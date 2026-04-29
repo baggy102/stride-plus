@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+ 
+# Environment
+.env
+.env.local
+.env.*.local
+ 
+# Build outputs
+dist/
+build/
+.next/
+out/
+ 
+# Expo / React Native
+apps/mobile/.expo/
+apps/mobile/ios/
+apps/mobile/android/
+ 
+# NestJS
+apps/server/dist/
+ 
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+ 
+# OS
+.DS_Store
+Thumbs.db
+ 
+# IDE
+.vscode/
+.idea/
+ 
+# Test coverage
+coverage/
+ 
+# AI agents
+CLAUDE.md
+agendt_docs/

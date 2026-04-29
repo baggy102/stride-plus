@@ -1,0 +1,12 @@
+{
+  "name": "stride-plus",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "server:dev": "pnpm --filter @stride/server dev",
+    "mobile:start": "pnpm --filter @stride/mobile start"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@nestjs/core"]
+  }
+}
