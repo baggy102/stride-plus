@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStorage from '@/utils/secureStorage';
 import client from '@/api/client';
 import { extractMessage } from '@/api/errors';
 
@@ -33,13 +33,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   hydrate: async () => {
     try {
-      const token = await SecureStore.getItemAsync('access_token');
+      const token = await SecureStorage.getItem('access_token');
       if (!token) return;
       const { data } = await client.get<User>('/users/me');
       set({ user: data, isAuthenticated: true });
     } catch {
-      await SecureStore.deleteItemAsync('access_token');
-      await SecureStore.deleteItemAsync('refresh_token');
+      await SecureStorage.deleteItem('access_token');
+      await SecureStorage.deleteItem('refresh_token');
     } finally {
       set({ isHydrating: false });
     }
@@ -53,8 +53,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
         refreshToken: string;
         user: User;
       }>('/auth/login', { email, password });
-      await SecureStore.setItemAsync('access_token', data.accessToken);
-      await SecureStore.setItemAsync('refresh_token', data.refreshToken);
+      await SecureStorage.setItem('access_token', data.accessToken);
+      await SecureStorage.setItem('refresh_token', data.refreshToken);
       set({ user: data.user, isAuthenticated: true });
     } catch (e) {
       set({ error: extractMessage(e) });
@@ -64,8 +64,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
-    await SecureStore.deleteItemAsync('access_token');
-    await SecureStore.deleteItemAsync('refresh_token');
+    await SecureStorage.deleteItem('access_token');
+    await SecureStorage.deleteItem('refresh_token');
     set({ user: null, isAuthenticated: false, error: null });
   },
 
@@ -77,8 +77,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
         refreshToken: string;
         user: User;
       }>('/auth/register', { username, email, password });
-      await SecureStore.setItemAsync('access_token', data.accessToken);
-      await SecureStore.setItemAsync('refresh_token', data.refreshToken);
+      await SecureStorage.setItem('access_token', data.accessToken);
+      await SecureStorage.setItem('refresh_token', data.refreshToken);
       set({ user: data.user, isAuthenticated: true });
     } catch (e) {
       set({ error: extractMessage(e) });
@@ -88,12 +88,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   refreshToken: async () => {
-    const token = await SecureStore.getItemAsync('refresh_token');
+    const token = await SecureStorage.getItem('refresh_token');
     if (!token) throw new Error('no_refresh_token');
     const { data } = await client.post<{ accessToken: string }>('/auth/refresh', {
       refreshToken: token,
     });
-    await SecureStore.setItemAsync('access_token', data.accessToken);
+    await SecureStorage.setItem('access_token', data.accessToken);
   },
 
   clearError: () => set({ error: null }),
