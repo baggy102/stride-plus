@@ -96,7 +96,7 @@ function calcTotalDistance(coords: [number, number][]) {
 }
 
 // 백그라운드 태스크 — 파일 최상위에 등록해야 한다
-TaskManager.defineTask(BACKGROUND_LOCATION_TASK, ({ data, error }) => {
+TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
   if (error) return;
   const locations = (data as { locations: Location.LocationObject[] }).locations;
   if (!locations?.length) return;
