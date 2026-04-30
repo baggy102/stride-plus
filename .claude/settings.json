@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s http://localhost:8081/status)",
+      "Bash(bash scripts/start-task.sh expo-sdk54-upgrade refactor)",
+      "Bash(node -e \"const p=require\\('c:/projects/stride-plus/apps/mobile/node_modules/expo/package.json'\\); console.log\\('expo:', p.version\\)\")",
+      "Bash(node -e \"const p=require\\('c:/projects/stride-plus/apps/mobile/node_modules/expo-router/package.json'\\); console.log\\('expo-router:', p.version\\)\")",
+      "Bash(node -e \"const p=require\\('c:/projects/stride-plus/apps/mobile/node_modules/react-native/package.json'\\); console.log\\('react-native:', p.version\\)\")",
+      "Bash(node -e \"const p=require\\('c:/projects/stride-plus/apps/mobile/node_modules/react/package.json'\\); console.log\\('react:', p.version\\)\")"
+    ]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/auto-commit.sh || true",
+            "shell": "bash",
+            "timeout": 120,
+            "statusMessage": "검증 후 자동 커밋 중..."
+          }
+        ]
+      }
+    ]
+  }
+}

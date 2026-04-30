@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install *)",
+      "Bash(pnpm list *)",
+      "Bash(pnpm --filter @stride/server add -D @nestjs/testing@^10)",
+      "Bash(pnpm --filter @stride/server exec jest --coverage)",
+      "Bash(bash scripts/verify-task.sh)",
+      "Bash(npx expo *)",
+      "Bash(bash scripts/complete-task.sh feature-gps-tracker-20260430-1241)"
+    ]
+  }
+}

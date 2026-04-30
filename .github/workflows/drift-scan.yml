@@ -1,0 +1,35 @@
+name: Drift Scan (scheduled)
+
+on:
+  schedule:
+    - cron: '0 18 * * *'   # 매일 KST 03:00 (UTC 18:00)
+  workflow_dispatch:        # 수동 트리거 가능
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  scan:
+    name: Tech Debt Drift Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run drift scanner (Issue 자동 생성 포함)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CREATE_ISSUES: 'true'
+        run: bash scripts/drift-scan.sh
+        continue-on-error: true   # 위반 발견 시 Issue 생성 후 워크플로우는 성공으로 처리
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## Drift Scan 완료 — $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "위반 발견 시 \`drift\` 레이블 Issue가 자동 생성됩니다." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Issue 목록 확인](https://github.com/${{ github.repository }}/issues?q=label%3Adrift+is%3Aopen)" >> "$GITHUB_STEP_SUMMARY"
