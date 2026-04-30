@@ -29,15 +29,20 @@ export class RunsService {
       .lean()
       .exec();
 
-    return runs.map((run) => ({
-      _id: run._id,
-      userId: run.userId,
-      distanceKm: run.distanceKm,
-      paceSecPerKm: run.paceSecPerKm,
-      thumbnailUrl: (run.photoUrls as string[])?.[0] ?? null,
-      startPoint: (run.route as any)?.coordinates?.[0] ?? null,
-      createdAt: (run as any).createdAt,
-    }));
+    return runs.map((run) => {
+      const route = run.route as { type: string; coordinates: [number, number][] } | undefined;
+      const photoUrls = run.photoUrls as string[] | undefined;
+      const createdAt = (run as unknown as { createdAt?: Date }).createdAt;
+      return {
+        _id: run._id,
+        userId: run.userId,
+        distanceKm: run.distanceKm,
+        paceSecPerKm: run.paceSecPerKm,
+        thumbnailUrl: photoUrls?.[0] ?? null,
+        startPoint: route?.coordinates?.[0] ?? null,
+        createdAt,
+      };
+    });
   }
 
   findById(id: string) {

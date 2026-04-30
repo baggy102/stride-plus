@@ -4,7 +4,14 @@
   "version": "0.0.1",
   "scripts": {
     "server:dev": "pnpm --filter @stride/server dev",
-    "mobile:start": "pnpm --filter @stride/mobile start"
+    "mobile:start": "pnpm --filter @stride/mobile start",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "husky": "^9.0.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["@nestjs/core"]
