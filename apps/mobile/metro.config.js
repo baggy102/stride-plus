@@ -23,8 +23,12 @@ if (!fs.existsSync(nativewindCacheDir)) {
 }
 
 // withNativeWind 적용 후 getCSSForPlatform 제거
-// (Metro 0.81 worker IPC로 함수 직렬화 불가 → "could not be cloned" 에러 방지)
+// Metro 0.81은 config를 worker로 IPC 직렬화할 때 structuredClone 사용 → 함수 불가
+// getCSSForPlatform은 config.transformer.cssToReactNativeRuntime 안에 중첩됨
 config = withNativeWind(config, { input: './global.css' });
 delete config.getCSSForPlatform;
+if (config.transformer?.cssToReactNativeRuntime) {
+  delete config.transformer.cssToReactNativeRuntime.getCSSForPlatform;
+}
 
 module.exports = config;
