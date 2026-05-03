@@ -52,8 +52,8 @@ describe('UsersService', () => {
     const newUser = { _id: 'u2', email: 'c@d.com', passwordHash: 'hash' };
     mockUserModel.create.mockResolvedValue(newUser);
 
-    const result = await service.create('c@d.com', 'hash');
+    const result = await service.create('c@d.com', 'hash', 'charlie');
     expect(result).toEqual(newUser);
-    expect(mockUserModel.create).toHaveBeenCalledWith({ email: 'c@d.com', passwordHash: 'hash' });
+    expect(mockUserModel.create).toHaveBeenCalledWith({ email: 'c@d.com', passwordHash: 'hash', username: 'charlie' });
   });
 });

@@ -12,6 +12,9 @@ export class User {
   passwordHash: string;
 
   @Prop({ default: '' })
+  username: string;
+
+  @Prop({ default: '' })
   bio: string;
 
   @Prop()
