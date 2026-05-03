@@ -5,7 +5,7 @@ import { Run, RunDocument } from './runs.schema';
 import { CreateRunDto } from './dto/create-run.dto';
 
 const MARKER_SELECT = 'userId distanceKm paceSecPerKm photoUrls createdAt route';
-const USER_SELECT = '_id profileImageUrl';
+const USER_SELECT = '_id username profileImageUrl';
 const DEFAULT_RADIUS = 5000;
 
 @Injectable()
