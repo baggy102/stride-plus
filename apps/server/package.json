@@ -2,6 +2,7 @@
   "name": "@stride/server",
   "version": "0.0.1",
   "scripts": {
+    "predev": "node -e \"const {execSync}=require('child_process');try{execSync('powershell -Command \\\"Get-NetTCPConnection -LocalPort 3000 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }\\\"')}catch(e){}\"",
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main",
