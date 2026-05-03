@@ -15,5 +15,9 @@
     "expo-env.d.ts",
     ".expo/types/**/*.ts",
     "nativewind-env.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".expo/types/router.d.ts"
   ]
 }

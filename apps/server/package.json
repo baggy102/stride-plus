@@ -2,6 +2,7 @@
   "name": "@stride/server",
   "version": "0.0.1",
   "scripts": {
+    "predev": "node scripts/kill-port.js 3000",
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main",

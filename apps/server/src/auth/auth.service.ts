@@ -21,12 +21,16 @@ export class AuthService {
     private readonly configService: ConfigService,
   ) {}
 
-  async register(email: string, password: string) {
+  async register(username: string, email: string, password: string) {
     const existing = await this.usersService.findByEmail(email);
     if (existing) throw new ConflictException('Email already in use');
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await this.usersService.create(email, passwordHash);
-    return { id: user._id, email: user.email };
+    const user = await this.usersService.create(email, passwordHash, username);
+    const tokens = await this.issueTokens(user._id.toString(), user.email);
+    return {
+      ...tokens,
+      user: { _id: user._id, email: user.email, username: user.username },
+    };
   }
 
   async login(email: string, password: string) {
@@ -34,7 +38,11 @@ export class AuthService {
     if (!user) throw new UnauthorizedException('Invalid credentials');
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Invalid credentials');
-    return this.issueTokens(user._id.toString(), user.email);
+    const tokens = await this.issueTokens(user._id.toString(), user.email);
+    return {
+      ...tokens,
+      user: { _id: user._id, email: user.email, username: user.username },
+    };
   }
 
   async refresh(token: string) {
@@ -68,13 +76,11 @@ export class AuthService {
         expiresIn: '7d',
       },
     );
-
     await this.refreshTokenModel.create({
       userId,
       token: refreshToken,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
-
     return { accessToken, refreshToken };
   }
 }
