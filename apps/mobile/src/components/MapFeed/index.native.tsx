@@ -25,20 +25,23 @@ export function MapFeed() {
   const [selected, setSelected] = useState<RunMarker | null>(null);
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  // 현재 위치로 초기 이동
+  // 현재 위치로 초기 이동 + 마커 조회
   useEffect(() => {
     (async () => {
+      let initialRegion = SEOUL;
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const loc = await Location.getCurrentPositionAsync({});
-        setRegion((prev) => ({
-          ...prev,
+        initialRegion = {
+          ...SEOUL,
           latitude: loc.coords.latitude,
           longitude: loc.coords.longitude,
-        }));
+        };
       }
+      setRegion(initialRegion);
+      fetchMarkers(initialRegion);
     })();
-  }, []);
+  }, [fetchMarkers]);
 
   const fetchMarkers = useCallback(async (r: Region) => {
     try {
