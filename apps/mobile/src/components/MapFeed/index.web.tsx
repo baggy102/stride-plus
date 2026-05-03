@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, ActivityIndicator, StyleSheet } from 'react-native';
 import client from '@/api/client';
 import { RunCard, RunMarker } from '../RunCard';
 
@@ -8,9 +8,10 @@ const SEOUL = { lat: 37.5665, lng: 126.978 };
 export function MapFeed() {
   const [runs, setRuns] = useState<RunMarker[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loc, setLoc] = useState(SEOUL);
 
   useEffect(() => {
-    const fetchRuns = async () => {
+    const init = async () => {
       try {
         const pos = await new Promise<GeolocationPosition>((res, rej) =>
           navigator.geolocation?.getCurrentPosition(res, rej, { timeout: 5000 }),
@@ -18,6 +19,8 @@ export function MapFeed() {
 
         const lat = pos?.coords.latitude ?? SEOUL.lat;
         const lng = pos?.coords.longitude ?? SEOUL.lng;
+        setLoc({ lat, lng });
+
         const { data } = await client.get<RunMarker[]>(
           `/runs?lat=${lat}&lng=${lng}&radius=10000`,
         );
@@ -28,30 +31,42 @@ export function MapFeed() {
         setLoading(false);
       }
     };
-    fetchRuns();
+    init();
   }, []);
 
   if (loading) {
     return (
-      <View className="flex-1 bg-zinc-950 items-center justify-center">
+      <View style={styles.center}>
         <ActivityIndicator color="#3b82f6" />
       </View>
     );
   }
 
+  const d = 0.03;
+  const bbox = `${loc.lng - d},${loc.lat - d},${loc.lng + d},${loc.lat + d}`;
+  const mapSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${bbox}&layer=mapnik&marker=${loc.lat},${loc.lng}`;
+
   return (
-    <View className="flex-1 bg-zinc-950">
-      <View className="px-4 pt-12 pb-4">
-        <Text className="text-white text-xl font-bold">주변 러닝</Text>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>주변 러닝</Text>
       </View>
+
+      {/* @ts-ignore — iframe은 Expo web 컨텍스트에서 유효 */}
+      <iframe
+        src={mapSrc}
+        style={{ width: '100%', height: 320, border: 'none', display: 'block' }}
+        title="map"
+      />
+
       {runs.length === 0 ? (
-        <View className="flex-1 items-center justify-center">
-          <Text className="text-zinc-500">주변 러닝 기록이 없습니다</Text>
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>주변 러닝 기록이 없습니다</Text>
         </View>
       ) : (
-        <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 32 }}>
           {runs.map((run) => (
-            <View key={run._id} className="border-b border-zinc-800 py-2">
+            <View key={run._id} style={styles.item}>
               <RunCard run={run} />
             </View>
           ))}
@@ -60,3 +75,14 @@ export function MapFeed() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#09090b' },
+  center: { flex: 1, backgroundColor: '#09090b', alignItems: 'center', justifyContent: 'center' },
+  header: { paddingHorizontal: 16, paddingTop: 48, paddingBottom: 12 },
+  title: { color: '#fff', fontSize: 20, fontWeight: 'bold' },
+  empty: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  emptyText: { color: '#71717a' },
+  list: { flex: 1 },
+  item: { borderBottomWidth: 1, borderBottomColor: '#27272a', paddingVertical: 8 },
+});
