@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Run, RunDocument } from './runs.schema';
+import { CreateRunDto } from './dto/create-run.dto';
 
 const MARKER_SELECT = 'userId distanceKm paceSecPerKm photoUrls createdAt route';
 const USER_SELECT = '_id profileImageUrl';
@@ -51,5 +52,17 @@ export class RunsService {
       .populate('userId', USER_SELECT)
       .lean()
       .exec();
+  }
+
+  async create(userId: string, dto: CreateRunDto, photoUrls: string[] = []) {
+    const run = new this.runModel({
+      userId,
+      route: { type: 'LineString', coordinates: dto.coordinates },
+      distanceKm: dto.distanceKm,
+      paceSecPerKm: dto.paceSecPerKm,
+      photoUrls,
+      description: dto.description ?? '',
+    });
+    return run.save();
   }
 }
