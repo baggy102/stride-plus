@@ -3,6 +3,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import * as cookieParser from 'cookie-parser';
+import { join } from 'path';
+import * as express from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -12,7 +14,8 @@ async function bootstrap() {
     credentials: true,
   });
   app.use(cookieParser());
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
+  app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Stride+')

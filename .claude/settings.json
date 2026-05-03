@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"console.log\\(require\\('c:/projects/stride-plus/node_modules/nativewind/package.json'\\).version\\)\")",
+      "Bash(node_modules/.bin/tailwindcss -i ./global.css -o ./tailwind.output.css --content \"./app/**/*.{js,jsx,ts,tsx},./src/**/*.{js,jsx,ts,tsx}\")",
+      "Bash(npx tailwindcss *)",
+      "Bash(bash scripts/verify-task.sh)",
+      "Bash(pnpm --filter @stride/mobile exec tsc --noEmit)",
+      "Bash(pnpm exec *)",
+      "Bash(git commit -m ' *)",
+      "Bash(xargs grep *)",
+      "Bash(npx --prefix apps/mobile expo start --clear --web)"
+    ]
+  }
+}

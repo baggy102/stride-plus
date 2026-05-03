@@ -1,8 +1,9 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { View, Text, Pressable, Modal, ScrollView, Alert } from 'react-native';
+import { View, Text, Pressable, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRunStore } from '@/store/run';
 import { useHaversine } from '@/hooks/useHaversine';
+import { RunSummaryModal } from '@/components/RunSummaryModal';
 
 function formatTime(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -25,7 +26,6 @@ export default function RecordScreen() {
   const { distanceKm, paceSecPerKm } = useHaversine(coordinates, elapsedSeconds);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const summaryRef = useRef<ReturnType<typeof stopTracking> | null>(null);
-
   const tick = useRunStore((s) => s._tick);
 
   useEffect(() => {
@@ -52,22 +52,18 @@ export default function RecordScreen() {
     summaryRef.current = stopTracking();
   }, [stopTracking]);
 
-  const handleReset = useCallback(() => {
+  const handleModalClose = useCallback(() => {
     summaryRef.current = null;
-    resetRun();
-  }, [resetRun]);
+  }, []);
 
   const summary = !isTracking && summaryRef.current ? summaryRef.current : null;
 
   return (
     <SafeAreaView className="flex-1 bg-zinc-950">
       <View className="flex-1 items-center justify-between py-10 px-6">
-        {/* 헤더 */}
         <Text className="text-white text-xl font-bold tracking-widest">STRIDE+</Text>
 
-        {/* 메트릭 */}
         <View className="w-full gap-6">
-          {/* 타이머 */}
           <View className="items-center">
             <Text className="text-zinc-400 text-sm uppercase tracking-widest mb-1">시간</Text>
             <Text className="text-white text-7xl font-mono font-bold tabular-nums">
@@ -75,7 +71,6 @@ export default function RecordScreen() {
             </Text>
           </View>
 
-          {/* 거리 / 페이스 */}
           <View className="flex-row justify-around">
             <View className="items-center">
               <Text className="text-zinc-400 text-sm uppercase tracking-widest mb-1">거리</Text>
@@ -93,7 +88,6 @@ export default function RecordScreen() {
             </View>
           </View>
 
-          {/* 좌표 수 (디버그용 — 추후 지도 컴포넌트로 교체) */}
           {isTracking && (
             <Text className="text-zinc-600 text-xs text-center">
               GPS 포인트: {coordinates.length}개
@@ -101,7 +95,6 @@ export default function RecordScreen() {
           )}
         </View>
 
-        {/* 컨트롤 버튼 */}
         <View className="items-center gap-4">
           {!isTracking ? (
             <Pressable
@@ -118,44 +111,17 @@ export default function RecordScreen() {
               <Text className="text-white text-xl font-bold">STOP</Text>
             </Pressable>
           )}
-          {!isTracking && elapsedSeconds > 0 && (
-            <Pressable onPress={handleReset}>
+          {!isTracking && elapsedSeconds > 0 && !summary && (
+            <Pressable onPress={resetRun}>
               <Text className="text-zinc-400 text-sm underline">초기화</Text>
             </Pressable>
           )}
         </View>
       </View>
 
-      {/* 요약 모달 */}
-      <Modal visible={!!summary} transparent animationType="slide">
-        <View className="flex-1 justify-end bg-black/60">
-          <View className="bg-zinc-900 rounded-t-3xl p-8 gap-6">
-            <Text className="text-white text-2xl font-bold text-center">러닝 완료!</Text>
-            <ScrollView>
-              <View className="gap-4">
-                <SummaryRow label="거리" value={`${summary?.distanceKm.toFixed(2)} km`} />
-                <SummaryRow label="시간" value={formatTime(summary?.elapsedSeconds ?? 0)} />
-                <SummaryRow label="평균 페이스" value={formatPace(summary?.paceSecPerKm ?? 0)} />
-              </View>
-            </ScrollView>
-            <Pressable
-              onPress={handleReset}
-              className="bg-blue-600 rounded-2xl py-4 items-center active:opacity-80"
-            >
-              <Text className="text-white font-bold text-lg">확인</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      {summary && (
+        <RunSummaryModal summary={summary} onClose={handleModalClose} />
+      )}
     </SafeAreaView>
-  );
-}
-
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View className="flex-row justify-between">
-      <Text className="text-zinc-400">{label}</Text>
-      <Text className="text-white font-bold">{value}</Text>
-    </View>
   );
 }
