@@ -103,7 +103,7 @@ export default function MapContent() {
       <View style={styles.mapWrapper}>
         <MapContainer
           center={[loc.lat, loc.lng]}
-          zoom={12}
+          zoom={11}
           style={{ height: '100%', width: '100%' }}
           zoomControl
           attributionControl

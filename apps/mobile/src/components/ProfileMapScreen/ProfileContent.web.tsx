@@ -42,16 +42,18 @@ export default function ProfileContent({ userId }: Props) {
 
   useEffect(() => {
     if (!targetId) return;
-    Promise.all([
-      client.get<UserProfile>(`/users/${targetId}`),
-      client.get<RunWithRoute[]>(`/runs?userId=${targetId}&limit=50`),
-    ])
-      .then(([{ data: prof }, { data: rs }]) => {
-        setProfile(prof);
-        setRuns(rs);
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+    let done = 0;
+    const finish = () => { if (++done === 2) setLoading(false); };
+
+    client.get<UserProfile>(`/users/${targetId}`)
+      .then(({ data }) => setProfile(data))
+      .catch((e) => console.error('[profile] users fetch failed', e))
+      .finally(finish);
+
+    client.get<RunWithRoute[]>(`/runs?userId=${targetId}&limit=50`)
+      .then(({ data }) => setRuns(data))
+      .catch((e) => console.error('[profile] runs fetch failed', e))
+      .finally(finish);
   }, [targetId]);
 
   const allCoords: LatLngTuple[] = runs.flatMap((r) =>
