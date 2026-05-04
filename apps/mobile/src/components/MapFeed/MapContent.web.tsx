@@ -1,24 +1,50 @@
 import 'leaflet/dist/leaflet.css';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import { MapContainer, TileLayer, CircleMarker } from 'react-leaflet';
+import { MapContainer, TileLayer, CircleMarker, useMapEvents } from 'react-leaflet';
 import client from '@/api/client';
-import { RunCard, RunMarker } from '../RunCard';
+import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
+const RADIUS = 15000; // 15km
+
+function MapMoveHandler({ onMove }: { onMove: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    moveend: (e) => {
+      const c = e.target.getCenter();
+      onMove(c.lat, c.lng);
+    },
+  });
+  return null;
+}
 
 export default function MapContent() {
   const [loading, setLoading] = useState(true);
   const [loc, setLoc] = useState(SEOUL);
+  const [runs, setRuns] = useState<RunMarker[]>([]);
+
+  const fetchRuns = useCallback(async (lat: number, lng: number) => {
+    try {
+      const { data } = await client.get<RunMarker[]>(
+        `/runs?lat=${lat}&lng=${lng}&radius=${RADIUS}`,
+      );
+      setRuns(data);
+    } catch {}
+  }, []);
 
   useEffect(() => {
     new Promise<GeolocationPosition>((res, rej) =>
       navigator.geolocation?.getCurrentPosition(res, rej, { timeout: 5000 }),
     )
-      .then((pos) => setLoc({ lat: pos.coords.latitude, lng: pos.coords.longitude }))
-      .catch(() => {})
+      .then((pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLoc({ lat, lng });
+        fetchRuns(lat, lng);
+      })
+      .catch(() => fetchRuns(SEOUL.lat, SEOUL.lng))
       .finally(() => setLoading(false));
-  }, []);
+  }, [fetchRuns]);
 
   if (loading) {
     return (
@@ -36,7 +62,7 @@ export default function MapContent() {
       <View style={styles.mapWrapper}>
         <MapContainer
           center={[loc.lat, loc.lng]}
-          zoom={15}
+          zoom={13}
           style={{ height: '100%', width: '100%' }}
           zoomControl
           attributionControl
@@ -45,11 +71,31 @@ export default function MapContent() {
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>'
           />
+          <MapMoveHandler onMove={fetchRuns} />
+
+          {/* 내 위치 */}
           <CircleMarker
             center={[loc.lat, loc.lng]}
             radius={10}
             pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 1, weight: 3 }}
           />
+
+          {/* 주변 런 시작점 마커 */}
+          {runs.map((run) =>
+            run.startPoint ? (
+              <CircleMarker
+                key={run._id}
+                center={[run.startPoint[1], run.startPoint[0]]}
+                radius={8}
+                pathOptions={{
+                  color: '#e53935',
+                  fillColor: '#e53935',
+                  fillOpacity: 0.9,
+                  weight: 2,
+                }}
+              />
+            ) : null,
+          )}
         </MapContainer>
       </View>
     </View>

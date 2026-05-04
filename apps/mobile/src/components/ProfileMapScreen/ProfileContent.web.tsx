@@ -1,5 +1,5 @@
 import 'leaflet/dist/leaflet.css';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Image } from 'react-native';
 import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
@@ -107,7 +107,7 @@ export default function ProfileContent({ userId }: Props) {
               ([lng, lat]) => [lat, lng] as LatLngTuple,
             );
             return (
-              <div key={run._id}>
+              <Fragment key={run._id}>
                 {routeCoords.length > 1 && (
                   <Polyline
                     positions={routeCoords}
@@ -127,7 +127,7 @@ export default function ProfileContent({ userId }: Props) {
                     eventHandlers={{ click: () => setSelected(run) }}
                   />
                 )}
-              </div>
+              </Fragment>
             );
           })}
         </MapContainer>
