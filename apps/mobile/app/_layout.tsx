@@ -22,9 +22,13 @@ export default function RootLayout() {
   useEffect(() => {
     if (isHydrating) return;
     const inAuthGroup = segments[0] === '(auth)';
+    const atRoot = segments.length === 0;
+
     if (!isAuthenticated && !inAuthGroup) {
+      // 미인증: 보호된 경로 → 로그인
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup) {
+    } else if (isAuthenticated && (inAuthGroup || atRoot)) {
+      // 인증됨: auth 그룹이거나 루트(/)에 있으면 → 피드
       router.replace('/(tabs)/feed');
     }
   }, [isAuthenticated, isHydrating, segments]);
