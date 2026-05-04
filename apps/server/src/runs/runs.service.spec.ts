@@ -125,6 +125,40 @@ describe('RunsService', () => {
     });
   });
 
+  describe('findByUser', () => {
+    it('userId로 런 목록 조회 — route 포함', async () => {
+      const raw = [
+        {
+          _id: 'run1',
+          userId: { _id: 'u1', username: 'alice', profileImageUrl: null },
+          distanceKm: 5.2,
+          paceSecPerKm: 330,
+          photoUrls: ['photo1.jpg'],
+          route: { type: 'LineString', coordinates: [[127.1, 37.5], [127.2, 37.6]] },
+          createdAt: new Date('2026-01-01'),
+        },
+      ];
+
+      mockFind.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        populate: jest.fn().mockReturnThis(),
+        sort: jest.fn().mockReturnThis(),
+        skip: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(raw),
+      });
+
+      const result = await service.findByUser('u1');
+      expect(result[0]).toMatchObject({
+        _id: 'run1',
+        distanceKm: 5.2,
+        route: [[127.1, 37.5], [127.2, 37.6]],
+        startPoint: [127.1, 37.5],
+      });
+    });
+  });
+
   describe('findById', () => {
     it('ID로 런 조회', async () => {
       const run = { _id: 'run1', distanceKm: 5 };

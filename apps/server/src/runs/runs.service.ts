@@ -46,6 +46,34 @@ export class RunsService {
     });
   }
 
+  async findByUser(userId: string, page = 1, limit = 50) {
+    const runs = await this.runModel
+      .find({ userId })
+      .select(MARKER_SELECT)
+      .populate('userId', USER_SELECT)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean()
+      .exec();
+
+    return runs.map((run) => {
+      const route = run.route as { type: string; coordinates: [number, number][] } | undefined;
+      const photoUrls = run.photoUrls as string[] | undefined;
+      const createdAt = (run as unknown as { createdAt?: Date }).createdAt;
+      return {
+        _id: run._id,
+        userId: run.userId,
+        distanceKm: run.distanceKm,
+        paceSecPerKm: run.paceSecPerKm,
+        thumbnailUrl: photoUrls?.[0] ?? null,
+        startPoint: route?.coordinates?.[0] ?? null,
+        route: route?.coordinates ?? [],
+        createdAt,
+      };
+    });
+  }
+
   findById(id: string) {
     return this.runModel
       .findById(id)

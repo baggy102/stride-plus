@@ -22,8 +22,11 @@ export class RunsController {
   constructor(private readonly runsService: RunsService) {}
 
   @Get()
-  findNearby(@Query() dto: FindRunsDto) {
-    return this.runsService.findNearby(dto.lat, dto.lng, dto.radius ?? 5000);
+  findRuns(@Query() dto: FindRunsDto) {
+    if (dto.userId) {
+      return this.runsService.findByUser(dto.userId, dto.page, dto.limit);
+    }
+    return this.runsService.findNearby(dto.lat ?? 0, dto.lng ?? 0, dto.radius ?? 5000);
   }
 
   @Get(':id')
