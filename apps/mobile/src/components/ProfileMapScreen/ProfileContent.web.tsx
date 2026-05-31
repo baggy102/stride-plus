@@ -1,8 +1,11 @@
 import 'leaflet/dist/leaflet.css';
-import { Fragment, useEffect, useState } from 'react';
+import L from 'leaflet';
+import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Image } from 'react-native';
-import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
+// @ts-ignore — react-leaflet-cluster types not bundled
+import MarkerClusterGroup from 'react-leaflet-cluster';
 import client from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { RunMarker } from '../RunCard';
@@ -21,10 +24,48 @@ interface Props {
   userId?: string;
 }
 
+const runDotIcon = L.divIcon({
+  html: `<div style="width:13px;height:13px;border-radius:50%;background:#e53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+  className: '',
+  iconSize: [13, 13],
+  iconAnchor: [6, 6],
+  popupAnchor: [0, -8],
+});
+
+function createClusterIcon(cluster: { getChildCount: () => number }) {
+  const n = cluster.getChildCount();
+  const label = n >= 1000 ? `+${(n / 1000).toFixed(1)}K` : `+${n}`;
+  return L.divIcon({
+    html: `<div style="
+      width:44px;height:44px;border-radius:22px;
+      background:rgba(229,57,53,0.88);color:#fff;
+      display:flex;align-items:center;justify-content:center;
+      font-size:13px;font-weight:700;letter-spacing:-0.3px;
+      border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.22);
+    ">${label}</div>`,
+    className: '',
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+}
+
+function formatPace(sec: number) {
+  if (!sec) return `--'--"`;
+  return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
+}
+
+function formatDate(iso: string) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`;
+}
+
 function FitBounds({ coords }: { coords: LatLngTuple[] }) {
   const map = useMap();
   useEffect(() => {
-    if (coords.length > 1) {
+    if (coords.length === 1) {
+      map.setView(coords[0], 13);
+    } else if (coords.length > 1) {
       map.fitBounds(coords, { padding: [40, 40] });
     }
   }, [map, coords]);
@@ -38,7 +79,6 @@ export default function ProfileContent({ userId }: Props) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<RunWithRoute | null>(null);
 
   useEffect(() => {
     if (!targetId) return;
@@ -56,20 +96,17 @@ export default function ProfileContent({ userId }: Props) {
       .finally(finish);
   }, [targetId]);
 
-  const allCoords: LatLngTuple[] = runs.flatMap((r) =>
-    r.route.map(([lng, lat]) => [lat, lng] as LatLngTuple),
-  );
+  const startPoints: LatLngTuple[] = runs
+    .filter((r) => r.startPoint)
+    .map((r) => [r.startPoint![1], r.startPoint![0]] as LatLngTuple);
 
   const totalKm = runs.reduce((s, r) => s + r.distanceKm, 0);
   const displayName = profile?.username ?? user?.username ?? '';
   const avatarLetter = (displayName || '?')[0].toUpperCase();
-
-  const center: LatLngTuple =
-    allCoords.length > 0 ? allCoords[0] : [37.5665, 126.978];
+  const center: LatLngTuple = startPoints.length > 0 ? startPoints[0] : [37.5665, 126.978];
 
   return (
     <View style={styles.container}>
-      {/* 프로필 헤더 */}
       <View style={styles.header}>
         <View style={styles.avatar}>
           {profile?.profileImageUrl ? (
@@ -90,7 +127,6 @@ export default function ProfileContent({ userId }: Props) {
         </View>
       </View>
 
-      {/* 지도 */}
       <View style={styles.mapWrapper}>
         <MapContainer
           center={center}
@@ -103,57 +139,60 @@ export default function ProfileContent({ userId }: Props) {
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>'
           />
-          {allCoords.length > 1 && <FitBounds coords={allCoords} />}
-          {runs.map((run) => {
-            const routeCoords: LatLngTuple[] = run.route.map(
-              ([lng, lat]) => [lat, lng] as LatLngTuple,
-            );
-            return (
-              <Fragment key={run._id}>
-                {routeCoords.length > 1 && (
-                  <Polyline
-                    positions={routeCoords}
-                    pathOptions={{ color: 'rgba(229,57,53,0.6)', weight: 3 }}
-                  />
-                )}
-                {run.startPoint && (
-                  <CircleMarker
-                    center={[run.startPoint[1], run.startPoint[0]]}
-                    radius={7}
-                    pathOptions={{
-                      color: '#e53935',
-                      fillColor: '#e53935',
-                      fillOpacity: 1,
-                      weight: 2,
-                    }}
-                    eventHandlers={{ click: () => setSelected(run) }}
-                  />
-                )}
-              </Fragment>
-            );
-          })}
+          {startPoints.length > 0 && <FitBounds coords={startPoints} />}
+
+          <MarkerClusterGroup
+            chunkedLoading
+            iconCreateFunction={createClusterIcon}
+            showCoverageOnHover={false}
+            maxClusterRadius={60}
+          >
+            {runs.map((run) => {
+              if (!run.startPoint) return null;
+              const [lng, lat] = run.startPoint;
+              return (
+                <Marker key={run._id} position={[lat, lng]} icon={runDotIcon}>
+                  <Popup closeButton={false} minWidth={200}>
+                    <div style={{ padding: '4px 2px', fontFamily: 'system-ui, sans-serif' }}>
+                      {run.thumbnailUrl && (
+                        <img
+                          src={run.thumbnailUrl}
+                          alt="run"
+                          style={{
+                            width: '100%',
+                            height: 120,
+                            objectFit: 'cover',
+                            borderRadius: 8,
+                            marginBottom: 10,
+                            display: 'block',
+                          }}
+                        />
+                      )}
+                      <div style={{ display: 'flex', gap: 16 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>거리</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#18181b' }}>
+                            {run.distanceKm.toFixed(2)} <span style={{ fontSize: 11, color: '#71717a' }}>km</span>
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>페이스</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#18181b' }}>
+                            {formatPace(run.paceSecPerKm)} <span style={{ fontSize: 11, color: '#71717a' }}>/km</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#a1a1aa', marginTop: 6 }}>
+                        {formatDate(run.createdAt as unknown as string)}
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MarkerClusterGroup>
         </MapContainer>
       </View>
-
-      {/* 선택된 런 카드 */}
-      {selected && (
-        <View style={styles.selectedCard}>
-          <View style={styles.selectedRow}>
-            <Text style={styles.selectedDist}>
-              {selected.distanceKm.toFixed(2)} km
-            </Text>
-            <Text
-              style={styles.closeBtn}
-              onPress={() => setSelected(null)}
-            >
-              ✕
-            </Text>
-          </View>
-          <Text style={styles.selectedDate}>
-            {new Date(selected.createdAt).toLocaleDateString('ko-KR')}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -185,21 +224,4 @@ const styles = StyleSheet.create({
   username: { fontSize: 18, fontWeight: '700', color: '#18181b' },
   stats: { fontSize: 13, color: '#71717a', marginTop: 2 },
   mapWrapper: { flex: 1 },
-  selectedCard: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    shadowColor: '#000',
-    shadowOpacity: 0.12,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  selectedRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  selectedDist: { fontSize: 20, fontWeight: '700', color: '#18181b' },
-  closeBtn: { fontSize: 18, color: '#71717a', padding: 4 },
-  selectedDate: { fontSize: 13, color: '#71717a', marginTop: 4 },
 });

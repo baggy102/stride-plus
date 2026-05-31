@@ -60,6 +60,18 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 5. Git Branch Rules
+
+**Never commit or push directly to `main` or `develop`.**
+
+- All work must happen on a feature branch: `feat/`, `fix/`, `chore/` 등
+- 작업 시작 전 반드시 현재 브랜치 확인: `git branch`
+- `main` 또는 `develop`에 있으면 작업용 브랜치를 먼저 생성 후 진행
+- 브랜치 생성: `git checkout -b feat/<작업명>`
+- PR을 통해서만 `develop` / `main` 에 병합
+
+브랜치 확인 없이 커밋하는 것은 **절대 금지**.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
