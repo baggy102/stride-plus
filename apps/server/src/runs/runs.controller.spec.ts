@@ -4,6 +4,7 @@ import { RunsService } from './runs.service';
 
 const mockRunsService = {
   findNearby: jest.fn(),
+  findByUser: jest.fn(),
   findById: jest.fn(),
 };
 
@@ -20,11 +21,20 @@ describe('RunsController', () => {
     jest.clearAllMocks();
   });
 
-  it('findNearby — runsService.findNearby 호출', async () => {
+  it('findRuns — userId 없으면 findNearby 호출', async () => {
     mockRunsService.findNearby.mockResolvedValue([]);
-    const dto = { lat: 37.5, lng: 127.0, radius: undefined } as Parameters<typeof controller.findNearby>[0];
-    await controller.findNearby(dto);
+    await controller.findRuns({ lat: 37.5, lng: 127.0 });
     expect(mockRunsService.findNearby).toHaveBeenCalledWith(37.5, 127.0, 5000);
+  });
+
+  it('findRuns — userId 있으면 findByUser 호출', async () => {
+    mockRunsService.findByUser.mockResolvedValue([]);
+    await controller.findRuns({ userId: '507f1f77bcf86cd799439011' });
+    expect(mockRunsService.findByUser).toHaveBeenCalledWith(
+      '507f1f77bcf86cd799439011',
+      undefined,
+      undefined,
+    );
   });
 
   it('findById — runsService.findById 호출', async () => {

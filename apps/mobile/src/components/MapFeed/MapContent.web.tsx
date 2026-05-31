@@ -1,0 +1,206 @@
+import 'leaflet/dist/leaflet.css';
+import L from 'leaflet';
+import { useCallback, useEffect, useState } from 'react';
+import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
+import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMapEvents } from 'react-leaflet';
+// @ts-ignore — react-leaflet-cluster types not bundled
+import MarkerClusterGroup from 'react-leaflet-cluster';
+import client, { BASE_URL } from '@/api/client';
+import { RunMarker } from '../RunCard';
+
+const SEOUL = { lat: 37.5665, lng: 126.978 };
+const RADIUS = 15000;
+
+// 개별 런 마커 아이콘
+const runDotIcon = L.divIcon({
+  html: `<div style="width:13px;height:13px;border-radius:50%;background:#e53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+  className: '',
+  iconSize: [13, 13],
+  iconAnchor: [6, 6],
+  popupAnchor: [0, -8],
+});
+
+// 클러스터 아이콘 — "+N" 스타일 빨간 원
+function createClusterIcon(cluster: { getChildCount: () => number }) {
+  const n = cluster.getChildCount();
+  const label = n >= 1000 ? `+${(n / 1000).toFixed(1)}K` : `+${n}`;
+  return L.divIcon({
+    html: `<div style="
+      width:44px;height:44px;border-radius:22px;
+      background:rgba(229,57,53,0.88);color:#fff;
+      display:flex;align-items:center;justify-content:center;
+      font-size:13px;font-weight:700;letter-spacing:-0.3px;
+      border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.22);
+    ">${label}</div>`,
+    className: '',
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
+  });
+}
+
+function formatPace(sec: number) {
+  return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
+}
+
+function formatDate(iso: string) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`;
+}
+
+function MapMoveHandler({ onMove }: { onMove: (lat: number, lng: number) => void }) {
+  useMapEvents({
+    moveend: (e) => {
+      const c = e.target.getCenter();
+      onMove(c.lat, c.lng);
+    },
+  });
+  return null;
+}
+
+export default function MapContent() {
+  const [loading, setLoading] = useState(true);
+  const [loc, setLoc] = useState(SEOUL);
+  const [runs, setRuns] = useState<RunMarker[]>([]);
+
+  const fetchRuns = useCallback(async (lat: number, lng: number) => {
+    try {
+      const { data } = await client.get<RunMarker[]>(
+        `/runs?lat=${lat}&lng=${lng}&radius=${RADIUS}`,
+      );
+      setRuns(data);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    new Promise<GeolocationPosition>((res, rej) =>
+      navigator.geolocation?.getCurrentPosition(res, rej, { timeout: 5000 }),
+    )
+      .then((pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setLoc({ lat, lng });
+        fetchRuns(lat, lng);
+      })
+      .catch(() => fetchRuns(SEOUL.lat, SEOUL.lng))
+      .finally(() => setLoading(false));
+  }, [fetchRuns]);
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color="#3b82f6" />
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>주변 러닝</Text>
+      </View>
+      <View style={styles.mapWrapper}>
+        <MapContainer
+          center={[loc.lat, loc.lng]}
+          zoom={11}
+          style={{ height: '100%', width: '100%' }}
+          zoomControl
+          attributionControl
+        >
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>'
+          />
+          <MapMoveHandler onMove={fetchRuns} />
+
+          {/* 내 위치 (파란 점) */}
+          <CircleMarker
+            center={[loc.lat, loc.lng]}
+            radius={9}
+            pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 1, weight: 3 }}
+          />
+
+          {/* 런 마커 — 클러스터링 */}
+          <MarkerClusterGroup
+            chunkedLoading
+            iconCreateFunction={createClusterIcon}
+            showCoverageOnHover={false}
+            maxClusterRadius={60}
+          >
+            {runs.map((run) => {
+              if (!run.startPoint) return null;
+              const [lng, lat] = run.startPoint;
+              return (
+                <Marker
+                  key={run._id}
+                  position={[lat, lng]}
+                  icon={runDotIcon}
+                >
+                  <Popup closeButton={false} minWidth={220}>
+                    <div style={{ padding: '4px 2px', fontFamily: 'system-ui, sans-serif' }}>
+                      {/* 썸네일 */}
+                      {run.thumbnailUrl && (
+                        <img
+                          src={`${BASE_URL}${run.thumbnailUrl}`}
+                          alt="run"
+                          style={{
+                            width: '100%',
+                            height: 120,
+                            objectFit: 'cover',
+                            borderRadius: 8,
+                            marginBottom: 10,
+                            display: 'block',
+                          }}
+                        />
+                      )}
+                      {/* 유저 */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: 14,
+                          background: '#e53935', color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 12, fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {(run.userId?.username ?? '?')[0].toUpperCase()}
+                        </div>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: '#18181b' }}>
+                          {run.userId?.username ?? '알 수 없음'}
+                        </span>
+                      </div>
+                      {/* 스탯 */}
+                      <div style={{ display: 'flex', gap: 16 }}>
+                        <div>
+                          <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>거리</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#18181b' }}>
+                            {run.distanceKm.toFixed(2)} <span style={{ fontSize: 11, color: '#71717a' }}>km</span>
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>페이스</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#18181b' }}>
+                            {formatPace(run.paceSecPerKm)} <span style={{ fontSize: 11, color: '#71717a' }}>/km</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#a1a1aa', marginTop: 6 }}>
+                        {formatDate(run.createdAt as unknown as string)}
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+              );
+            })}
+          </MarkerClusterGroup>
+        </MapContainer>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  center: { flex: 1, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
+  header: { paddingHorizontal: 16, paddingTop: 48, paddingBottom: 12 },
+  title: { color: '#09090b', fontSize: 20, fontWeight: 'bold' },
+  mapWrapper: { flex: 1 },
+});

@@ -1,6 +1,7 @@
-import '../global.css';
+import '../styles';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Slot, useRouter, useSegments } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@/store/auth';
@@ -21,25 +22,29 @@ export default function RootLayout() {
   useEffect(() => {
     if (isHydrating) return;
     const inAuthGroup = segments[0] === '(auth)';
+    const atRoot = segments.length === 0;
+
     if (!isAuthenticated && !inAuthGroup) {
+      // 미인증: 보호된 경로 → 로그인
       router.replace('/(auth)/login');
-    } else if (isAuthenticated && inAuthGroup) {
+    } else if (isAuthenticated && (inAuthGroup || atRoot)) {
+      // 인증됨: auth 그룹이거나 루트(/)에 있으면 → 피드
       router.replace('/(tabs)/feed');
     }
   }, [isAuthenticated, isHydrating, segments]);
 
-  if (isHydrating) {
-    return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
-  }
-
   return (
-    <>
+    <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="auto" />
       <Slot />
-    </>
+      {isHydrating && (
+        <View
+          style={{ position: 'absolute', inset: 0 }}
+          className="items-center justify-center bg-white"
+        >
+          <ActivityIndicator size="large" color="#3b82f6" />
+        </View>
+      )}
+    </GestureHandlerRootView>
   );
 }

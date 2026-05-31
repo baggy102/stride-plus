@@ -22,34 +22,26 @@ describe('AuthController', () => {
   });
 
   it('register — authService.register 호출', async () => {
-    mockAuthService.register.mockResolvedValue({ id: 'u1', email: 'a@b.com' });
+    const user = { _id: 'u1', email: 'a@b.com', username: 'alice' };
+    mockAuthService.register.mockResolvedValue({ accessToken: 'at', refreshToken: 'rt', user });
     const dto = { email: 'a@b.com', password: 'pw', username: 'alice' };
     const result = await controller.register(dto as Parameters<typeof controller.register>[0]);
-    expect(result).toEqual({ id: 'u1', email: 'a@b.com' });
-    expect(mockAuthService.register).toHaveBeenCalledWith('a@b.com', 'pw');
+    expect(result).toEqual({ accessToken: 'at', refreshToken: 'rt', user });
+    expect(mockAuthService.register).toHaveBeenCalledWith('alice', 'a@b.com', 'pw');
   });
 
-  it('login — accessToken 반환하고 쿠키 설정', async () => {
-    mockAuthService.login.mockResolvedValue({
-      accessToken: 'at',
-      refreshToken: 'rt',
-    });
+  it('login — accessToken·refreshToken·user 반환', async () => {
+    const user = { _id: 'u1', email: 'a@b.com', username: 'alice' };
+    mockAuthService.login.mockResolvedValue({ accessToken: 'at', refreshToken: 'rt', user });
     const dto = { email: 'a@b.com', password: 'pw' };
-    const res = { cookie: jest.fn() } as unknown as import('express').Response;
-    const result = await controller.login(dto as Parameters<typeof controller.login>[0], res);
-    expect(result).toEqual({ accessToken: 'at' });
-    expect(res.cookie).toHaveBeenCalledWith('refresh_token', 'rt', expect.any(Object));
+    const result = await controller.login(dto as Parameters<typeof controller.login>[0]);
+    expect(result).toEqual({ accessToken: 'at', refreshToken: 'rt', user });
   });
 
-  it('refresh — authService.refresh 호출하고 쿠키 갱신', async () => {
-    mockAuthService.refresh.mockResolvedValue({
-      accessToken: 'new-at',
-      refreshToken: 'new-rt',
-    });
-    const req = { cookies: { refresh_token: 'old-rt' } } as unknown as import('express').Request;
-    const res = { cookie: jest.fn() } as unknown as import('express').Response;
-    const result = await controller.refresh(req, res);
-    expect(result).toEqual({ accessToken: 'new-at' });
+  it('refresh — body의 refreshToken으로 갱신', async () => {
+    mockAuthService.refresh.mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt' });
+    const result = await controller.refresh({ refreshToken: 'old-rt' });
+    expect(result).toEqual({ accessToken: 'new-at', refreshToken: 'new-rt' });
     expect(mockAuthService.refresh).toHaveBeenCalledWith('old-rt');
   });
 });

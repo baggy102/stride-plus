@@ -1,8 +1,8 @@
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import * as SecureStorage from '@/utils/secureStorage';
 import Constants from 'expo-constants';
 
-const BASE_URL =
+export const BASE_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ?? 'http://localhost:3000';
 
 const client = axios.create({
@@ -18,7 +18,7 @@ export const registerUnauthenticatedHandler = (fn: () => void) => {
 
 // ── Request: access_token 헤더 첨부 ─────────────────────────────────────────
 client.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('access_token');
+  const token = await SecureStorage.getItem('access_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -54,7 +54,7 @@ client.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      const refreshToken = await SecureStore.getItemAsync('refresh_token');
+      const refreshToken = await SecureStorage.getItem('refresh_token');
       if (!refreshToken) throw new Error('no_refresh_token');
 
       const { data } = await axios.post<{ accessToken: string }>(
@@ -62,7 +62,7 @@ client.interceptors.response.use(
         { refreshToken },
       );
 
-      await SecureStore.setItemAsync('access_token', data.accessToken);
+      await SecureStorage.setItem('access_token', data.accessToken);
       client.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`;
 
       drainQueue(null, data.accessToken);
@@ -70,8 +70,8 @@ client.interceptors.response.use(
       return client(original);
     } catch (refreshError) {
       drainQueue(refreshError);
-      await SecureStore.deleteItemAsync('access_token');
-      await SecureStore.deleteItemAsync('refresh_token');
+      await SecureStorage.deleteItem('access_token');
+      await SecureStorage.deleteItem('refresh_token');
       onUnauthenticated?.();
       return Promise.reject(refreshError);
     } finally {
