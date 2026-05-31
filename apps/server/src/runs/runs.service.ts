@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Run, RunDocument } from './runs.schema';
 import { CreateRunDto } from './dto/create-run.dto';
 
@@ -47,8 +47,9 @@ export class RunsService {
   }
 
   async findByUser(userId: string, page = 1, limit = 50) {
+    const oid = new Types.ObjectId(userId);
     const runs = await this.runModel
-      .find({ userId })
+      .find({ userId: oid })
       .select(MARKER_SELECT)
       .populate('userId', USER_SELECT)
       .sort({ createdAt: -1 })
