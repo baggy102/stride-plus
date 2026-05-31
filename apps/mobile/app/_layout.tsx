@@ -33,18 +33,18 @@ export default function RootLayout() {
     }
   }, [isAuthenticated, isHydrating, segments]);
 
-  if (isHydrating) {
-    return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#3b82f6" />
-      </View>
-    );
-  }
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="auto" />
       <Slot />
+      {isHydrating && (
+        <View
+          style={{ position: 'absolute', inset: 0 }}
+          className="items-center justify-center bg-white"
+        >
+          <ActivityIndicator size="large" color="#3b82f6" />
+        </View>
+      )}
     </GestureHandlerRootView>
   );
 }

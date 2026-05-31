@@ -9,6 +9,7 @@ import client from '@/api/client';
 import { StatBadge } from './StatBadge';
 import { PhotoPicker } from './PhotoPicker';
 import { MiniMap } from './MiniMap';
+import { generateRouteImage } from './generateRouteImage';
 
 interface Props {
   summary: RunSummary;
@@ -37,15 +38,16 @@ export function RunSummaryModal({ summary, onClose }: Props) {
       form.append('paceSecPerKm', String(summary.paceSecPerKm));
       form.append('description', description);
 
+      // 경로 이미지를 첫 번째 photo로 업로드 → thumbnailUrl로 저장됨
+      const routeFile = await generateRouteImage(summary.coordinates);
+      if (routeFile) {
+        form.append('photos', routeFile as unknown as Blob);
+      }
+
       photos.forEach((uri, i) => {
         const ext = uri.split('.').pop() ?? 'jpg';
         const name = `photo_${i}.${ext}`;
-        if (Platform.OS === 'web') {
-          // Web: fetch blob from data URI
-          form.append('photos', { uri, name, type: `image/${ext}` } as unknown as Blob);
-        } else {
-          form.append('photos', { uri, name, type: `image/${ext}` } as unknown as Blob);
-        }
+        form.append('photos', { uri, name, type: `image/${ext}` } as unknown as Blob);
       });
 
       const { data: run } = await client.post<{ _id: string }>('/runs', form, {

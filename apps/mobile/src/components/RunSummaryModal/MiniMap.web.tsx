@@ -19,9 +19,15 @@ function buildPath(coords: [number, number][]) {
   const rangeX = maxLng - minLng || 0.001;
   const rangeY = maxLat - minLat || 0.001;
 
+  const drawW = W - PAD * 2;
+  const drawH = H - PAD * 2;
+  const scale = Math.min(drawW / rangeX, drawH / rangeY);
+  const offsetX = PAD + (drawW - rangeX * scale) / 2;
+  const offsetY = PAD + (drawH - rangeY * scale) / 2;
+
   return coords.map(([lng, lat]) => ({
-    x: PAD + ((lng - minLng) / rangeX) * (W - PAD * 2),
-    y: H - PAD - ((lat - minLat) / rangeY) * (H - PAD * 2),
+    x: offsetX + (lng - minLng) * scale,
+    y: offsetY + rangeY * scale - (lat - minLat) * scale,
   }));
 }
 
