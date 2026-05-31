@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as SecureStorage from '@/utils/secureStorage';
 import Constants from 'expo-constants';
 
-const BASE_URL =
+export const BASE_URL =
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ?? 'http://localhost:3000';
 
 const client = axios.create({

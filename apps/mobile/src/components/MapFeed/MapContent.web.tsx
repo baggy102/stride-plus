@@ -5,7 +5,7 @@ import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
 import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMapEvents } from 'react-leaflet';
 // @ts-ignore — react-leaflet-cluster types not bundled
 import MarkerClusterGroup from 'react-leaflet-cluster';
-import client from '@/api/client';
+import client, { BASE_URL } from '@/api/client';
 import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
@@ -39,7 +39,6 @@ function createClusterIcon(cluster: { getChildCount: () => number }) {
 }
 
 function formatPace(sec: number) {
-  if (!sec) return '--\'--"';
   return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
 }
 
@@ -142,7 +141,7 @@ export default function MapContent() {
                       {/* 썸네일 */}
                       {run.thumbnailUrl && (
                         <img
-                          src={run.thumbnailUrl}
+                          src={`${BASE_URL}${run.thumbnailUrl}`}
                           alt="run"
                           style={{
                             width: '100%',

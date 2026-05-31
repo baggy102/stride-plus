@@ -6,7 +6,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
 // @ts-ignore — react-leaflet-cluster types not bundled
 import MarkerClusterGroup from 'react-leaflet-cluster';
-import client from '@/api/client';
+import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { RunMarker } from '../RunCard';
 
@@ -50,7 +50,6 @@ function createClusterIcon(cluster: { getChildCount: () => number }) {
 }
 
 function formatPace(sec: number) {
-  if (!sec) return `--'--"`;
   return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
 }
 
@@ -156,7 +155,7 @@ export default function ProfileContent({ userId }: Props) {
                     <div style={{ padding: '4px 2px', fontFamily: 'system-ui, sans-serif' }}>
                       {run.thumbnailUrl && (
                         <img
-                          src={run.thumbnailUrl}
+                          src={`${BASE_URL}${run.thumbnailUrl}`}
                           alt="run"
                           style={{
                             width: '100%',
