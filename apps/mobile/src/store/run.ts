@@ -1,9 +1,6 @@
 import { Platform } from 'react-native';
 import { create } from 'zustand';
 import * as Location from 'expo-location';
-import * as TaskManager from 'expo-task-manager';
-
-export const BACKGROUND_LOCATION_TASK = 'bg-location';
 
 export interface RunSummary {
   coordinates: [number, number][];
@@ -24,6 +21,7 @@ interface RunStore {
 }
 
 let webWatchId: number | null = null;
+let nativeWatchSub: Location.LocationSubscription | null = null;
 
 export const useRunStore = create<RunStore>((set, get) => ({
   isTracking: false,
@@ -70,19 +68,16 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     set({ isTracking: true, coordinates: [], elapsedSeconds: 0 });
 
-    const bgStatus = await Location.requestBackgroundPermissionsAsync();
-    if (bgStatus.status !== 'granted') throw new Error('bg_location_permission_denied');
-
-    await Location.startLocationUpdatesAsync(BACKGROUND_LOCATION_TASK, {
-      accuracy: Location.Accuracy.BestForNavigation,
-      timeInterval: 3000,
-      distanceInterval: 5,
-      showsBackgroundLocationIndicator: true,
-      foregroundService: {
-        notificationTitle: 'Stride+ 러닝 중',
-        notificationBody: '백그라운드에서 GPS를 추적하고 있습니다.',
+    nativeWatchSub = await Location.watchPositionAsync(
+      {
+        accuracy: Location.Accuracy.BestForNavigation,
+        timeInterval: 3000,
+        distanceInterval: 5,
       },
-    });
+      (loc) => {
+        useRunStore.getState()._addCoordinate(loc.coords.longitude, loc.coords.latitude);
+      },
+    );
   },
 
   stopTracking: () => {
@@ -94,9 +89,8 @@ export const useRunStore = create<RunStore>((set, get) => ({
         webWatchId = null;
       }
     } else {
-      TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK).then((registered) => {
-        if (registered) Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
-      });
+      nativeWatchSub?.remove();
+      nativeWatchSub = null;
     }
 
     set({ isTracking: false });
@@ -134,13 +128,3 @@ function calcTotalDistance(coords: [number, number][]) {
   return total;
 }
 
-// 백그라운드 태스크 — 네이티브 전용
-if (Platform.OS !== 'web') {
-  TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
-    if (error) return;
-    const locations = (data as { locations: Location.LocationObject[] }).locations;
-    if (!locations?.length) return;
-    const { longitude, latitude } = locations[locations.length - 1].coords;
-    useRunStore.getState()._addCoordinate(longitude, latitude);
-  });
-}
