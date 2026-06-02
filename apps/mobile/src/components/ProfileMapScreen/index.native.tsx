@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image, ScrollView } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
+import { WebView } from 'react-native-webview';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { RunMarker } from '../RunCard';
@@ -22,6 +23,57 @@ function formatPace(sec: number) {
   return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
 }
 
+function buildHtml(runs: RunWithRoute[], baseUrl: string) {
+  const runsJson = JSON.stringify(runs);
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>* { margin:0; padding:0; } #map { width:100vw; height:100vh; }</style>
+</head>
+<body>
+<div id="map"></div>
+<script>
+  const runs = ${runsJson};
+  const map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OSM © CARTO'
+  }).addTo(map);
+
+  const dotIcon = L.divIcon({
+    html: '<div style="width:13px;height:13px;border-radius:50%;background:#e53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>',
+    className: '', iconSize: [13,13], iconAnchor: [6,6],
+  });
+
+  const allLatLng = [];
+
+  runs.forEach(function(run) {
+    if (run.route && run.route.length > 1) {
+      const coords = run.route.map(function(c) { return [c[1], c[0]]; });
+      coords.forEach(function(c) { allLatLng.push(c); });
+      L.polyline(coords, { color: 'rgba(229,57,53,0.6)', weight: 3 }).addTo(map);
+    }
+    if (run.startPoint) {
+      const m = L.marker([run.startPoint[1], run.startPoint[0]], { icon: dotIcon });
+      m.on('click', function() {
+        window.ReactNativeWebView.postMessage(JSON.stringify(run));
+      });
+      m.addTo(map);
+    }
+  });
+
+  if (allLatLng.length > 1) {
+    map.fitBounds(allLatLng, { padding: [40, 40] });
+  } else if (allLatLng.length === 1) {
+    map.setView(allLatLng[0], 14);
+  }
+</script>
+</body>
+</html>`;
+}
+
 export function ProfileMapScreen({ userId }: Props) {
   const { user } = useAuthStore();
   const targetId = userId ?? user?._id;
@@ -29,6 +81,7 @@ export function ProfileMapScreen({ userId }: Props) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState<RunWithRoute | null>(null);
 
   useEffect(() => {
     if (!targetId) return;
@@ -51,7 +104,24 @@ export function ProfileMapScreen({ userId }: Props) {
   const avatarLetter = (displayName || '?')[0].toUpperCase();
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
+    <View style={styles.container}>
+      {/* 지도 */}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color="#e53935" size="large" />
+        </View>
+      ) : (
+        <WebView
+          source={{ html: buildHtml(runs, BASE_URL) }}
+          style={StyleSheet.absoluteFillObject}
+          originWhitelist={['*']}
+          onMessage={(e) => {
+            try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
+          }}
+        />
+      )}
+
+      {/* 프로필 헤더 오버레이 */}
       <View style={styles.header}>
         <View style={styles.avatar}>
           {profile?.profileImageUrl ? (
@@ -67,50 +137,66 @@ export function ProfileMapScreen({ userId }: Props) {
           ) : (
             <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
           )}
-          <Text style={styles.note}>지도는 웹 버전에서 확인하세요</Text>
         </View>
       </View>
 
-      {runs.map((run) => (
-        <View key={run._id} style={styles.card}>
-          {run.thumbnailUrl && (
+      {/* 선택된 런 카드 */}
+      {selected && (
+        <View style={styles.card}>
+          <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
+            <Text style={styles.closeTxt}>✕</Text>
+          </Pressable>
+          {selected.thumbnailUrl && (
             <Image
-              source={{ uri: `${BASE_URL}${run.thumbnailUrl}` }}
-              style={styles.thumbnail}
+              source={{ uri: `${BASE_URL}${selected.thumbnailUrl}` }}
+              style={styles.thumb}
               resizeMode="cover"
             />
           )}
-          <View style={styles.cardStats}>
+          <View style={styles.statsRow}>
             <View>
-              <Text style={styles.label}>거리</Text>
-              <Text style={styles.value}>{run.distanceKm.toFixed(2)} km</Text>
+              <Text style={styles.statLabel}>거리</Text>
+              <Text style={styles.statValue}>{selected.distanceKm.toFixed(2)} km</Text>
             </View>
             <View>
-              <Text style={styles.label}>페이스</Text>
-              <Text style={styles.value}>{formatPace(run.paceSecPerKm)}</Text>
+              <Text style={styles.statLabel}>페이스</Text>
+              <Text style={styles.statValue}>{formatPace(selected.paceSecPerKm)}</Text>
             </View>
           </View>
-          <Text style={styles.date}>{new Date(run.createdAt).toLocaleDateString('ko-KR')}</Text>
+          <Text style={styles.date}>
+            {new Date(selected.createdAt).toLocaleDateString('ko-KR')}
+          </Text>
         </View>
-      ))}
-    </ScrollView>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16, backgroundColor: '#fff', gap: 14, borderBottomWidth: 1, borderBottomColor: '#e4e4e7' },
+  container: { flex: 1 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    backgroundColor: 'rgba(255,255,255,0.93)',
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16, gap: 14,
+  },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#e53935', alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: 52, height: 52, borderRadius: 26 },
   avatarLetter: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   headerInfo: { flex: 1 },
   username: { fontSize: 18, fontWeight: '700', color: '#18181b' },
   stats: { fontSize: 13, color: '#71717a', marginTop: 2 },
-  note: { fontSize: 11, color: '#a1a1aa', marginTop: 4 },
-  card: { backgroundColor: '#fff', borderRadius: 12, margin: 12, marginBottom: 0, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
-  thumbnail: { width: '100%', height: 160 },
-  cardStats: { flexDirection: 'row', gap: 24, padding: 14 },
-  label: { fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 },
-  value: { fontSize: 18, fontWeight: '700', color: '#18181b', marginTop: 2 },
-  date: { fontSize: 12, color: '#a1a1aa', paddingHorizontal: 14, paddingBottom: 14 },
+  card: {
+    position: 'absolute', bottom: 24, left: 16, right: 16,
+    backgroundColor: '#fff', borderRadius: 16, padding: 16,
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
+  },
+  closeBtn: { position: 'absolute', top: 12, right: 12, padding: 4 },
+  closeTxt: { fontSize: 16, color: '#71717a' },
+  thumb: { width: '100%', height: 130, borderRadius: 10, marginBottom: 12 },
+  statsRow: { flexDirection: 'row', gap: 20, marginBottom: 6 },
+  statLabel: { fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 },
+  statValue: { fontSize: 18, fontWeight: '700', color: '#18181b', marginTop: 2 },
+  date: { fontSize: 11, color: '#a1a1aa' },
 });
