@@ -138,18 +138,20 @@ export function ProfileMapScreen({ userId }: Props) {
           <ActivityIndicator color="#e53935" size="large" />
         </View>
       ) : (
-        <WebView
-          ref={webViewRef}
-          source={{ html: buildHtml(runs, BASE_URL) }}
-          style={StyleSheet.absoluteFillObject}
-          originWhitelist={['*']}
-          onMessage={(e) => {
-            try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
-          }}
-        />
-        <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
-          <Text style={styles.myLocTxt}>📍</Text>
-        </Pressable>
+        <>
+          <WebView
+            ref={webViewRef}
+            source={{ html: buildHtml(runs, BASE_URL) }}
+            style={StyleSheet.absoluteFillObject}
+            originWhitelist={['*']}
+            onMessage={(e) => {
+              try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
+            }}
+          />
+          <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
+            <Text style={styles.myLocTxt}>📍</Text>
+          </Pressable>
+        </>
       )}
 
       {/* 프로필 헤더 오버레이 */}
