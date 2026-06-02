@@ -160,7 +160,7 @@ export function MapFeed() {
                 {(selected.userId?.username ?? '?')[0].toUpperCase()}
               </Text>
             </View>
-            <Text style={styles.username}>{selected.userId?.username ?? '알 수 없음'}</Text>
+            <Text style={styles.username}>{selected.userId?.username || '알 수 없음'}</Text>
           </View>
           <View style={styles.stats}>
             <View>

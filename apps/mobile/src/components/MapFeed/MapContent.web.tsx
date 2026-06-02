@@ -168,7 +168,7 @@ export default function MapContent() {
                           {(run.userId?.username ?? '?')[0].toUpperCase()}
                         </div>
                         <span style={{ fontWeight: 600, fontSize: 13, color: '#18181b' }}>
-                          {run.userId?.username ?? '알 수 없음'}
+                          {run.userId?.username || '알 수 없음'}
                         </span>
                       </div>
                       <div style={{ display: 'flex', gap: 16 }}>

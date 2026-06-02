@@ -49,7 +49,7 @@ export function RunCard({ run }: Props) {
         )}
         <View>
           <Text className="text-white font-semibold">
-            {run.userId.username ?? '알 수 없음'}
+            {run.userId.username || '알 수 없음'}
           </Text>
           <Text className="text-zinc-400 text-xs">{formatDate(run.createdAt)}</Text>
         </View>
