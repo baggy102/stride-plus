@@ -1,155 +1,71 @@
-import { useRef, useState, useCallback, useEffect } from 'react';
-import { StyleSheet, View, Text } from 'react-native';
-import MapView, { Region } from 'react-native-maps';
-import ClusteredMapView from 'react-native-maps-clustering';
-import { Marker } from 'react-native-maps';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import client, { BASE_URL } from '@/api/client';
+import { RunMarker } from '../RunCard';
 import * as Location from 'expo-location';
-import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import client from '@/api/client';
-import { RunCard, RunMarker } from '../RunCard';
-
-const SEOUL: Region = {
-  latitude: 37.5665,
-  longitude: 126.978,
-  latitudeDelta: 0.05,
-  longitudeDelta: 0.05,
-};
-
-function latitudeDeltaToMeters(delta: number) {
-  return Math.round(delta * 111000 * 0.6);
-}
 
 export function MapFeed() {
-  const [region, setRegion] = useState<Region>(SEOUL);
-  const [markers, setMarkers] = useState<RunMarker[]>([]);
-  const [selected, setSelected] = useState<RunMarker | null>(null);
-  const bottomSheetRef = useRef<BottomSheet>(null);
+  const [runs, setRuns] = useState<RunMarker[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // 현재 위치로 초기 이동 + 마커 조회
+  const fetchRuns = useCallback(async (lat: number, lng: number) => {
+    try {
+      const { data } = await client.get<RunMarker[]>(
+        `/runs?lat=${lat}&lng=${lng}&radius=15000`,
+      );
+      setRuns(data);
+    } catch {}
+    finally { setLoading(false); }
+  }, []);
+
   useEffect(() => {
     (async () => {
-      let initialRegion = SEOUL;
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const loc = await Location.getCurrentPositionAsync({});
-        initialRegion = {
-          ...SEOUL,
-          latitude: loc.coords.latitude,
-          longitude: loc.coords.longitude,
-        };
+        fetchRuns(loc.coords.latitude, loc.coords.longitude);
+      } else {
+        fetchRuns(37.5665, 126.978);
       }
-      setRegion(initialRegion);
-      fetchMarkers(initialRegion);
     })();
-  }, [fetchMarkers]);
+  }, [fetchRuns]);
 
-  const fetchMarkers = useCallback(async (r: Region) => {
-    try {
-      const radius = latitudeDeltaToMeters(r.latitudeDelta);
-      const { data } = await client.get<RunMarker[]>(
-        `/runs?lat=${r.latitude}&lng=${r.longitude}&radius=${radius}`,
-      );
-      setMarkers(data);
-    } catch {
-      // 조용히 실패
-    }
-  }, []);
-
-  const handleRegionChange = useCallback(
-    (r: Region) => {
-      setRegion(r);
-      fetchMarkers(r);
-    },
-    [fetchMarkers],
-  );
-
-  const handleMarkerPress = useCallback((run: RunMarker) => {
-    setSelected(run);
-    bottomSheetRef.current?.expand();
-  }, []);
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color="#e53935" size="large" />
+      </View>
+    );
+  }
 
   return (
-    <View style={StyleSheet.absoluteFillObject}>
-      <ClusteredMapView
-        style={StyleSheet.absoluteFillObject}
-        region={region}
-        onRegionChangeComplete={handleRegionChange}
-        clusterColor="#E53935"
-        radius={40}
-        renderCluster={(cluster) => {
-          const { geometry, onPress, properties } = cluster;
-          const [lng, lat] = geometry.coordinates;
-          return (
-            <Marker
-              key={`cluster-${properties.cluster_id}`}
-              coordinate={{ latitude: lat, longitude: lng }}
-              onPress={onPress}
-            >
-              <View style={styles.cluster}>
-                <Text style={styles.clusterText}>+{properties.point_count}</Text>
-              </View>
-            </Marker>
-          );
-        }}
-      >
-        {markers.map((run) => {
-          if (!run.startPoint) return null;
-          const [lng, lat] = run.startPoint;
-          return (
-            <Marker
-              key={run._id}
-              coordinate={{ latitude: lat, longitude: lng }}
-              onPress={() => handleMarkerPress(run)}
-            >
-              <View style={styles.dot} />
-            </Marker>
-          );
-        })}
-      </ClusteredMapView>
-
-      <BottomSheet
-        ref={bottomSheetRef}
-        index={-1}
-        snapPoints={['45%']}
-        enablePanDownToClose
-        backgroundStyle={styles.sheet}
-        handleIndicatorStyle={styles.handle}
-        onClose={() => setSelected(null)}
-      >
-        <BottomSheetView>
-          {selected && <RunCard run={selected} />}
-        </BottomSheetView>
-      </BottomSheet>
+    <View style={styles.container}>
+      <Text style={styles.title}>주변 러닝 ({runs.length}개)</Text>
+      <Text style={styles.note}>지도는 웹 버전에서 확인하세요</Text>
+      {runs.map((run) => (
+        <View key={run._id} style={styles.card}>
+          {run.thumbnailUrl && (
+            // eslint-disable-next-line @typescript-eslint/no-require-imports
+            <View style={styles.thumb}>
+              <Text style={styles.thumbText}>📍</Text>
+            </View>
+          )}
+          <Text style={styles.cardUser}>{run.userId?.username ?? '알 수 없음'}</Text>
+          <Text style={styles.cardStat}>{run.distanceKm.toFixed(2)} km</Text>
+        </View>
+      ))}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  cluster: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: '#E53935',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clusterText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 13,
-  },
-  dot: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#E53935',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  sheet: {
-    backgroundColor: '#18181b',
-  },
-  handle: {
-    backgroundColor: '#52525b',
-  },
+  container: { flex: 1, backgroundColor: '#f8fafc', padding: 16, paddingTop: 60 },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  title: { fontSize: 20, fontWeight: 'bold', color: '#09090b', marginBottom: 4 },
+  note: { fontSize: 12, color: '#a1a1aa', marginBottom: 16 },
+  card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  thumb: { width: 40, height: 40, borderRadius: 8, backgroundColor: '#fee2e2', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  thumbText: { fontSize: 20 },
+  cardUser: { fontWeight: '600', color: '#18181b', marginBottom: 2 },
+  cardStat: { color: '#71717a', fontSize: 13 },
 });
