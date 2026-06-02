@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, Pressable, Image } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
+import { useFocusEffect } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { RunMarker } from '../RunCard';
 
@@ -77,6 +78,8 @@ export function MapFeed() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<RunMarker | null>(null);
   const [html, setHtml] = useState('');
+  const webViewRef = useRef<WebView>(null);
+  const skipFirstFocus = useRef(true);
 
   const fetchRuns = useCallback(async (lat: number, lng: number) => {
     try {
@@ -87,6 +90,7 @@ export function MapFeed() {
     finally { setLoading(false); }
   }, []);
 
+  // 최초 마운트: 내 위치 확보 후 fetch
   useEffect(() => {
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
@@ -101,6 +105,20 @@ export function MapFeed() {
     })();
   }, [fetchRuns]);
 
+  // 탭 재진입 시 리페치
+  useFocusEffect(useCallback(() => {
+    if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
+    fetchRuns(loc.lat, loc.lng);
+  }, [fetchRuns, loc]));
+
+  const handleMyLocation = useCallback(async () => {
+    try {
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = pos.coords;
+      webViewRef.current?.injectJavaScript(`map.flyTo([${latitude}, ${longitude}], 14); true;`);
+    } catch {}
+  }, []);
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -112,6 +130,7 @@ export function MapFeed() {
   return (
     <View style={styles.container}>
       <WebView
+        ref={webViewRef}
         source={{ html }}
         style={StyleSheet.absoluteFillObject}
         originWhitelist={['*']}
@@ -119,6 +138,9 @@ export function MapFeed() {
           try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
         }}
       />
+      <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
+        <Text style={styles.myLocTxt}>📍</Text>
+      </Pressable>
 
       {selected && (
         <View style={styles.card}>
@@ -160,6 +182,8 @@ export function MapFeed() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
+  myLocBtn: { position: 'absolute', bottom: 100, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
+  myLocTxt: { fontSize: 20 },
   card: {
     position: 'absolute', bottom: 24, left: 16, right: 16,
     backgroundColor: '#fff', borderRadius: 16, padding: 16,

@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
 import { WebView } from 'react-native-webview';
+import * as Location from 'expo-location';
+import { useFocusEffect } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { RunMarker } from '../RunCard';
@@ -92,9 +94,11 @@ export function ProfileMapScreen({ userId }: Props) {
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
+  const webViewRef = useRef<WebView>(null);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     if (!targetId) return;
+    setLoading(true);
     let done = 0;
     const finish = () => { if (++done === 2) setLoading(false); };
 
@@ -109,6 +113,19 @@ export function ProfileMapScreen({ userId }: Props) {
       .finally(finish);
   }, [targetId]);
 
+  // 탭 포커스마다 리페치 (최초 포함)
+  useFocusEffect(useCallback(() => {
+    fetchData();
+  }, [fetchData]));
+
+  const handleMyLocation = useCallback(async () => {
+    try {
+      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const { latitude, longitude } = pos.coords;
+      webViewRef.current?.injectJavaScript(`map.flyTo([${latitude}, ${longitude}], 14); true;`);
+    } catch {}
+  }, []);
+
   const totalKm = runs.reduce((s, r) => s + r.distanceKm, 0);
   const displayName = profile?.username ?? user?.username ?? '';
   const avatarLetter = (displayName || '?')[0].toUpperCase();
@@ -122,6 +139,7 @@ export function ProfileMapScreen({ userId }: Props) {
         </View>
       ) : (
         <WebView
+          ref={webViewRef}
           source={{ html: buildHtml(runs, BASE_URL) }}
           style={StyleSheet.absoluteFillObject}
           originWhitelist={['*']}
@@ -129,6 +147,9 @@ export function ProfileMapScreen({ userId }: Props) {
             try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
           }}
         />
+        <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
+          <Text style={styles.myLocTxt}>📍</Text>
+        </Pressable>
       )}
 
       {/* 프로필 헤더 오버레이 */}
@@ -209,4 +230,6 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 },
   statValue: { fontSize: 18, fontWeight: '700', color: '#18181b', marginTop: 2 },
   date: { fontSize: 11, color: '#a1a1aa' },
+  myLocBtn: { position: 'absolute', bottom: 100, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
+  myLocTxt: { fontSize: 20 },
 });
