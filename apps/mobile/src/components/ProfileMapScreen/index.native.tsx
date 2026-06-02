@@ -30,7 +30,10 @@ function buildHtml(runs: RunWithRoute[], baseUrl: string) {
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
   <style>* { margin:0; padding:0; } #map { width:100vw; height:100vh; }</style>
 </head>
 <body>
@@ -47,22 +50,29 @@ function buildHtml(runs: RunWithRoute[], baseUrl: string) {
     className: '', iconSize: [13,13], iconAnchor: [6,6],
   });
 
+  function clusterIcon(cluster) {
+    const n = cluster.getChildCount();
+    return L.divIcon({
+      html: '<div style="width:44px;height:44px;border-radius:22px;background:rgba(229,57,53,0.88);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.22)">+' + n + '</div>',
+      className: '', iconSize: [44,44], iconAnchor: [22,22],
+    });
+  }
+
+  const group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   const allLatLng = [];
 
   runs.forEach(function(run) {
-    if (run.route && run.route.length > 1) {
-      const coords = run.route.map(function(c) { return [c[1], c[0]]; });
-      coords.forEach(function(c) { allLatLng.push(c); });
-      L.polyline(coords, { color: 'rgba(229,57,53,0.6)', weight: 3 }).addTo(map);
-    }
-    if (run.startPoint) {
-      const m = L.marker([run.startPoint[1], run.startPoint[0]], { icon: dotIcon });
-      m.on('click', function() {
-        window.ReactNativeWebView.postMessage(JSON.stringify(run));
-      });
-      m.addTo(map);
-    }
+    if (!run.startPoint) return;
+    const lat = run.startPoint[1], lng = run.startPoint[0];
+    allLatLng.push([lat, lng]);
+    const m = L.marker([lat, lng], { icon: dotIcon });
+    m.on('click', function() {
+      window.ReactNativeWebView.postMessage(JSON.stringify(run));
+    });
+    group.addLayer(m);
   });
+
+  map.addLayer(group);
 
   if (allLatLng.length > 1) {
     map.fitBounds(allLatLng, { padding: [40, 40] });
