@@ -113,8 +113,15 @@ export default function ProfileContent({ userId }: Props) {
       .finally(finish);
   }, [targetId]);
 
-  // 탭 포커스마다 리페치 (최초 포함)
+  // targetId가 hydration 후 처음 생길 때 fetch (SecureStore 비동기 타이밍 대응)
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // 탭 재진입 시 리페치
+  const skipFirstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
+    if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
     fetchData();
   }, [fetchData]));
 
