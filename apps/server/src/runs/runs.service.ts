@@ -85,7 +85,7 @@ export class RunsService {
 
   async create(userId: string, dto: CreateRunDto, photoUrls: string[] = []) {
     const run = new this.runModel({
-      userId,
+      userId: new Types.ObjectId(userId),
       route: { type: 'LineString', coordinates: dto.coordinates },
       distanceKm: dto.distanceKm,
       paceSecPerKm: dto.paceSecPerKm,
