@@ -1,11 +1,12 @@
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
 // @ts-ignore — react-leaflet-cluster types not bundled
 import MarkerClusterGroup from 'react-leaflet-cluster';
+import { useFocusEffect } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { RunMarker } from '../RunCard';
@@ -61,13 +62,28 @@ function formatDate(iso: string) {
 
 function FitBounds({ coords }: { coords: LatLngTuple[] }) {
   const map = useMap();
+  const fitted = useRef(false);
   useEffect(() => {
-    if (coords.length === 1) {
-      map.setView(coords[0], 13);
-    } else if (coords.length > 1) {
-      map.fitBounds(coords, { padding: [40, 40] });
-    }
+    if (fitted.current || coords.length === 0) return;
+    fitted.current = true;
+    if (coords.length === 1) map.setView(coords[0], 13);
+    else map.fitBounds(coords, { padding: [40, 40] });
   }, [map, coords]);
+  return null;
+}
+
+function FlyToMe({ trigger }: { trigger: number }) {
+  const map = useMap();
+  const last = useRef(0);
+  useEffect(() => {
+    if (trigger === last.current) return;
+    last.current = trigger;
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => map.flyTo([pos.coords.latitude, pos.coords.longitude], 14),
+      undefined,
+      { enableHighAccuracy: false },
+    );
+  }, [trigger, map]);
   return null;
 }
 
@@ -78,9 +94,11 @@ export default function ProfileContent({ userId }: Props) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
   const [loading, setLoading] = useState(true);
+  const [flyTrigger, setFlyTrigger] = useState(0);
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
     if (!targetId) return;
+    setLoading(true);
     let done = 0;
     const finish = () => { if (++done === 2) setLoading(false); };
 
@@ -94,6 +112,18 @@ export default function ProfileContent({ userId }: Props) {
       .catch((e) => console.error('[profile] runs fetch failed', e))
       .finally(finish);
   }, [targetId]);
+
+  // targetId가 hydration 후 처음 생길 때 fetch (SecureStore 비동기 타이밍 대응)
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // 탭 재진입 시 리페치
+  const skipFirstFocus = useRef(true);
+  useFocusEffect(useCallback(() => {
+    if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
+    fetchData();
+  }, [fetchData]));
 
   const startPoints: LatLngTuple[] = runs
     .filter((r) => r.startPoint)
@@ -119,9 +149,7 @@ export default function ProfileContent({ userId }: Props) {
           {loading ? (
             <ActivityIndicator size="small" color="#71717a" />
           ) : (
-            <Text style={styles.stats}>
-              {totalKm.toFixed(1)} km · {runs.length}회
-            </Text>
+            <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
           )}
         </View>
       </View>
@@ -139,6 +167,7 @@ export default function ProfileContent({ userId }: Props) {
             attribution='&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>'
           />
           {startPoints.length > 0 && <FitBounds coords={startPoints} />}
+          <FlyToMe trigger={flyTrigger} />
 
           <MarkerClusterGroup
             chunkedLoading
@@ -157,14 +186,7 @@ export default function ProfileContent({ userId }: Props) {
                         <img
                           src={`${BASE_URL}${run.thumbnailUrl}`}
                           alt="run"
-                          style={{
-                            width: '100%',
-                            height: 120,
-                            objectFit: 'cover',
-                            borderRadius: 8,
-                            marginBottom: 10,
-                            display: 'block',
-                          }}
+                          style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, marginBottom: 10, display: 'block' }}
                         />
                       )}
                       <div style={{ display: 'flex', gap: 16 }}>
@@ -191,6 +213,11 @@ export default function ProfileContent({ userId }: Props) {
             })}
           </MarkerClusterGroup>
         </MapContainer>
+
+        {/* 내 위치 버튼 */}
+        <Pressable style={styles.myLocBtn} onPress={() => setFlyTrigger((t) => t + 1)}>
+          <Text style={styles.myLocTxt}>📍</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -199,28 +226,23 @@ export default function ProfileContent({ userId }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f8fafc' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 52,
-    paddingBottom: 16,
-    backgroundColor: '#fff',
-    gap: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e4e4e7',
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16,
+    backgroundColor: '#fff', gap: 14,
+    borderBottomWidth: 1, borderBottomColor: '#e4e4e7',
   },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#e53935',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#e53935', alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: 52, height: 52, borderRadius: 26 },
   avatarLetter: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
   headerInfo: { flex: 1 },
   username: { fontSize: 18, fontWeight: '700', color: '#18181b' },
   stats: { fontSize: 13, color: '#71717a', marginTop: 2 },
   mapWrapper: { flex: 1 },
+  myLocBtn: {
+    position: 'absolute', bottom: 24, right: 16,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+  },
+  myLocTxt: { fontSize: 20 },
 });

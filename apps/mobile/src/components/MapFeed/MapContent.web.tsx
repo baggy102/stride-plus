@@ -1,17 +1,17 @@
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
-import { useCallback, useEffect, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Text } from 'react-native';
-import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMapEvents } from 'react-leaflet';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, ActivityIndicator, StyleSheet, Text, Pressable } from 'react-native';
+import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 // @ts-ignore — react-leaflet-cluster types not bundled
 import MarkerClusterGroup from 'react-leaflet-cluster';
+import { useFocusEffect } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 const RADIUS = 15000;
 
-// 개별 런 마커 아이콘
 const runDotIcon = L.divIcon({
   html: `<div style="width:13px;height:13px;border-radius:50%;background:#e53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
   className: '',
@@ -20,7 +20,6 @@ const runDotIcon = L.divIcon({
   popupAnchor: [0, -8],
 });
 
-// 클러스터 아이콘 — "+N" 스타일 빨간 원
 function createClusterIcon(cluster: { getChildCount: () => number }) {
   const n = cluster.getChildCount();
   const label = n >= 1000 ? `+${(n / 1000).toFixed(1)}K` : `+${n}`;
@@ -58,10 +57,27 @@ function MapMoveHandler({ onMove }: { onMove: (lat: number, lng: number) => void
   return null;
 }
 
+function FlyToMe({ trigger }: { trigger: number }) {
+  const map = useMap();
+  const last = useRef(0);
+  useEffect(() => {
+    if (trigger === last.current) return;
+    last.current = trigger;
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => map.flyTo([pos.coords.latitude, pos.coords.longitude], 14),
+      undefined,
+      { enableHighAccuracy: false },
+    );
+  }, [trigger, map]);
+  return null;
+}
+
 export default function MapContent() {
   const [loading, setLoading] = useState(true);
   const [loc, setLoc] = useState(SEOUL);
   const [runs, setRuns] = useState<RunMarker[]>([]);
+  const [flyTrigger, setFlyTrigger] = useState(0);
+  const skipFirstFocus = useRef(true);
 
   const fetchRuns = useCallback(async (lat: number, lng: number) => {
     try {
@@ -72,6 +88,7 @@ export default function MapContent() {
     } catch {}
   }, []);
 
+  // 최초 마운트: 내 위치 확보 후 fetch
   useEffect(() => {
     new Promise<GeolocationPosition>((res, rej) =>
       navigator.geolocation?.getCurrentPosition(res, rej, { timeout: 5000 }),
@@ -85,6 +102,12 @@ export default function MapContent() {
       .catch(() => fetchRuns(SEOUL.lat, SEOUL.lng))
       .finally(() => setLoading(false));
   }, [fetchRuns]);
+
+  // 탭 재진입 시 리페치
+  useFocusEffect(useCallback(() => {
+    if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
+    fetchRuns(loc.lat, loc.lng);
+  }, [fetchRuns, loc]));
 
   if (loading) {
     return (
@@ -112,15 +135,14 @@ export default function MapContent() {
             attribution='&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>'
           />
           <MapMoveHandler onMove={fetchRuns} />
+          <FlyToMe trigger={flyTrigger} />
 
-          {/* 내 위치 (파란 점) */}
           <CircleMarker
             center={[loc.lat, loc.lng]}
             radius={9}
             pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 1, weight: 3 }}
           />
 
-          {/* 런 마커 — 클러스터링 */}
           <MarkerClusterGroup
             chunkedLoading
             iconCreateFunction={createClusterIcon}
@@ -131,43 +153,24 @@ export default function MapContent() {
               if (!run.startPoint) return null;
               const [lng, lat] = run.startPoint;
               return (
-                <Marker
-                  key={run._id}
-                  position={[lat, lng]}
-                  icon={runDotIcon}
-                >
+                <Marker key={run._id} position={[lat, lng]} icon={runDotIcon}>
                   <Popup closeButton={false} minWidth={220}>
                     <div style={{ padding: '4px 2px', fontFamily: 'system-ui, sans-serif' }}>
-                      {/* 썸네일 */}
                       {run.thumbnailUrl && (
                         <img
                           src={`${BASE_URL}${run.thumbnailUrl}`}
                           alt="run"
-                          style={{
-                            width: '100%',
-                            height: 120,
-                            objectFit: 'cover',
-                            borderRadius: 8,
-                            marginBottom: 10,
-                            display: 'block',
-                          }}
+                          style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, marginBottom: 10, display: 'block' }}
                         />
                       )}
-                      {/* 유저 */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <div style={{
-                          width: 28, height: 28, borderRadius: 14,
-                          background: '#e53935', color: '#fff',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 12, fontWeight: 700, flexShrink: 0,
-                        }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 14, background: '#e53935', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                           {(run.userId?.username ?? '?')[0].toUpperCase()}
                         </div>
                         <span style={{ fontWeight: 600, fontSize: 13, color: '#18181b' }}>
-                          {run.userId?.username ?? '알 수 없음'}
+                          {run.userId?.username || '알 수 없음'}
                         </span>
                       </div>
-                      {/* 스탯 */}
                       <div style={{ display: 'flex', gap: 16 }}>
                         <div>
                           <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>거리</div>
@@ -192,6 +195,11 @@ export default function MapContent() {
             })}
           </MarkerClusterGroup>
         </MapContainer>
+
+        {/* 내 위치 버튼 */}
+        <Pressable style={styles.myLocBtn} onPress={() => setFlyTrigger((t) => t + 1)}>
+          <Text style={styles.myLocTxt}>📍</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -203,4 +211,20 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 48, paddingBottom: 12 },
   title: { color: '#09090b', fontSize: 20, fontWeight: 'bold' },
   mapWrapper: { flex: 1 },
+  myLocBtn: {
+    position: 'absolute',
+    bottom: 24,
+    right: 16,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
+  },
+  myLocTxt: { fontSize: 20 },
 });
