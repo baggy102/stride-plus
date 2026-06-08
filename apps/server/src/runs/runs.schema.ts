@@ -22,6 +22,9 @@ export class Run {
   @Prop({ required: true })
   paceSecPerKm: number;
 
+  @Prop({ default: '' })
+  routeImageUrl: string;
+
   @Prop({ type: [String], default: [] })
   photoUrls: string[];
 
