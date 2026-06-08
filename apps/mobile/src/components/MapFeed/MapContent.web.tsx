@@ -39,27 +39,58 @@ function createClusterIcon(cluster: { getChildCount: () => number }) {
 
 function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string }) {
   const [idx, setIdx] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ x: number; left: number } | null>(null);
+
   if (images.length === 0) return null;
 
-  const wrap = {
-    position: 'relative' as const, width: '100%', height: 120,
-    overflow: 'hidden', borderRadius: 8, marginBottom: 10,
+  const goTo = (i: number) => {
+    const el = trackRef.current;
+    if (!el) return;
+    el.scrollTo({ left: i * el.clientWidth, behavior: 'smooth' });
+    setIdx(i);
   };
-  const dot = (i: number) => ({
-    width: 6, height: 6, borderRadius: 3, cursor: 'pointer' as const,
-    background: i === idx ? '#fff' : 'rgba(255,255,255,0.5)',
-  });
 
   return (
-    <div style={wrap}>
-      <img
-        src={`${baseUrl}${images[idx]}`}
-        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-      />
+    <div style={{ position: 'relative', width: '100%', height: 120, overflow: 'hidden', borderRadius: 8, marginBottom: 10 }}>
+      <div
+        ref={trackRef}
+        onMouseDown={(e) => { drag.current = { x: e.pageX, left: trackRef.current?.scrollLeft ?? 0 }; }}
+        onMouseMove={(e) => {
+          if (!drag.current || !trackRef.current) return;
+          e.preventDefault();
+          trackRef.current.scrollLeft = drag.current.left + (drag.current.x - e.pageX);
+        }}
+        onMouseUp={() => {
+          if (!drag.current || !trackRef.current) return;
+          const el = trackRef.current;
+          el.scrollTo({ left: Math.round(el.scrollLeft / el.clientWidth) * el.clientWidth, behavior: 'smooth' });
+          drag.current = null;
+        }}
+        onMouseLeave={() => { drag.current = null; }}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          if (el.clientWidth > 0) setIdx(Math.round(el.scrollLeft / el.clientWidth));
+        }}
+        style={{ display: 'flex', overflowX: 'scroll', scrollSnapType: 'x mandatory', width: '100%', height: 120, cursor: 'grab', userSelect: 'none' }}
+      >
+        {images.map((img, i) => (
+          <img
+            key={i}
+            src={`${baseUrl}${img}`}
+            draggable={false}
+            style={{ flexShrink: 0, width: '100%', height: 120, objectFit: 'cover', scrollSnapAlign: 'start', pointerEvents: 'none' }}
+          />
+        ))}
+      </div>
       {images.length > 1 && (
         <div style={{ position: 'absolute', bottom: 6, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 4 }}>
           {images.map((_, i) => (
-            <div key={i} style={dot(i)} onClick={() => setIdx(i)} />
+            <div
+              key={i}
+              onClick={() => goTo(i)}
+              style={{ width: 6, height: 6, borderRadius: 3, cursor: 'pointer', background: i === idx ? '#fff' : 'rgba(255,255,255,0.5)' }}
+            />
           ))}
         </div>
       )}
