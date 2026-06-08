@@ -241,11 +241,12 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
   header: { paddingHorizontal: 16, paddingTop: 48, paddingBottom: 12 },
   title: { color: '#09090b', fontSize: 20, fontWeight: 'bold' },
-  mapWrapper: { flex: 1 },
+  mapWrapper: { flex: 1, position: 'relative' },
   myLocBtn: {
     position: 'absolute',
     bottom: 24,
     right: 16,
+    zIndex: 1000,
     width: 44,
     height: 44,
     borderRadius: 22,

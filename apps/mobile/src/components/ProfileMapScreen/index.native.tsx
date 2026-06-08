@@ -25,7 +25,7 @@ function formatPace(sec: number) {
   return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
 }
 
-function buildHtml(runs: RunWithRoute[], baseUrl: string) {
+function buildHtml(runs: RunWithRoute[]) {
   const runsJson = JSON.stringify(runs);
   return `<!DOCTYPE html>
 <html>
@@ -148,7 +148,7 @@ export function ProfileMapScreen({ userId }: Props) {
         <>
           <WebView
             ref={webViewRef}
-            source={{ html: buildHtml(runs, BASE_URL) }}
+            source={{ html: buildHtml(runs) }}
             style={StyleSheet.absoluteFillObject}
             originWhitelist={['*']}
             onMessage={(e) => {
@@ -186,9 +186,9 @@ export function ProfileMapScreen({ userId }: Props) {
           <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
             <Text style={styles.closeTxt}>✕</Text>
           </Pressable>
-          {selected.thumbnailUrl && (
+          {(selected.routeImageUrl || selected.thumbnailUrl) && (
             <Image
-              source={{ uri: `${BASE_URL}${selected.thumbnailUrl}` }}
+              source={{ uri: `${BASE_URL}${selected.routeImageUrl || selected.thumbnailUrl}` }}
               style={styles.thumb}
               resizeMode="cover"
             />
@@ -239,6 +239,6 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 },
   statValue: { fontSize: 18, fontWeight: '700', color: '#18181b', marginTop: 2 },
   date: { fontSize: 11, color: '#a1a1aa' },
-  myLocBtn: { position: 'absolute', bottom: 100, right: 16, width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
+  myLocBtn: { position: 'absolute', bottom: 100, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
   myLocTxt: { fontSize: 20 },
 });

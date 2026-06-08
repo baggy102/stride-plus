@@ -87,6 +87,14 @@ export class RunsService {
       .exec();
   }
 
+  async updateRouteImage(id: string, routeImageUrl: string) {
+    const run = await this.runModel
+      .findByIdAndUpdate(id, { routeImageUrl }, { new: true })
+      .lean()
+      .exec();
+    return { routeImageUrl: (run as unknown as { routeImageUrl?: string })?.routeImageUrl ?? '' };
+  }
+
   async create(
     userId: string,
     dto: CreateRunDto,

@@ -10,6 +10,7 @@ import { useFocusEffect } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { RunMarker } from '../RunCard';
+import { generateRouteImage } from '@/components/RunSummaryModal/generateRouteImage';
 
 interface UserProfile {
   _id: string;
@@ -58,6 +59,31 @@ function formatDate(iso: string) {
   if (!iso) return '';
   const d = new Date(iso);
   return `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`;
+}
+
+function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string }) {
+  const [idx, setIdx] = useState(0);
+  if (images.length === 0) return null;
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: 120, overflow: 'hidden', borderRadius: 8, marginBottom: 10 }}>
+      <img
+        src={`${baseUrl}${images[idx]}`}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
+      {images.length > 1 && (
+        <div style={{ position: 'absolute', bottom: 6, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 4 }}>
+          {images.map((_, i) => (
+            <div
+              key={i}
+              onClick={() => setIdx(i)}
+              style={{ width: 6, height: 6, borderRadius: 3, cursor: 'pointer', background: i === idx ? '#fff' : 'rgba(255,255,255,0.5)' }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FitBounds({ coords }: { coords: LatLngTuple[] }) {
@@ -113,17 +139,37 @@ export default function ProfileContent({ userId }: Props) {
       .finally(finish);
   }, [targetId]);
 
-  // targetId가 hydration 후 처음 생길 때 fetch (SecureStore 비동기 타이밍 대응)
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  // 탭 재진입 시 리페치
   const skipFirstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
     if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
     fetchData();
   }, [fetchData]));
+
+  // 기존 런 중 routeImageUrl 없는 것 자동 생성·업로드
+  const migrationDone = useRef(false);
+  useEffect(() => {
+    if (migrationDone.current || runs.length === 0) return;
+    const toMigrate = runs.filter((r) => !r.routeImageUrl && r.route?.length > 1);
+    if (toMigrate.length === 0) { migrationDone.current = true; return; }
+    migrationDone.current = true;
+
+    toMigrate.forEach(async (run) => {
+      try {
+        const img = await generateRouteImage(run.route);
+        if (!img) return;
+        const form = new FormData();
+        form.append('routeImage', img as unknown as Blob);
+        const { data } = await client.patch<{ routeImageUrl: string }>(
+          `/runs/${run._id}/route-image`,
+          form,
+          { headers: { 'Content-Type': 'multipart/form-data' } },
+        );
+        setRuns((prev) => prev.map((r) => r._id === run._id ? { ...r, routeImageUrl: data.routeImageUrl } : r));
+      } catch {}
+    });
+  }, [runs]);
 
   const startPoints: LatLngTuple[] = runs
     .filter((r) => r.startPoint)
@@ -178,17 +224,12 @@ export default function ProfileContent({ userId }: Props) {
             {runs.map((run) => {
               if (!run.startPoint) return null;
               const [lng, lat] = run.startPoint;
+              const images = [run.routeImageUrl, ...run.photoUrls].filter(Boolean) as string[];
               return (
                 <Marker key={run._id} position={[lat, lng]} icon={runDotIcon}>
                   <Popup closeButton={false} minWidth={200}>
                     <div style={{ padding: '4px 2px', fontFamily: 'system-ui, sans-serif' }}>
-                      {run.thumbnailUrl && (
-                        <img
-                          src={`${BASE_URL}${run.thumbnailUrl}`}
-                          alt="run"
-                          style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, marginBottom: 10, display: 'block' }}
-                        />
-                      )}
+                      <PopupCarousel images={images} baseUrl={BASE_URL} />
                       <div style={{ display: 'flex', gap: 16 }}>
                         <div>
                           <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>거리</div>
@@ -237,12 +278,22 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   username: { fontSize: 18, fontWeight: '700', color: '#18181b' },
   stats: { fontSize: 13, color: '#71717a', marginTop: 2 },
-  mapWrapper: { flex: 1 },
+  mapWrapper: { flex: 1, position: 'relative' },
   myLocBtn: {
-    position: 'absolute', bottom: 24, right: 16,
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+    position: 'absolute',
+    bottom: 24,
+    right: 16,
+    zIndex: 1000,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 4,
   },
   myLocTxt: { fontSize: 20 },
 });
