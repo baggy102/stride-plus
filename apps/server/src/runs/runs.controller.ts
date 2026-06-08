@@ -2,7 +2,7 @@ import {
   Controller, Get, Post, Param, Query, Req,
   UseInterceptors, UploadedFiles, Body,
 } from '@nestjs/common';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { RunsService } from './runs.service';
@@ -35,13 +35,21 @@ export class RunsController {
   }
 
   @Post()
-  @UseInterceptors(FilesInterceptor('photos', 3, { storage }))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [{ name: 'routeImage', maxCount: 1 }, { name: 'photos', maxCount: 3 }],
+      { storage },
+    ),
+  )
   create(
     @Req() req: { user: { sub: string } },
     @Body() dto: CreateRunDto,
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles() files: { routeImage?: Express.Multer.File[]; photos?: Express.Multer.File[] },
   ) {
-    const photoUrls = (files ?? []).map((f) => `/uploads/${f.filename}`);
-    return this.runsService.create(req.user.sub, dto, photoUrls);
+    const routeImageUrl = files?.routeImage?.[0]
+      ? `/uploads/${files.routeImage[0].filename}`
+      : '';
+    const photoUrls = (files?.photos ?? []).map((f) => `/uploads/${f.filename}`);
+    return this.runsService.create(req.user.sub, dto, routeImageUrl, photoUrls);
   }
 }
