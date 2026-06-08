@@ -4,7 +4,7 @@ import { Model, Types } from 'mongoose';
 import { Run, RunDocument } from './runs.schema';
 import { CreateRunDto } from './dto/create-run.dto';
 
-const MARKER_SELECT = 'userId distanceKm paceSecPerKm photoUrls createdAt route';
+const MARKER_SELECT = 'userId distanceKm paceSecPerKm routeImageUrl photoUrls createdAt route';
 const USER_SELECT = '_id username profileImageUrl';
 const DEFAULT_RADIUS = 5000;
 
@@ -39,7 +39,9 @@ export class RunsService {
         userId: run.userId,
         distanceKm: run.distanceKm,
         paceSecPerKm: run.paceSecPerKm,
+        routeImageUrl: (run as unknown as { routeImageUrl?: string }).routeImageUrl ?? null,
         thumbnailUrl: photoUrls?.[0] ?? null,
+        photoUrls: photoUrls ?? [],
         startPoint: route?.coordinates?.[0] ?? null,
         createdAt,
       };
@@ -67,7 +69,9 @@ export class RunsService {
         userId: run.userId,
         distanceKm: run.distanceKm,
         paceSecPerKm: run.paceSecPerKm,
+        routeImageUrl: (run as unknown as { routeImageUrl?: string }).routeImageUrl ?? null,
         thumbnailUrl: photoUrls?.[0] ?? null,
+        photoUrls: photoUrls ?? [],
         startPoint: route?.coordinates?.[0] ?? null,
         route: route?.coordinates ?? [],
         createdAt,
@@ -83,12 +87,18 @@ export class RunsService {
       .exec();
   }
 
-  async create(userId: string, dto: CreateRunDto, photoUrls: string[] = []) {
+  async create(
+    userId: string,
+    dto: CreateRunDto,
+    routeImageUrl = '',
+    photoUrls: string[] = [],
+  ) {
     const run = new this.runModel({
       userId: new Types.ObjectId(userId),
       route: { type: 'LineString', coordinates: dto.coordinates },
       distanceKm: dto.distanceKm,
       paceSecPerKm: dto.paceSecPerKm,
+      routeImageUrl,
       photoUrls,
       description: dto.description ?? '',
     });

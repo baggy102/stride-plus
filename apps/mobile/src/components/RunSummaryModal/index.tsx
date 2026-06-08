@@ -38,10 +38,9 @@ export function RunSummaryModal({ summary, onClose }: Props) {
       form.append('paceSecPerKm', String(summary.paceSecPerKm));
       form.append('description', description);
 
-      // 경로 이미지를 첫 번째 photo로 업로드 → thumbnailUrl로 저장됨
       const routeFile = await generateRouteImage(summary.coordinates);
       if (routeFile) {
-        form.append('photos', routeFile as unknown as Blob);
+        form.append('routeImage', routeFile as unknown as Blob);
       }
 
       photos.forEach((uri, i) => {

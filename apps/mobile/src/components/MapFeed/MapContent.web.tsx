@@ -37,6 +37,36 @@ function createClusterIcon(cluster: { getChildCount: () => number }) {
   });
 }
 
+function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string }) {
+  const [idx, setIdx] = useState(0);
+  if (images.length === 0) return null;
+
+  const wrap = {
+    position: 'relative' as const, width: '100%', height: 120,
+    overflow: 'hidden', borderRadius: 8, marginBottom: 10,
+  };
+  const dot = (i: number) => ({
+    width: 6, height: 6, borderRadius: 3, cursor: 'pointer' as const,
+    background: i === idx ? '#fff' : 'rgba(255,255,255,0.5)',
+  });
+
+  return (
+    <div style={wrap}>
+      <img
+        src={`${baseUrl}${images[idx]}`}
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
+      {images.length > 1 && (
+        <div style={{ position: 'absolute', bottom: 6, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 4 }}>
+          {images.map((_, i) => (
+            <div key={i} style={dot(i)} onClick={() => setIdx(i)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatPace(sec: number) {
   return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
 }
@@ -156,13 +186,10 @@ export default function MapContent() {
                 <Marker key={run._id} position={[lat, lng]} icon={runDotIcon}>
                   <Popup closeButton={false} minWidth={220}>
                     <div style={{ padding: '4px 2px', fontFamily: 'system-ui, sans-serif' }}>
-                      {run.thumbnailUrl && (
-                        <img
-                          src={`${BASE_URL}${run.thumbnailUrl}`}
-                          alt="run"
-                          style={{ width: '100%', height: 120, objectFit: 'cover', borderRadius: 8, marginBottom: 10, display: 'block' }}
-                        />
-                      )}
+                      <PopupCarousel
+                        images={[run.routeImageUrl, ...run.photoUrls].filter(Boolean) as string[]}
+                        baseUrl={BASE_URL}
+                      />
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <div style={{ width: 28, height: 28, borderRadius: 14, background: '#e53935', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                           {(run.userId?.username ?? '?')[0].toUpperCase()}

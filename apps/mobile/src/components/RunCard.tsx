@@ -1,12 +1,16 @@
-import { View, Text, Pressable, Image } from 'react-native';
+import { useState } from 'react';
+import { View, Text, Pressable, Image, ScrollView, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
+import { BASE_URL } from '@/api/client';
 
 export interface RunMarker {
   _id: string;
   userId: { _id: string; username?: string; profileImageUrl?: string };
   distanceKm: number;
   paceSecPerKm: number;
+  routeImageUrl: string | null;
   thumbnailUrl: string | null;
+  photoUrls: string[];
   startPoint: [number, number] | null;
   createdAt: string;
 }
@@ -21,12 +25,69 @@ function formatDate(iso: string) {
   return `${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
+function ImageCarousel({ images }: { images: string[] }) {
+  const { width: screenWidth } = useWindowDimensions();
+  const imgWidth = screenWidth - 32; // px-4 (16px) * 2
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  if (images.length === 0) return null;
+
+  return (
+    <View style={{ borderRadius: 16, overflow: 'hidden' }}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={(e) => {
+          setActiveIdx(Math.round(e.nativeEvent.contentOffset.x / imgWidth));
+        }}
+        style={{ width: imgWidth, height: 192 }}
+      >
+        {images.map((uri, i) => (
+          <Image
+            key={i}
+            source={{ uri: `${BASE_URL}${uri}` }}
+            style={{ width: imgWidth, height: 192 }}
+            resizeMode="cover"
+          />
+        ))}
+      </ScrollView>
+      {images.length > 1 && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 8,
+            left: 0,
+            right: 0,
+            flexDirection: 'row',
+            justifyContent: 'center',
+            gap: 4,
+          }}
+        >
+          {images.map((_, i) => (
+            <View
+              key={i}
+              style={{
+                width: 6,
+                height: 6,
+                borderRadius: 3,
+                backgroundColor: i === activeIdx ? '#fff' : 'rgba(255,255,255,0.4)',
+              }}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
 interface Props {
   run: RunMarker;
 }
 
 export function RunCard({ run }: Props) {
   const router = useRouter();
+  const images = [run.routeImageUrl, ...run.photoUrls].filter(Boolean) as string[];
 
   return (
     <View className="px-4 pb-8 gap-4">
@@ -55,14 +116,8 @@ export function RunCard({ run }: Props) {
         </View>
       </Pressable>
 
-      {/* 썸네일 */}
-      {run.thumbnailUrl && (
-        <Image
-          source={{ uri: run.thumbnailUrl }}
-          className="w-full h-48 rounded-2xl bg-zinc-800"
-          resizeMode="cover"
-        />
-      )}
+      {/* 이미지 캐러셀 */}
+      <ImageCarousel images={images} />
 
       {/* 스탯 */}
       <View className="flex-row gap-6">
