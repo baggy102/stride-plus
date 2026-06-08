@@ -45,6 +45,7 @@ agent_docs/
 
 # Claude Code local settings
 .claude/settings.local.json
+CLAUDE.md
 
 # Server uploads (user-generated files)
 apps/server/uploads/
