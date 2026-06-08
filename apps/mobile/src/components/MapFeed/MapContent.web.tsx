@@ -78,10 +78,14 @@ function formatDate(iso: string) {
 }
 
 function MapMoveHandler({ onMove }: { onMove: (lat: number, lng: number) => void }) {
+  const timerRef = useRef<ReturnType<typeof setTimeout>>();
   useMapEvents({
     moveend: (e) => {
-      const c = e.target.getCenter();
-      onMove(c.lat, c.lng);
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        const c = e.target.getCenter();
+        onMove(c.lat, c.lng);
+      }, 500);
     },
   });
   return null;
