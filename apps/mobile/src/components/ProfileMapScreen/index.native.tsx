@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable, ScrollView, useWindowDimensions } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useFocusEffect } from 'expo-router';
@@ -90,10 +90,14 @@ export function ProfileMapScreen({ userId }: Props) {
   const { user } = useAuthStore();
   const targetId = userId ?? user?._id;
 
+  const { width: screenWidth } = useWindowDimensions();
+  const cardImgWidth = screenWidth - 64; // card: left/right 16 + padding 16*2
+
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
+  const [cardImgIdx, setCardImgIdx] = useState(0);
   const webViewRef = useRef<WebView>(null);
 
   const fetchData = useCallback(() => {
@@ -152,7 +156,10 @@ export function ProfileMapScreen({ userId }: Props) {
             style={StyleSheet.absoluteFillObject}
             originWhitelist={['*']}
             onMessage={(e) => {
-              try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
+              try {
+                setSelected(JSON.parse(e.nativeEvent.data));
+                setCardImgIdx(0);
+              } catch {}
             }}
           />
           <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
@@ -186,13 +193,45 @@ export function ProfileMapScreen({ userId }: Props) {
           <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
             <Text style={styles.closeTxt}>✕</Text>
           </Pressable>
-          {(selected.routeImageUrl || selected.thumbnailUrl) && (
-            <Image
-              source={{ uri: `${BASE_URL}${selected.routeImageUrl || selected.thumbnailUrl}` }}
-              style={styles.thumb}
-              resizeMode="cover"
-            />
-          )}
+          {(() => {
+            const imgs = [selected.routeImageUrl, ...selected.photoUrls].filter(Boolean) as string[];
+            if (imgs.length === 0) return null;
+            return (
+              <View style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
+                <ScrollView
+                  horizontal
+                  pagingEnabled
+                  showsHorizontalScrollIndicator={false}
+                  style={{ width: cardImgWidth, height: 130 }}
+                  onMomentumScrollEnd={(e) =>
+                    setCardImgIdx(Math.round(e.nativeEvent.contentOffset.x / cardImgWidth))
+                  }
+                >
+                  {imgs.map((uri, i) => (
+                    <Image
+                      key={i}
+                      source={{ uri: `${BASE_URL}${uri}` }}
+                      style={{ width: cardImgWidth, height: 130 }}
+                      resizeMode="cover"
+                    />
+                  ))}
+                </ScrollView>
+                {imgs.length > 1 && (
+                  <View style={{ position: 'absolute', bottom: 6, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
+                    {imgs.map((_, i) => (
+                      <View
+                        key={i}
+                        style={{
+                          width: 6, height: 6, borderRadius: 3,
+                          backgroundColor: i === cardImgIdx ? '#fff' : 'rgba(255,255,255,0.4)',
+                        }}
+                      />
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          })()}
           <View style={styles.statsRow}>
             <View>
               <Text style={styles.statLabel}>거리</Text>
@@ -234,7 +273,6 @@ const styles = StyleSheet.create({
   },
   closeBtn: { position: 'absolute', top: 12, right: 12, padding: 4 },
   closeTxt: { fontSize: 16, color: '#71717a' },
-  thumb: { width: '100%', height: 130, borderRadius: 10, marginBottom: 12 },
   statsRow: { flexDirection: 'row', gap: 20, marginBottom: 6 },
   statLabel: { fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 },
   statValue: { fontSize: 18, fontWeight: '700', color: '#18181b', marginTop: 2 },
