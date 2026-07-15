@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useFocusEffect } from 'expo-router';
@@ -19,6 +19,56 @@ interface RunWithRoute extends RunMarker {
 
 interface Props {
   userId?: string;
+}
+
+function CardCarousel({ imgs, baseUrl }: { imgs: string[]; baseUrl: string }) {
+  const [idx, setIdx] = useState(0);
+  const [w, setW] = useState(0);
+
+  if (imgs.length === 0) return null;
+
+  return (
+    <View
+      style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+    >
+      {w > 0 && (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          decelerationRate="fast"
+          scrollEventThrottle={16}
+          style={{ width: w, height: 130 }}
+          onScroll={(e) =>
+            setIdx(Math.round(e.nativeEvent.contentOffset.x / w))
+          }
+        >
+          {imgs.map((uri, i) => (
+            <Image
+              key={i}
+              source={{ uri: `${baseUrl}${uri}` }}
+              style={{ width: w, height: 130 }}
+              resizeMode="cover"
+            />
+          ))}
+        </ScrollView>
+      )}
+      {imgs.length > 1 && w > 0 && (
+        <View style={{ position: 'absolute', bottom: 6, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
+          {imgs.map((_, i) => (
+            <View
+              key={i}
+              style={{
+                width: 6, height: 6, borderRadius: 3,
+                backgroundColor: i === idx ? '#fff' : 'rgba(255,255,255,0.4)',
+              }}
+            />
+          ))}
+        </View>
+      )}
+    </View>
+  );
 }
 
 function formatPace(sec: number) {
@@ -90,14 +140,10 @@ export function ProfileMapScreen({ userId }: Props) {
   const { user } = useAuthStore();
   const targetId = userId ?? user?._id;
 
-  const { width: screenWidth } = useWindowDimensions();
-  const cardImgWidth = screenWidth - 64; // card: left/right 16 + padding 16*2
-
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
-  const [cardImgIdx, setCardImgIdx] = useState(0);
   const webViewRef = useRef<WebView>(null);
 
   const fetchData = useCallback(() => {
@@ -156,10 +202,7 @@ export function ProfileMapScreen({ userId }: Props) {
             style={StyleSheet.absoluteFillObject}
             originWhitelist={['*']}
             onMessage={(e) => {
-              try {
-                setSelected(JSON.parse(e.nativeEvent.data));
-                setCardImgIdx(0);
-              } catch {}
+              try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
             }}
           />
           <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
@@ -193,45 +236,11 @@ export function ProfileMapScreen({ userId }: Props) {
           <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
             <Text style={styles.closeTxt}>✕</Text>
           </Pressable>
-          {(() => {
-            const imgs = [selected.routeImageUrl, ...selected.photoUrls].filter(Boolean) as string[];
-            if (imgs.length === 0) return null;
-            return (
-              <View style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}>
-                <ScrollView
-                  horizontal
-                  pagingEnabled
-                  showsHorizontalScrollIndicator={false}
-                  style={{ width: cardImgWidth, height: 130 }}
-                  onMomentumScrollEnd={(e) =>
-                    setCardImgIdx(Math.round(e.nativeEvent.contentOffset.x / cardImgWidth))
-                  }
-                >
-                  {imgs.map((uri, i) => (
-                    <Image
-                      key={i}
-                      source={{ uri: `${BASE_URL}${uri}` }}
-                      style={{ width: cardImgWidth, height: 130 }}
-                      resizeMode="cover"
-                    />
-                  ))}
-                </ScrollView>
-                {imgs.length > 1 && (
-                  <View style={{ position: 'absolute', bottom: 6, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
-                    {imgs.map((_, i) => (
-                      <View
-                        key={i}
-                        style={{
-                          width: 6, height: 6, borderRadius: 3,
-                          backgroundColor: i === cardImgIdx ? '#fff' : 'rgba(255,255,255,0.4)',
-                        }}
-                      />
-                    ))}
-                  </View>
-                )}
-              </View>
-            );
-          })()}
+          <CardCarousel
+            key={selected._id}
+            imgs={[selected.routeImageUrl, ...selected.photoUrls].filter(Boolean) as string[]}
+            baseUrl={BASE_URL}
+          />
           <View style={styles.statsRow}>
             <View>
               <Text style={styles.statLabel}>거리</Text>
