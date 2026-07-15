@@ -35,7 +35,7 @@ function carouselHtml(photos: string[], baseUrl: string, runId: string): string 
 /** 팝업 카드 내부 HTML (공통) */
 export function popupInnerHtml(run: {
   _id: string;
-  userId?: { username?: string };
+  userId?: { _id?: string; username?: string };
   distanceKm: number;
   paceSecPerKm: number;
   routeImageUrl?: string | null;
@@ -58,7 +58,7 @@ export function popupInnerHtml(run: {
   const date = `${d.getFullYear()}. ${d.getMonth() + 1}. ${d.getDate()}`;
 
   const userHtml = showUser
-    ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+    ? `<div onclick="window.ReactNativeWebView.postMessage(JSON.stringify({type:'profile',userId:'${run.userId?._id ?? ''}'}))" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;">
         <div style="width:28px;height:28px;border-radius:14px;background:#e53935;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">
           ${(run.userId?.username || '?')[0].toUpperCase()}
         </div>
