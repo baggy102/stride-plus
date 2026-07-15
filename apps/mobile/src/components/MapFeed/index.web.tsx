@@ -13,8 +13,8 @@ export function MapFeed() {
 
   if (!isClient) {
     return (
-      <View style={{ flex: 1, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' }}>
-        <ActivityIndicator color="#3b82f6" />
+      <View style={{ flex: 1, backgroundColor: '#0A0A0A', alignItems: 'center', justifyContent: 'center' }}>
+        <ActivityIndicator color="#B3E5FC" />
       </View>
     );
   }
@@ -22,8 +22,8 @@ export function MapFeed() {
   return (
     <Suspense
       fallback={
-        <View style={{ flex: 1, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' }}>
-          <ActivityIndicator color="#3b82f6" />
+        <View style={{ flex: 1, backgroundColor: '#0A0A0A', alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator color="#B3E5FC" />
         </View>
       }
     >

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable, ScrollView } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
+import { AppLogo } from '@/components/AppLogo';
 import { RunMarker } from '../RunCard';
 
 interface UserProfile {
@@ -86,7 +88,24 @@ function buildHtml(runs: RunWithRoute[]) {
   <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
-  <style>* { margin:0; padding:0; } #map { width:100vw; height:100vh; }</style>
+  <style>
+    * { margin:0; padding:0; }
+    #map { width:100vw; height:100vh; }
+    .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
+    .leaflet-popup-content-wrapper {
+      background: #141414 !important;
+      border: 1px solid #1F1F1F !important;
+      border-radius: 12px !important;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.7) !important;
+      color: #F5F5F5 !important;
+    }
+    .leaflet-popup-tip { background: #141414 !important; }
+    @keyframes runDotPulse {
+      0%, 100% { transform: scale(1); opacity: 0.7; }
+      50% { transform: scale(2.6); opacity: 0; }
+    }
+    .run-dot-pulse { animation: runDotPulse 2s ease-out infinite; }
+  </style>
 </head>
 <body>
 <div id="map"></div>
@@ -94,19 +113,20 @@ function buildHtml(runs: RunWithRoute[]) {
   const runs = ${runsJson};
   const map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OSM © CARTO'
+    attribution: '© OSM © CARTO',
+    className: 'map-tiles-dark'
   }).addTo(map);
 
   const dotIcon = L.divIcon({
-    html: '<div style="width:13px;height:13px;border-radius:50%;background:#e53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>',
-    className: '', iconSize: [13,13], iconAnchor: [6,6],
+    html: '<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:rgba(179,229,252,0.25)"></div><div style="width:11px;height:11px;border-radius:50%;background:#B3E5FC;border:2px solid #0A0A0A;box-shadow:0 0 8px rgba(179,229,252,0.7)"></div></div>',
+    className: '', iconSize: [22,22], iconAnchor: [11,11],
   });
 
   function clusterIcon(cluster) {
     const n = cluster.getChildCount();
     return L.divIcon({
-      html: '<div style="width:44px;height:44px;border-radius:22px;background:rgba(229,57,53,0.88);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.22)">+' + n + '</div>',
-      className: '', iconSize: [44,44], iconAnchor: [22,22],
+      html: '<div style="width:48px;height:48px;border-radius:50%;background:#0A0A0A;color:#B3E5FC;border:2px solid #B3E5FC;box-shadow:0 0 14px rgba(179,229,252,0.5),0 0 4px rgba(179,229,252,0.25);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+' + n + '</div>',
+      className: '', iconSize: [48,48], iconAnchor: [24,24],
     });
   }
 
@@ -138,6 +158,7 @@ function buildHtml(runs: RunWithRoute[]) {
 
 export function ProfileMapScreen({ userId }: Props) {
   const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
   const targetId = userId ?? user?._id;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -212,21 +233,24 @@ export function ProfileMapScreen({ userId }: Props) {
       )}
 
       {/* 프로필 헤더 오버레이 */}
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          {profile?.profileImageUrl ? (
-            <Image source={{ uri: profile.profileImageUrl }} style={styles.avatarImg} />
-          ) : (
-            <Text style={styles.avatarLetter}>{avatarLetter}</Text>
-          )}
-        </View>
-        <View style={styles.headerInfo}>
-          <Text style={styles.username}>{displayName}</Text>
-          {loading ? (
-            <ActivityIndicator size="small" color="#71717a" />
-          ) : (
-            <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
-          )}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <AppLogo />
+        <View style={styles.userRow}>
+          <View style={styles.avatar}>
+            {profile?.profileImageUrl ? (
+              <Image source={{ uri: profile.profileImageUrl }} style={styles.avatarImg} />
+            ) : (
+              <Text style={styles.avatarLetter}>{avatarLetter}</Text>
+            )}
+          </View>
+          <View style={styles.headerInfo}>
+            <Text style={styles.username}>{displayName}</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#71717a" />
+            ) : (
+              <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
+            )}
+          </View>
         </View>
       </View>
 
@@ -262,30 +286,33 @@ export function ProfileMapScreen({ userId }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0A0A' },
   header: {
-    position: 'absolute', top: 0, left: 0, right: 0,
-    backgroundColor: 'rgba(255,255,255,0.93)',
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16, gap: 14,
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
+    backgroundColor: 'rgba(10,10,10,0.93)',
+    alignItems: 'center',
+    paddingHorizontal: 20, paddingBottom: 16,
+    borderBottomWidth: 1, borderBottomColor: '#1F1F1F',
   },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#e53935', alignItems: 'center', justifyContent: 'center' },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12, alignSelf: 'stretch' },
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#B3E5FC', alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: 52, height: 52, borderRadius: 26 },
-  avatarLetter: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  avatarLetter: { color: '#01579B', fontSize: 22, fontWeight: 'bold' },
   headerInfo: { flex: 1 },
-  username: { fontSize: 18, fontWeight: '700', color: '#18181b' },
-  stats: { fontSize: 13, color: '#71717a', marginTop: 2 },
+  username: { fontSize: 18, fontWeight: '700', color: '#F5F5F5' },
+  stats: { fontSize: 13, color: '#808080', marginTop: 2 },
   card: {
     position: 'absolute', bottom: 24, left: 16, right: 16,
-    backgroundColor: '#fff', borderRadius: 16, padding: 16,
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 6,
+    backgroundColor: '#141414', borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: '#1F1F1F',
+    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 6,
   },
   closeBtn: { position: 'absolute', top: 12, right: 12, padding: 4 },
-  closeTxt: { fontSize: 16, color: '#71717a' },
+  closeTxt: { fontSize: 16, color: '#404040' },
   statsRow: { flexDirection: 'row', gap: 20, marginBottom: 6 },
-  statLabel: { fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#18181b', marginTop: 2 },
-  date: { fontSize: 11, color: '#a1a1aa' },
-  myLocBtn: { position: 'absolute', bottom: 100, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 4 },
+  statLabel: { fontSize: 10, color: '#404040', textTransform: 'uppercase', letterSpacing: 1 },
+  statValue: { fontSize: 18, fontWeight: '700', color: '#B3E5FC', marginTop: 2 },
+  date: { fontSize: 11, color: '#808080' },
+  myLocBtn: { position: 'absolute', bottom: 100, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1F1F1F', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
   myLocTxt: { fontSize: 20 },
 });

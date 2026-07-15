@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRunStore } from '@/store/run';
 import { useHaversine } from '@/hooks/useHaversine';
 import { RunSummaryModal } from '@/components/RunSummaryModal';
+import { AppLogo } from '@/components/AppLogo';
 
 function formatTime(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -58,61 +59,67 @@ export default function RecordScreen() {
   const summary = !isTracking && summaryRef.current ? summaryRef.current : null;
 
   return (
-    <SafeAreaView className="flex-1 bg-zinc-950">
+    <SafeAreaView className="flex-1 bg-brand-dark">
       <View className="flex-1 items-center justify-between py-10 px-6">
-        <Text className="text-white text-xl font-bold tracking-widest">STRIDE+</Text>
 
+        <AppLogo />
+
+        {/* 수치 영역 */}
         <View className="w-full gap-6">
           <View className="items-center">
-            <Text className="text-zinc-400 text-sm uppercase tracking-widest mb-1">시간</Text>
-            <Text className="text-white text-7xl font-mono font-bold tabular-nums">
+            <Text className="text-brand-text-secondary text-sm uppercase tracking-widest mb-1">시간</Text>
+            <Text className="text-brand-text-primary text-7xl font-mono font-bold tabular-nums">
               {formatTime(elapsedSeconds)}
             </Text>
           </View>
 
           <View className="flex-row justify-around">
             <View className="items-center">
-              <Text className="text-zinc-400 text-sm uppercase tracking-widest mb-1">거리</Text>
-              <Text className="text-white text-4xl font-bold tabular-nums">
+              <Text className="text-brand-text-secondary text-sm uppercase tracking-widest mb-1">거리</Text>
+              <Text style={{ color: '#B3E5FC' }} className="text-4xl font-bold tabular-nums">
                 {distanceKm.toFixed(2)}
               </Text>
-              <Text className="text-zinc-500 text-sm">km</Text>
+              <Text className="text-brand-muted text-sm">km</Text>
             </View>
             <View className="items-center">
-              <Text className="text-zinc-400 text-sm uppercase tracking-widest mb-1">페이스</Text>
-              <Text className="text-white text-4xl font-bold tabular-nums">
+              <Text className="text-brand-text-secondary text-sm uppercase tracking-widest mb-1">페이스</Text>
+              <Text className="text-brand-text-primary text-4xl font-bold tabular-nums">
                 {formatPace(paceSecPerKm)}
               </Text>
-              <Text className="text-zinc-500 text-sm">/km</Text>
+              <Text className="text-brand-muted text-sm">/km</Text>
             </View>
           </View>
 
+          {/* 트래킹 중 LIVE 인디케이터 */}
           {isTracking && (
-            <Text className="text-zinc-600 text-xs text-center">
-              GPS 포인트: {coordinates.length}개
-            </Text>
+            <View className="flex-row items-center justify-center gap-2">
+              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#81D4FA' }} />
+              <Text className="text-brand-text-secondary text-xs tracking-widest">LIVE</Text>
+            </View>
           )}
         </View>
 
+        {/* START / STOP 버튼 */}
         <View className="items-center gap-4">
           {!isTracking ? (
             <Pressable
               onPress={handleStart}
-              className="bg-green-500 rounded-full w-28 h-28 items-center justify-center active:opacity-80"
+              style={{ backgroundColor: '#B3E5FC' }}
+              className="rounded-full w-32 h-32 items-center justify-center active:opacity-80"
             >
-              <Text className="text-white text-xl font-bold">START</Text>
+              <Text style={{ color: '#01579B' }} className="text-xl font-bold">START</Text>
             </Pressable>
           ) : (
             <Pressable
               onPress={handleStop}
-              className="bg-red-500 rounded-full w-28 h-28 items-center justify-center active:opacity-80"
+              className="bg-red-500 rounded-full w-32 h-32 items-center justify-center active:opacity-80"
             >
               <Text className="text-white text-xl font-bold">STOP</Text>
             </Pressable>
           )}
           {!isTracking && elapsedSeconds > 0 && !summary && (
             <Pressable onPress={resetRun}>
-              <Text className="text-zinc-400 text-sm underline">초기화</Text>
+              <Text className="text-brand-muted text-sm underline">초기화</Text>
             </Pressable>
           )}
         </View>
