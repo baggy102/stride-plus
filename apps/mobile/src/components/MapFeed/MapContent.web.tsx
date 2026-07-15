@@ -1,8 +1,10 @@
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ActivityIndicator, StyleSheet, Text, Pressable } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Pressable, Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
+import { AppLogo } from '@/components/AppLogo';
 // @ts-ignore — react-leaflet-cluster types not bundled
 import MarkerClusterGroup from 'react-leaflet-cluster';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -13,11 +15,16 @@ const SEOUL = { lat: 37.5665, lng: 126.978 };
 const RADIUS = 15000;
 
 const runDotIcon = L.divIcon({
-  html: `<div style="width:13px;height:13px;border-radius:50%;background:#e53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+  html: `
+    <div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center">
+      <div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:rgba(179,229,252,0.25)"></div>
+      <div style="width:11px;height:11px;border-radius:50%;background:#B3E5FC;border:2px solid #0A0A0A;box-shadow:0 0 8px rgba(179,229,252,0.7)"></div>
+    </div>
+  `,
   className: '',
-  iconSize: [13, 13],
-  iconAnchor: [6, 6],
-  popupAnchor: [0, -8],
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  popupAnchor: [0, -13],
 });
 
 function createClusterIcon(cluster: { getChildCount: () => number }) {
@@ -25,15 +32,17 @@ function createClusterIcon(cluster: { getChildCount: () => number }) {
   const label = n >= 1000 ? `+${(n / 1000).toFixed(1)}K` : `+${n}`;
   return L.divIcon({
     html: `<div style="
-      width:44px;height:44px;border-radius:22px;
-      background:rgba(229,57,53,0.88);color:#fff;
+      width:48px;height:48px;border-radius:50%;
+      background:#0A0A0A;color:#B3E5FC;
+      border:2px solid #B3E5FC;
+      box-shadow:0 0 14px rgba(179,229,252,0.5),0 0 4px rgba(179,229,252,0.25);
       display:flex;align-items:center;justify-content:center;
-      font-size:13px;font-weight:700;letter-spacing:-0.3px;
-      border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.22);
+      font-size:13px;font-weight:900;letter-spacing:-0.5px;
+      font-family:system-ui,sans-serif
     ">${label}</div>`,
     className: '',
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
   });
 }
 
@@ -53,7 +62,6 @@ function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string 
 
   return (
     <div style={{ position: 'relative', width: '100%', height: 120, overflow: 'hidden', borderRadius: 8, marginBottom: 10 }}>
-      {/* 트랙: 높이 140(=120+20)으로 스크롤바를 부모 clip 영역 밖으로 밀어냄 */}
       <div
         ref={trackRef}
         onMouseDown={(e) => { drag.current = { x: e.pageX, left: trackRef.current?.scrollLeft ?? 0 }; }}
@@ -100,7 +108,7 @@ function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string 
             <div
               key={i}
               onClick={() => goTo(i)}
-              style={{ width: 6, height: 6, borderRadius: 3, cursor: 'pointer', background: i === idx ? '#fff' : 'rgba(255,255,255,0.5)' }}
+              style={{ width: 6, height: 6, borderRadius: 3, cursor: 'pointer', background: i === idx ? '#B3E5FC' : 'rgba(255,255,255,0.4)' }}
             />
           ))}
         </div>
@@ -150,11 +158,43 @@ function FlyToMe({ trigger }: { trigger: number }) {
 
 export default function MapContent() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(true);
   const [loc, setLoc] = useState(SEOUL);
   const [runs, setRuns] = useState<RunMarker[]>([]);
   const [flyTrigger, setFlyTrigger] = useState(0);
   const skipFirstFocus = useRef(true);
+
+  // 지도 다크화 CSS + 마커 펄스 애니메이션 주입
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.id = 'stride-mapfeed-styles';
+    style.textContent = `
+      .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
+      .leaflet-top.leaflet-left { top: 68px !important; }
+      .leaflet-popup-content-wrapper {
+        background: #141414 !important;
+        border: 1px solid #1F1F1F !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.7) !important;
+        color: #F5F5F5 !important;
+      }
+      .leaflet-popup-tip { background: #141414 !important; }
+      .leaflet-popup-content { margin: 12px !important; }
+      @keyframes runDotPulse {
+        0%, 100% { transform: scale(1); opacity: 0.7; }
+        50% { transform: scale(2.6); opacity: 0; }
+      }
+      .run-dot-pulse { animation: runDotPulse 2s ease-out infinite; }
+    `;
+    if (!document.getElementById('stride-mapfeed-styles')) {
+      document.head.appendChild(style);
+    }
+    return () => {
+      const el = document.getElementById('stride-mapfeed-styles');
+      if (el) el.remove();
+    };
+  }, []);
 
   const fetchRuns = useCallback(async (lat: number, lng: number) => {
     try {
@@ -165,7 +205,6 @@ export default function MapContent() {
     } catch {}
   }, []);
 
-  // 최초 마운트: 내 위치 확보 후 fetch
   useEffect(() => {
     new Promise<GeolocationPosition>((res, rej) =>
       navigator.geolocation?.getCurrentPosition(res, rej, { timeout: 5000 }),
@@ -180,7 +219,6 @@ export default function MapContent() {
       .finally(() => setLoading(false));
   }, [fetchRuns]);
 
-  // 탭 재진입 시 리페치
   useFocusEffect(useCallback(() => {
     if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
     fetchRuns(loc.lat, loc.lng);
@@ -189,35 +227,34 @@ export default function MapContent() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#3b82f6" />
+        <ActivityIndicator color="#B3E5FC" />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>주변 러닝</Text>
-      </View>
-      <View style={styles.mapWrapper}>
-        <MapContainer
-          center={[loc.lat, loc.lng]}
-          zoom={11}
-          style={{ height: '100%', width: '100%' }}
-          zoomControl
-          attributionControl
-        >
+      {/* 지도 — 전체 채우기 */}
+      <MapContainer
+        center={[loc.lat, loc.lng]}
+        zoom={11}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}
+        zoomControl
+        attributionControl
+      >
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            className="map-tiles-dark"
             attribution='&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>'
           />
           <MapMoveHandler onMove={fetchRuns} />
           <FlyToMe trigger={flyTrigger} />
 
+          {/* 내 위치 마커 — 흰색 채우기 + Frost Blue 테두리 (러닝 기록 마커와 구분) */}
           <CircleMarker
             center={[loc.lat, loc.lng]}
             radius={9}
-            pathOptions={{ color: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 1, weight: 3 }}
+            pathOptions={{ color: '#B3E5FC', fillColor: '#FFFFFF', fillOpacity: 1, weight: 3 }}
           />
 
           <MarkerClusterGroup
@@ -232,7 +269,7 @@ export default function MapContent() {
               return (
                 <Marker key={run._id} position={[lat, lng]} icon={runDotIcon}>
                   <Popup closeButton={false} minWidth={220}>
-                    <div style={{ padding: '4px 2px', fontFamily: 'system-ui, sans-serif' }}>
+                    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
                       <PopupCarousel
                         images={[run.routeImageUrl, ...run.photoUrls].filter(Boolean) as string[]}
                         baseUrl={BASE_URL}
@@ -241,28 +278,28 @@ export default function MapContent() {
                         style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: run.userId?._id ? 'pointer' : 'default' }}
                         onClick={() => { if (run.userId?._id) router.push(`/user/${run.userId._id}`); }}
                       >
-                        <div style={{ width: 28, height: 28, borderRadius: 14, background: '#e53935', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 14, background: '#B3E5FC', color: '#01579B', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                           {(run.userId?.username ?? '?')[0].toUpperCase()}
                         </div>
-                        <span style={{ fontWeight: 600, fontSize: 13, color: '#18181b' }}>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: '#F5F5F5' }}>
                           {run.userId?.username || '알 수 없음'}
                         </span>
                       </div>
-                      <div style={{ display: 'flex', gap: 16 }}>
+                      <div style={{ display: 'flex', gap: 16, marginBottom: 6 }}>
                         <div>
-                          <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>거리</div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: '#18181b' }}>
-                            {run.distanceKm.toFixed(2)} <span style={{ fontSize: 11, color: '#71717a' }}>km</span>
+                          <div style={{ fontSize: 10, color: '#404040', textTransform: 'uppercase', letterSpacing: 1 }}>거리</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#B3E5FC' }}>
+                            {run.distanceKm.toFixed(2)} <span style={{ fontSize: 11, color: '#808080' }}>km</span>
                           </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>페이스</div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: '#18181b' }}>
-                            {formatPace(run.paceSecPerKm)} <span style={{ fontSize: 11, color: '#71717a' }}>/km</span>
+                          <div style={{ fontSize: 10, color: '#404040', textTransform: 'uppercase', letterSpacing: 1 }}>페이스</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#F5F5F5' }}>
+                            {formatPace(run.paceSecPerKm)} <span style={{ fontSize: 11, color: '#808080' }}>/km</span>
                           </div>
                         </div>
                       </div>
-                      <div style={{ fontSize: 11, color: '#a1a1aa', marginTop: 6 }}>
+                      <div style={{ fontSize: 11, color: '#808080' }}>
                         {formatDate(run.createdAt as unknown as string)}
                       </div>
                     </div>
@@ -271,38 +308,36 @@ export default function MapContent() {
               );
             })}
           </MarkerClusterGroup>
-        </MapContainer>
+      </MapContainer>
 
-        {/* 내 위치 버튼 */}
-        <Pressable style={styles.myLocBtn} onPress={() => setFlyTrigger((t) => t + 1)}>
-          <Text style={styles.myLocTxt}>📍</Text>
-        </Pressable>
+      {/* 헤더 오버레이 — 지도 위에 absolute 배치 */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <AppLogo />
       </View>
+
+      <Pressable style={styles.myLocBtn} onPress={() => setFlyTrigger((t) => t + 1)}>
+        <Text style={styles.myLocTxt}>📍</Text>
+      </Pressable>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  center: { flex: 1, backgroundColor: '#f8fafc', alignItems: 'center', justifyContent: 'center' },
-  header: { paddingHorizontal: 16, paddingTop: 48, paddingBottom: 12 },
-  title: { color: '#09090b', fontSize: 20, fontWeight: 'bold' },
-  mapWrapper: { flex: 1, position: 'relative' },
-  myLocBtn: {
-    position: 'absolute',
-    bottom: 24,
-    right: 16,
-    zIndex: 1000,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fff',
+  container: { flex: 1, backgroundColor: '#0A0A0A', position: 'relative' },
+  center: { flex: 1, backgroundColor: '#0A0A0A', alignItems: 'center', justifyContent: 'center' },
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1000,
+    paddingHorizontal: 20, paddingBottom: 14,
+    backgroundColor: 'rgba(10,10,10,0.88)',
+    borderBottomWidth: 1, borderBottomColor: '#1F1F1F',
     alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+  },
+  myLocBtn: {
+    position: 'absolute', bottom: 24, right: 16, zIndex: 1000,
+    width: 44, height: 44, borderRadius: 22,
+    backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#1F1F1F',
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
   },
   myLocTxt: { fontSize: 20 },
 });

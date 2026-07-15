@@ -2,6 +2,7 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import type { LatLngTuple } from 'leaflet';
 // @ts-ignore — react-leaflet-cluster types not bundled
@@ -11,6 +12,7 @@ import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { RunMarker } from '../RunCard';
 import { generateRouteImage } from '@/components/RunSummaryModal/generateRouteImage';
+import { AppLogo } from '@/components/AppLogo';
 
 interface UserProfile {
   _id: string;
@@ -27,11 +29,16 @@ interface Props {
 }
 
 const runDotIcon = L.divIcon({
-  html: `<div style="width:13px;height:13px;border-radius:50%;background:#e53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>`,
+  html: `
+    <div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center">
+      <div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:rgba(179,229,252,0.25)"></div>
+      <div style="width:11px;height:11px;border-radius:50%;background:#B3E5FC;border:2px solid #0A0A0A;box-shadow:0 0 8px rgba(179,229,252,0.7)"></div>
+    </div>
+  `,
   className: '',
-  iconSize: [13, 13],
-  iconAnchor: [6, 6],
-  popupAnchor: [0, -8],
+  iconSize: [22, 22],
+  iconAnchor: [11, 11],
+  popupAnchor: [0, -13],
 });
 
 function createClusterIcon(cluster: { getChildCount: () => number }) {
@@ -39,15 +46,17 @@ function createClusterIcon(cluster: { getChildCount: () => number }) {
   const label = n >= 1000 ? `+${(n / 1000).toFixed(1)}K` : `+${n}`;
   return L.divIcon({
     html: `<div style="
-      width:44px;height:44px;border-radius:22px;
-      background:rgba(229,57,53,0.88);color:#fff;
+      width:48px;height:48px;border-radius:50%;
+      background:#0A0A0A;color:#B3E5FC;
+      border:2px solid #B3E5FC;
+      box-shadow:0 0 14px rgba(179,229,252,0.5),0 0 4px rgba(179,229,252,0.25);
       display:flex;align-items:center;justify-content:center;
-      font-size:13px;font-weight:700;letter-spacing:-0.3px;
-      border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.22);
+      font-size:13px;font-weight:900;letter-spacing:-0.5px;
+      font-family:system-ui,sans-serif
     ">${label}</div>`,
     className: '',
-    iconSize: [44, 44],
-    iconAnchor: [22, 22],
+    iconSize: [48, 48],
+    iconAnchor: [24, 24],
   });
 }
 
@@ -123,7 +132,7 @@ function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string 
             <div
               key={i}
               onClick={() => goTo(i)}
-              style={{ width: 6, height: 6, borderRadius: 3, cursor: 'pointer', background: i === idx ? '#fff' : 'rgba(255,255,255,0.5)' }}
+              style={{ width: 6, height: 6, borderRadius: 3, cursor: 'pointer', background: i === idx ? '#B3E5FC' : 'rgba(255,255,255,0.4)' }}
             />
           ))}
         </div>
@@ -161,12 +170,43 @@ function FlyToMe({ trigger }: { trigger: number }) {
 
 export default function ProfileContent({ userId }: Props) {
   const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
   const targetId = userId ?? user?._id;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [flyTrigger, setFlyTrigger] = useState(0);
+
+  // 지도 타일 다크화 CSS + 마커 펄스 애니메이션 주입
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.id = 'stride-map-styles';
+    style.textContent = `
+      .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
+      .leaflet-popup-content-wrapper {
+        background: #141414 !important;
+        border: 1px solid #1F1F1F !important;
+        border-radius: 12px !important;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.7) !important;
+        color: #F5F5F5 !important;
+      }
+      .leaflet-popup-tip { background: #141414 !important; }
+      .leaflet-popup-content { margin: 12px !important; }
+      @keyframes runDotPulse {
+        0%, 100% { transform: scale(1); opacity: 0.7; }
+        50% { transform: scale(2.6); opacity: 0; }
+      }
+      .run-dot-pulse { animation: runDotPulse 2s ease-out infinite; }
+    `;
+    if (!document.getElementById('stride-map-styles')) {
+      document.head.appendChild(style);
+    }
+    return () => {
+      const el = document.getElementById('stride-map-styles');
+      if (el) el.remove();
+    };
+  }, []);
 
   const fetchData = useCallback(() => {
     if (!targetId) return;
@@ -228,21 +268,24 @@ export default function ProfileContent({ userId }: Props) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.avatar}>
-          {profile?.profileImageUrl ? (
-            <Image source={{ uri: profile.profileImageUrl }} style={styles.avatarImg} />
-          ) : (
-            <Text style={styles.avatarLetter}>{avatarLetter}</Text>
-          )}
-        </View>
-        <View style={styles.headerInfo}>
-          <Text style={styles.username}>{displayName}</Text>
-          {loading ? (
-            <ActivityIndicator size="small" color="#71717a" />
-          ) : (
-            <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
-          )}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <AppLogo />
+        <View style={styles.userRow}>
+          <View style={styles.avatar}>
+            {profile?.profileImageUrl ? (
+              <Image source={{ uri: profile.profileImageUrl }} style={styles.avatarImg} />
+            ) : (
+              <Text style={styles.avatarLetter}>{avatarLetter}</Text>
+            )}
+          </View>
+          <View style={styles.headerInfo}>
+            <Text style={styles.username}>{displayName}</Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#81D4FA" />
+            ) : (
+              <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
+            )}
+          </View>
         </View>
       </View>
 
@@ -256,6 +299,7 @@ export default function ProfileContent({ userId }: Props) {
         >
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            className="map-tiles-dark"
             attribution='&copy; <a href="https://openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com">CARTO</a>'
           />
           {startPoints.length > 0 && <FitBounds coords={startPoints} />}
@@ -278,19 +322,19 @@ export default function ProfileContent({ userId }: Props) {
                       <PopupCarousel images={images} baseUrl={BASE_URL} />
                       <div style={{ display: 'flex', gap: 16 }}>
                         <div>
-                          <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>거리</div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: '#18181b' }}>
-                            {run.distanceKm.toFixed(2)} <span style={{ fontSize: 11, color: '#71717a' }}>km</span>
+                          <div style={{ fontSize: 10, color: '#404040', textTransform: 'uppercase', letterSpacing: 1 }}>거리</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#B3E5FC' }}>
+                            {run.distanceKm.toFixed(2)} <span style={{ fontSize: 11, color: '#808080' }}>km</span>
                           </div>
                         </div>
                         <div>
-                          <div style={{ fontSize: 10, color: '#71717a', textTransform: 'uppercase', letterSpacing: 1 }}>페이스</div>
-                          <div style={{ fontSize: 16, fontWeight: 700, color: '#18181b' }}>
-                            {formatPace(run.paceSecPerKm)} <span style={{ fontSize: 11, color: '#71717a' }}>/km</span>
+                          <div style={{ fontSize: 10, color: '#404040', textTransform: 'uppercase', letterSpacing: 1 }}>페이스</div>
+                          <div style={{ fontSize: 16, fontWeight: 700, color: '#F5F5F5' }}>
+                            {formatPace(run.paceSecPerKm)} <span style={{ fontSize: 11, color: '#808080' }}>/km</span>
                           </div>
                         </div>
                       </div>
-                      <div style={{ fontSize: 11, color: '#a1a1aa', marginTop: 6 }}>
+                      <div style={{ fontSize: 11, color: '#808080', marginTop: 6 }}>
                         {formatDate(run.createdAt as unknown as string)}
                       </div>
                     </div>
@@ -311,19 +355,19 @@ export default function ProfileContent({ userId }: Props) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1, backgroundColor: '#0A0A0A' },
   header: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: 20, paddingTop: 52, paddingBottom: 16,
-    backgroundColor: '#fff', gap: 14,
-    borderBottomWidth: 1, borderBottomColor: '#e4e4e7',
+    paddingHorizontal: 20, paddingBottom: 16,
+    backgroundColor: '#0A0A0A', alignItems: 'center',
+    borderBottomWidth: 1, borderBottomColor: '#1F1F1F',
   },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#e53935', alignItems: 'center', justifyContent: 'center' },
+  userRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12, alignSelf: 'stretch' },
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#B3E5FC', alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: 52, height: 52, borderRadius: 26 },
-  avatarLetter: { color: '#fff', fontSize: 22, fontWeight: 'bold' },
+  avatarLetter: { color: '#01579B', fontSize: 22, fontWeight: 'bold' },
   headerInfo: { flex: 1 },
-  username: { fontSize: 18, fontWeight: '700', color: '#18181b' },
-  stats: { fontSize: 13, color: '#71717a', marginTop: 2 },
+  username: { fontSize: 18, fontWeight: '700', color: '#F5F5F5' },
+  stats: { fontSize: 13, color: '#808080', marginTop: 2 },
   mapWrapper: { flex: 1, position: 'relative' },
   myLocBtn: {
     position: 'absolute',
@@ -333,11 +377,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#fff',
+    backgroundColor: '#141414',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#1F1F1F',
     shadowColor: '#000',
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.4,
     shadowRadius: 6,
     elevation: 4,
   },

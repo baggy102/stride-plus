@@ -37,7 +37,6 @@ export async function generateRouteImage(coordinates: [number, number][]): Promi
   const minLat = Math.min(...lats);
   const maxLat = Math.max(...lats);
 
-  // 경로 주변 여백 추가
   const padLng = (maxLng - minLng) * 0.4 || 0.003;
   const padLat = (maxLat - minLat) * 0.4 || 0.003;
   const bMinLng = minLng - padLng;
@@ -45,7 +44,6 @@ export async function generateRouteImage(coordinates: [number, number][]): Promi
   const bMinLat = minLat - padLat;
   const bMaxLat = maxLat + padLat;
 
-  // 캔버스에 맞는 줌 레벨 계산
   let zoom = 17;
   while (zoom > 1) {
     const tl = lngLatToTileFloat(bMinLng, bMaxLat, zoom);
@@ -57,19 +55,18 @@ export async function generateRouteImage(coordinates: [number, number][]): Promi
   const tl = lngLatToTileFloat(bMinLng, bMaxLat, zoom);
   const br = lngLatToTileFloat(bMaxLng, bMinLat, zoom);
 
-  // 경로를 캔버스 중앙에 배치하기 위한 오프셋
   const routeW = (br.x - tl.x) * TILE_SIZE;
   const routeH = (br.y - tl.y) * TILE_SIZE;
   const offsetX = (CANVAS_W - routeW) / 2;
   const offsetY = (CANVAS_H - routeH) / 2;
 
-  // 타일 범위
   const txStart = Math.floor(tl.x);
   const tyStart = Math.floor(tl.y);
   const txEnd = Math.floor(br.x);
   const tyEnd = Math.floor(br.y);
 
-  // 지도 타일 병렬 로드 & 렌더링
+  // 라이트 타일을 grayscale + invert + brightness로 다크맵처럼 렌더링
+  ctx.filter = 'invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5)';
   const tileJobs: Promise<void>[] = [];
   for (let tx = txStart; tx <= txEnd; tx++) {
     for (let ty = tyStart; ty <= tyEnd; ty++) {
@@ -83,7 +80,7 @@ export async function generateRouteImage(coordinates: [number, number][]): Promi
         loadTile(url)
           .then((img) => ctx.drawImage(img, px, py, TILE_SIZE, TILE_SIZE))
           .catch(() => {
-            ctx.fillStyle = '#e8e8e8';
+            ctx.fillStyle = '#141414';
             ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
           }),
       );
@@ -91,7 +88,9 @@ export async function generateRouteImage(coordinates: [number, number][]): Promi
   }
   await Promise.all(tileJobs);
 
-  // lng/lat → 캔버스 픽셀 변환
+  // 타일 필터 리셋 후 경로 그리기
+  ctx.filter = 'none';
+
   const toPixel = ([lng, lat]: [number, number]) => {
     const tf = lngLatToTileFloat(lng, lat, zoom);
     return {
@@ -102,9 +101,9 @@ export async function generateRouteImage(coordinates: [number, number][]): Promi
 
   const pts = coordinates.map(toPixel);
 
-  // 경로 글로우 (반투명 두꺼운 선)
+  // 경로 글로우 (Frost Blue 반투명)
   ctx.beginPath();
-  ctx.strokeStyle = 'rgba(229,57,53,0.35)';
+  ctx.strokeStyle = 'rgba(179,229,252,0.3)';
   ctx.lineWidth = 10;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -112,9 +111,9 @@ export async function generateRouteImage(coordinates: [number, number][]): Promi
   pts.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
   ctx.stroke();
 
-  // 경로 메인 선
+  // 경로 메인 선 (Frost Blue)
   ctx.beginPath();
-  ctx.strokeStyle = '#e53935';
+  ctx.strokeStyle = '#B3E5FC';
   ctx.lineWidth = 4;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
@@ -122,20 +121,20 @@ export async function generateRouteImage(coordinates: [number, number][]): Promi
   pts.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
   ctx.stroke();
 
-  // 시작점 (초록)
+  // 시작점 (Frost Blue secondary)
   ctx.beginPath();
-  ctx.fillStyle = '#22c55e';
-  ctx.strokeStyle = '#fff';
+  ctx.fillStyle = '#81D4FA';
+  ctx.strokeStyle = '#0A0A0A';
   ctx.lineWidth = 2.5;
   ctx.arc(pts[0].x, pts[0].y, 7, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  // 종료점 (빨강)
+  // 종료점 (Frost Blue primary)
   const last = pts[pts.length - 1];
   ctx.beginPath();
-  ctx.fillStyle = '#e53935';
-  ctx.strokeStyle = '#fff';
+  ctx.fillStyle = '#B3E5FC';
+  ctx.strokeStyle = '#0A0A0A';
   ctx.lineWidth = 2.5;
   ctx.arc(last.x, last.y, 7, 0, Math.PI * 2);
   ctx.fill();

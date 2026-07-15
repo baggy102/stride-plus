@@ -59,10 +59,10 @@ export function popupInnerHtml(run: {
 
   const userHtml = showUser
     ? `<div onclick="window.ReactNativeWebView.postMessage(JSON.stringify({type:'profile',userId:'${run.userId?._id ?? ''}'}))" style="display:flex;align-items:center;gap:8px;margin-bottom:10px;cursor:pointer;">
-        <div style="width:28px;height:28px;border-radius:14px;background:#e53935;color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">
+        <div style="width:28px;height:28px;border-radius:14px;background:#B3E5FC;color:#01579B;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">
           ${(run.userId?.username || '?')[0].toUpperCase()}
         </div>
-        <span style="font-weight:600;font-size:13px;color:#18181b;">${run.userId?.username || '알 수 없음'}</span>
+        <span style="font-weight:600;font-size:13px;color:#F5F5F5;">${run.userId?.username || '알 수 없음'}</span>
       </div>`
     : '';
 
@@ -71,15 +71,15 @@ export function popupInnerHtml(run: {
     ${userHtml}
     <div style="display:flex;gap:16px;margin-bottom:6px;">
       <div>
-        <div style="font-size:10px;color:#71717a;text-transform:uppercase;letter-spacing:1px;">거리</div>
-        <div style="font-size:16px;font-weight:700;color:#18181b;">${run.distanceKm.toFixed(2)} <span style="font-size:11px;color:#71717a;">km</span></div>
+        <div style="font-size:10px;color:#404040;text-transform:uppercase;letter-spacing:1px;">거리</div>
+        <div style="font-size:16px;font-weight:700;color:#B3E5FC;">${run.distanceKm.toFixed(2)} <span style="font-size:11px;color:#808080;">km</span></div>
       </div>
       <div>
-        <div style="font-size:10px;color:#71717a;text-transform:uppercase;letter-spacing:1px;">페이스</div>
-        <div style="font-size:16px;font-weight:700;color:#18181b;">${pace} <span style="font-size:11px;color:#71717a;">/km</span></div>
+        <div style="font-size:10px;color:#404040;text-transform:uppercase;letter-spacing:1px;">페이스</div>
+        <div style="font-size:16px;font-weight:700;color:#F5F5F5;">${pace} <span style="font-size:11px;color:#808080;">/km</span></div>
       </div>
     </div>
-    <div style="font-size:11px;color:#a1a1aa;">${date}</div>
+    <div style="font-size:11px;color:#808080;">${date}</div>
   </div>`;
 }
 
