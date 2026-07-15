@@ -53,6 +53,7 @@ function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string 
 
   return (
     <div style={{ position: 'relative', width: '100%', height: 120, overflow: 'hidden', borderRadius: 8, marginBottom: 10 }}>
+      {/* 트랙: 높이 140(=120+20)으로 스크롤바를 부모 clip 영역 밖으로 밀어냄 */}
       <div
         ref={trackRef}
         onMouseDown={(e) => { drag.current = { x: e.pageX, left: trackRef.current?.scrollLeft ?? 0 }; }}
@@ -72,7 +73,17 @@ function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string 
           const el = e.currentTarget;
           if (el.clientWidth > 0) setIdx(Math.round(el.scrollLeft / el.clientWidth));
         }}
-        style={{ display: 'flex', overflowX: 'scroll', scrollSnapType: 'x mandatory', width: '100%', height: 120, cursor: 'grab', userSelect: 'none' }}
+        style={{
+          display: 'flex',
+          overflowX: 'scroll',
+          overflowY: 'hidden',
+          scrollSnapType: 'x mandatory',
+          width: '100%',
+          height: 140,
+          cursor: 'grab',
+          userSelect: 'none',
+          scrollbarWidth: 'none' as const,
+        }}
       >
         {images.map((img, i) => (
           <img

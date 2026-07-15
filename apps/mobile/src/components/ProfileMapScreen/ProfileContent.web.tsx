@@ -96,7 +96,17 @@ function PopupCarousel({ images, baseUrl }: { images: string[]; baseUrl: string 
           const el = e.currentTarget;
           if (el.clientWidth > 0) setIdx(Math.round(el.scrollLeft / el.clientWidth));
         }}
-        style={{ display: 'flex', overflowX: 'scroll', scrollSnapType: 'x mandatory', width: '100%', height: 120, cursor: 'grab', userSelect: 'none' }}
+        style={{
+          display: 'flex',
+          overflowX: 'scroll',
+          overflowY: 'hidden',
+          scrollSnapType: 'x mandatory',
+          width: '100%',
+          height: 140,
+          cursor: 'grab',
+          userSelect: 'none',
+          scrollbarWidth: 'none' as const,
+        }}
       >
         {images.map((img, i) => (
           <img
