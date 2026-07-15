@@ -5,7 +5,7 @@ import { View, ActivityIndicator, StyleSheet, Text, Pressable } from 'react-nati
 import { MapContainer, TileLayer, CircleMarker, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 // @ts-ignore — react-leaflet-cluster types not bundled
 import MarkerClusterGroup from 'react-leaflet-cluster';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { RunMarker } from '../RunCard';
 
@@ -149,6 +149,7 @@ function FlyToMe({ trigger }: { trigger: number }) {
 }
 
 export default function MapContent() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [loc, setLoc] = useState(SEOUL);
   const [runs, setRuns] = useState<RunMarker[]>([]);
@@ -236,7 +237,10 @@ export default function MapContent() {
                         images={[run.routeImageUrl, ...run.photoUrls].filter(Boolean) as string[]}
                         baseUrl={BASE_URL}
                       />
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <div
+                        style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, cursor: run.userId?._id ? 'pointer' : 'default' }}
+                        onClick={() => { if (run.userId?._id) router.push(`/user/${run.userId._id}`); }}
+                      >
                         <div style={{ width: 28, height: 28, borderRadius: 14, background: '#e53935', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                           {(run.userId?.username ?? '?')[0].toUpperCase()}
                         </div>

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { View, StyleSheet, ActivityIndicator, Text, Pressable } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { LEAFLET_HEAD, popupInnerHtml } from '@/utils/mapHtml';
 import { RunMarker } from '../RunCard';
@@ -57,6 +57,7 @@ function buildHtml(lat: number, lng: number, runs: RunMarker[], baseUrl: string)
 }
 
 export function MapFeed() {
+  const router = useRouter();
   const [loc, setLoc] = useState(SEOUL);
   const [runs, setRuns] = useState<RunMarker[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +118,12 @@ export function MapFeed() {
         originWhitelist={['*']}
         javaScriptEnabled
         startInLoadingState
-        onMessage={() => {}}
+        onMessage={(e) => {
+          try {
+            const msg = JSON.parse(e.nativeEvent.data);
+            if (msg.type === 'profile' && msg.userId) router.push(`/user/${msg.userId}`);
+          } catch {}
+        }}
       />
       <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
         <Text style={styles.myLocTxt}>📍</Text>
