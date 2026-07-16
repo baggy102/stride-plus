@@ -11,7 +11,7 @@ import { useFocusEffect } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { RunMarker } from '../RunCard';
-import { generateRouteImage } from '@/components/RunSummaryModal/generateRouteImage';
+import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
 import { AppLogo } from '@/components/AppLogo';
 
 interface UserProfile {

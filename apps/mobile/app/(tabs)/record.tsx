@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { View, Text, Pressable, Alert } from 'react-native';
+import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useRunStore } from '@/store/run';
 import { useHaversine } from '@/hooks/useHaversine';
-import { RunSummaryModal } from '@/components/RunSummaryModal';
 import { AppLogo } from '@/components/AppLogo';
 
 function formatTime(seconds: number) {
@@ -21,11 +21,11 @@ function formatPace(secPerKm: number) {
 }
 
 export default function RecordScreen() {
+  const router = useRouter();
   const { isTracking, coordinates, elapsedSeconds, startTracking, stopTracking, resetRun } =
     useRunStore();
   const { distanceKm, paceSecPerKm } = useHaversine(coordinates, elapsedSeconds);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const summaryRef = useRef<ReturnType<typeof stopTracking> | null>(null);
   const tick = useRunStore((s) => s._tick);
 
   useEffect(() => {
@@ -49,85 +49,123 @@ export default function RecordScreen() {
   }, [startTracking]);
 
   const handleStop = useCallback(() => {
-    summaryRef.current = stopTracking();
-  }, [stopTracking]);
-
-  const handleModalClose = useCallback(() => {
-    summaryRef.current = null;
-  }, []);
-
-  const summary = !isTracking && summaryRef.current ? summaryRef.current : null;
+    stopTracking();
+    router.push('/run-summary');
+  }, [stopTracking, router]);
 
   return (
-    <SafeAreaView className="flex-1 bg-brand-dark">
-      <View className="flex-1 items-center justify-between py-10 px-6">
+    <SafeAreaView style={styles.safeArea}>
+      <View style={styles.container}>
 
         <AppLogo />
 
         {/* 수치 영역 */}
-        <View className="w-full gap-6">
-          <View className="items-center">
-            <Text className="text-brand-text-secondary text-sm uppercase tracking-widest mb-1">시간</Text>
-            <Text className="text-brand-text-primary text-7xl font-mono font-bold tabular-nums">
-              {formatTime(elapsedSeconds)}
-            </Text>
+        <View style={styles.statsBlock}>
+          <View style={styles.center}>
+            <Text style={styles.label}>시간</Text>
+            <Text style={styles.timeValue}>{formatTime(elapsedSeconds)}</Text>
           </View>
 
-          <View className="flex-row justify-around">
-            <View className="items-center">
-              <Text className="text-brand-text-secondary text-sm uppercase tracking-widest mb-1">거리</Text>
-              <Text style={{ color: '#B3E5FC' }} className="text-4xl font-bold tabular-nums">
+          <View style={styles.row}>
+            <View style={styles.center}>
+              <Text style={styles.label}>거리</Text>
+              <Text style={[styles.statValue, { color: '#B3E5FC' }]}>
                 {distanceKm.toFixed(2)}
               </Text>
-              <Text className="text-brand-muted text-sm">km</Text>
+              <Text style={styles.unit}>km</Text>
             </View>
-            <View className="items-center">
-              <Text className="text-brand-text-secondary text-sm uppercase tracking-widest mb-1">페이스</Text>
-              <Text className="text-brand-text-primary text-4xl font-bold tabular-nums">
-                {formatPace(paceSecPerKm)}
-              </Text>
-              <Text className="text-brand-muted text-sm">/km</Text>
+            <View style={styles.center}>
+              <Text style={styles.label}>페이스</Text>
+              <Text style={styles.statValue}>{formatPace(paceSecPerKm)}</Text>
+              <Text style={styles.unit}>/km</Text>
             </View>
           </View>
 
           {/* 트래킹 중 LIVE 인디케이터 */}
           {isTracking && (
-            <View className="flex-row items-center justify-center gap-2">
-              <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#81D4FA' }} />
-              <Text className="text-brand-text-secondary text-xs tracking-widest">LIVE</Text>
+            <View style={styles.liveRow}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveText}>LIVE</Text>
             </View>
           )}
         </View>
 
         {/* START / STOP 버튼 */}
-        <View className="items-center gap-4">
+        <View style={styles.center}>
           {!isTracking ? (
             <Pressable
               onPress={handleStart}
-              style={{ backgroundColor: '#B3E5FC' }}
-              className="rounded-full w-32 h-32 items-center justify-center active:opacity-80"
+              style={({ pressed }) => [
+                styles.mainButton,
+                { backgroundColor: '#B3E5FC', opacity: pressed ? 0.8 : 1 },
+              ]}
             >
-              <Text style={{ color: '#01579B' }} className="text-xl font-bold">START</Text>
+              <Text style={[styles.buttonText, { color: '#01579B' }]}>START</Text>
             </Pressable>
           ) : (
             <Pressable
               onPress={handleStop}
-              className="bg-red-500 rounded-full w-32 h-32 items-center justify-center active:opacity-80"
+              style={({ pressed }) => [
+                styles.mainButton,
+                { backgroundColor: '#EF4444', opacity: pressed ? 0.8 : 1 },
+              ]}
             >
-              <Text className="text-white text-xl font-bold">STOP</Text>
+              <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>STOP</Text>
             </Pressable>
           )}
-          {!isTracking && elapsedSeconds > 0 && !summary && (
-            <Pressable onPress={resetRun}>
-              <Text className="text-brand-muted text-sm underline">초기화</Text>
+          {!isTracking && elapsedSeconds > 0 && (
+            <Pressable onPress={resetRun} style={{ marginTop: 16 }}>
+              <Text style={styles.resetText}>초기화</Text>
             </Pressable>
           )}
         </View>
       </View>
-
-      {summary && (
-        <RunSummaryModal summary={summary} onClose={handleModalClose} />
-      )}
     </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: '#0A0A0A' },
+  container: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 40,
+    paddingHorizontal: 24,
+  },
+  center: { alignItems: 'center' },
+  row: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
+  statsBlock: { width: '100%', gap: 24 },
+  label: {
+    color: '#808080',
+    fontSize: 14,
+    textTransform: 'uppercase',
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  timeValue: {
+    color: '#F5F5F5',
+    fontSize: 72,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  statValue: {
+    color: '#F5F5F5',
+    fontSize: 36,
+    fontWeight: '700',
+    fontVariant: ['tabular-nums'],
+  },
+  unit: { color: '#404040', fontSize: 14 },
+  liveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#81D4FA' },
+  liveText: { color: '#808080', fontSize: 12, letterSpacing: 2 },
+  mainButton: {
+    width: 128,
+    height: 128,
+    borderRadius: 64,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: { fontSize: 20, fontWeight: '700' },
+  resetText: { color: '#404040', fontSize: 14, textDecorationLine: 'underline' },
+});

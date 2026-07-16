@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable, ScrollView } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { useFocusEffect } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { AppLogo } from '@/components/AppLogo';
+import { MapPopupCard } from '@/components/MapPopupCard';
 import { RunMarker } from '../RunCard';
 
 interface UserProfile {
@@ -21,60 +22,6 @@ interface RunWithRoute extends RunMarker {
 
 interface Props {
   userId?: string;
-}
-
-function CardCarousel({ imgs, baseUrl }: { imgs: string[]; baseUrl: string }) {
-  const [idx, setIdx] = useState(0);
-  const [w, setW] = useState(0);
-
-  if (imgs.length === 0) return null;
-
-  return (
-    <View
-      style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}
-      onLayout={(e) => setW(e.nativeEvent.layout.width)}
-    >
-      {w > 0 && (
-        <ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          decelerationRate="fast"
-          scrollEventThrottle={16}
-          style={{ width: w, height: 130 }}
-          onScroll={(e) =>
-            setIdx(Math.round(e.nativeEvent.contentOffset.x / w))
-          }
-        >
-          {imgs.map((uri, i) => (
-            <Image
-              key={i}
-              source={{ uri: `${baseUrl}${uri}` }}
-              style={{ width: w, height: 130 }}
-              resizeMode="cover"
-            />
-          ))}
-        </ScrollView>
-      )}
-      {imgs.length > 1 && w > 0 && (
-        <View style={{ position: 'absolute', bottom: 6, left: 0, right: 0, flexDirection: 'row', justifyContent: 'center', gap: 4 }}>
-          {imgs.map((_, i) => (
-            <View
-              key={i}
-              style={{
-                width: 6, height: 6, borderRadius: 3,
-                backgroundColor: i === idx ? '#fff' : 'rgba(255,255,255,0.4)',
-              }}
-            />
-          ))}
-        </View>
-      )}
-    </View>
-  );
-}
-
-function formatPace(sec: number) {
-  return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
 }
 
 function buildHtml(runs: RunWithRoute[]) {
@@ -256,29 +203,11 @@ export function ProfileMapScreen({ userId }: Props) {
 
       {/* 선택된 런 카드 */}
       {selected && (
-        <View style={styles.card}>
-          <Pressable style={styles.closeBtn} onPress={() => setSelected(null)}>
-            <Text style={styles.closeTxt}>✕</Text>
-          </Pressable>
-          <CardCarousel
-            key={selected._id}
-            imgs={[selected.routeImageUrl, ...selected.photoUrls].filter(Boolean) as string[]}
-            baseUrl={BASE_URL}
-          />
-          <View style={styles.statsRow}>
-            <View>
-              <Text style={styles.statLabel}>거리</Text>
-              <Text style={styles.statValue}>{selected.distanceKm.toFixed(2)} km</Text>
-            </View>
-            <View>
-              <Text style={styles.statLabel}>페이스</Text>
-              <Text style={styles.statValue}>{formatPace(selected.paceSecPerKm)}</Text>
-            </View>
-          </View>
-          <Text style={styles.date}>
-            {new Date(selected.createdAt).toLocaleDateString('ko-KR')}
-          </Text>
-        </View>
+        <MapPopupCard
+          run={selected}
+          baseUrl={BASE_URL}
+          onClose={() => setSelected(null)}
+        />
       )}
     </View>
   );
@@ -301,18 +230,6 @@ const styles = StyleSheet.create({
   headerInfo: { flex: 1 },
   username: { fontSize: 18, fontWeight: '700', color: '#F5F5F5' },
   stats: { fontSize: 13, color: '#808080', marginTop: 2 },
-  card: {
-    position: 'absolute', bottom: 24, left: 16, right: 16,
-    backgroundColor: '#141414', borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: '#1F1F1F',
-    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 6,
-  },
-  closeBtn: { position: 'absolute', top: 12, right: 12, padding: 4 },
-  closeTxt: { fontSize: 16, color: '#404040' },
-  statsRow: { flexDirection: 'row', gap: 20, marginBottom: 6 },
-  statLabel: { fontSize: 10, color: '#404040', textTransform: 'uppercase', letterSpacing: 1 },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#B3E5FC', marginTop: 2 },
-  date: { fontSize: 11, color: '#808080' },
   myLocBtn: { position: 'absolute', bottom: 100, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1F1F1F', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
   myLocTxt: { fontSize: 20 },
 });
