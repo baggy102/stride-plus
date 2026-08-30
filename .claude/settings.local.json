@@ -1,4 +1,31 @@
 {
+  "env": {
+    "CLUADE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__notion__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-scope.js\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__notion__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/notion-scope-learn.js\""
+          }
+        ]
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(npm test *)",
@@ -11,7 +38,12 @@
       "Bash(ipconfig)",
       "Bash(rm -rf /tmp/expo-export-test2)",
       "Bash(timeout 90 npx expo export --platform ios --output-dir /tmp/expo-export-test2)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "mcp__notion__notion-get-teams",
+      "mcp__notion__notion-fetch",
+      "Bash(node .claude/hooks/notion-scope.js)",
+      "Bash(echo \"exit=$?\")",
+      "mcp__notion__notion-query-data-sources"
     ]
   }
 }

@@ -1,0 +1,51 @@
+# stride+ 팀스페이스 화이트리스트
+# 이 파일에 있는 ID를 대상으로 할 때만 Notion 쓰기 작업이 허용된다.
+# 형식: 대시 없는 32자리 hex 한 줄에 하나. '#' 주석 허용.
+# 새 페이지를 만들면 PostToolUse 훅이 자동으로 여기에 추가한다.
+
+# --- 팀스페이스 ---
+1516785cbbb68101a4e90042a28af9d3   # stride+ (teamspace)
+
+# --- 페이지 ---
+1516785cbbb68074bb82f3f4413034fd   # 🏠 stride+ 홈 (root)
+3cc6785cbbb681b2bb96e22db31374d8   # 🧭 작업 프로세스
+3cc6785cbbb6818e9897c30a76c30f6e   # 📚 문서 · 기록
+1ec6785cbbb680fcb906e3b409223b53   # MVP 모델
+1ec6785cbbb680f7bc5cfe877aaa71ba   # 고도화 단계
+3cc6785cbbb681819259f5d857974e41   # 개발 개요
+3cc6785cbbb681039c6bcb836f8420a4   # 보관
+
+# --- 데이터베이스 ---
+3cc6785cbbb681948a43dc1176d692ac   # 기능 파이프라인 (linked view)
+3cc6785cbbb681bf879ce1740ef4c7c7   # 지금 하는 일 (linked view)
+3cc6785cbbb681b99d74f00e1fb8a3b1   # 다음 할 일 (linked view)
+3cc6785cbbb681538369cb07d33f4c37   # 로드맵 (linked view)
+3cc6785cbbb681f68d58c47adf58262c   # 최근 개발 로그 (linked view)
+9f5c90f5d4614619b658128987d2ce05   # 기능 명세
+f2e5b108ad304437a75db1342dbc4e83   # 시나리오
+3566785cbbb6809da877f7592042109d   # (문서·기록 내 DB)
+c218fa3e310f47d9aab90136c6edfb38   # 개발 로그
+
+# --- 데이터 소스 (collection://) ---
+a6b6660a8fe743bda816c71ef0f70d96   # 기능 명세
+1516785cbbb681b6bd28000b6f7722ab   # 작업
+1516785cbbb681e39f87000b96f4598a   # 로드맵
+a0fe445f8db84f29a3ba9b6fd381fd49   # 개발 로그
+439333ef72144961a0ffc9790e17f57c   # 시나리오
+3566785cbbb6806e9b89000b890389cf   # (문서·기록 내 DB)
+
+3cc6785cbbb681b19cf2de2df22d4b9b   # auto: notion-create-pages 결과
+3cc6785cbbb68171b319d29a81c27456   # auto: notion-create-pages 결과
+3cc6785cbbb68148ad84d9850c5846a1   # auto: notion-create-pages 결과
+3cc6785cbbb6810e98bdf7c594b8a41e   # auto: notion-create-pages 결과
+3cc6785cbbb681afb7a6cda54afc2e0f   # auto: notion-create-pages 결과
+3cc6785cbbb6818a833ae5dac6ebc446   # auto: notion-create-pages 결과
+3cc6785cbbb681849dbad23df79a9843   # auto: notion-create-pages 결과
+3cc6785cbbb6810080afe547af6955a0   # auto: notion-create-pages 결과
+3cc6785cbbb681c09da2f71818a69816   # auto: notion-create-pages 결과
+3cc6785cbbb6812785cad4ff2c28ce19   # auto: notion-create-pages 결과
+3cc6785cbbb6812e9502c7ecc411d143   # auto: notion-create-pages 결과
+3cc6785cbbb681b583a6e5eec1a8232b   # auto: notion-create-pages 결과
+3cc6785cbbb6818491cbd7a84071df08   # auto: notion-create-pages 결과
+3cc6785cbbb68153b1e7f4df7f8faed7   # auto: notion-create-pages 결과
+3cc6785cbbb681d09c21cc2d3bb0fad4   # auto: notion-create-pages 결과
