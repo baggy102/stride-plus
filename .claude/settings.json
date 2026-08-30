@@ -11,5 +11,8 @@
       "Bash(xargs grep *)",
       "Bash(npx --prefix apps/mobile expo start --clear --web)"
     ]
+  },
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   }
 }
