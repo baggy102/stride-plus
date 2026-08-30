@@ -6,33 +6,37 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#3b82f6',
+        tabBarShowLabel: false,
+        tabBarActiveTintColor: '#B3E5FC',
+        tabBarInactiveTintColor: '#404040',
+        tabBarStyle: {
+          backgroundColor: '#0A0A0A',
+          borderTopColor: '#1F1F1F',
+          borderTopWidth: 1,
+        },
       }}
     >
       <Tabs.Screen
         name="feed"
         options={{
-          title: '피드',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="map" size={size} color={color} />
+            <Ionicons name="newspaper-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="record"
         options={{
-          title: '기록',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="fitness" size={size} color={color} />
+            <Ionicons name="radio-button-on-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: '프로필',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
+            <Ionicons name="person-outline" size={size} color={color} />
           ),
         }}
       />

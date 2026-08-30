@@ -13,9 +13,11 @@ interface RunStore {
   isTracking: boolean;
   coordinates: [number, number][];
   elapsedSeconds: number;
+  pendingSummary: RunSummary | null;
   startTracking: () => Promise<void>;
   stopTracking: () => RunSummary;
   resetRun: () => void;
+  clearPendingSummary: () => void;
   _tick: () => void;
   _addCoordinate: (lng: number, lat: number) => void;
 }
@@ -27,6 +29,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   isTracking: false,
   coordinates: [],
   elapsedSeconds: 0,
+  pendingSummary: null,
 
   _tick: () => set((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 })),
 
@@ -98,10 +101,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const distanceKm = calcTotalDistance(coordinates);
     const paceSecPerKm = distanceKm > 0 ? elapsedSeconds / distanceKm : 0;
 
-    return { coordinates, distanceKm, elapsedSeconds, paceSecPerKm };
+    const summary = { coordinates, distanceKm, elapsedSeconds, paceSecPerKm };
+    set({ pendingSummary: summary });
+    return summary;
   },
 
-  resetRun: () => set({ isTracking: false, coordinates: [], elapsedSeconds: 0 }),
+  resetRun: () => set({ isTracking: false, coordinates: [], elapsedSeconds: 0, pendingSummary: null }),
+
+  clearPendingSummary: () => set({ pendingSummary: null }),
 }));
 
 function toRad(deg: number) {

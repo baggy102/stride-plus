@@ -1,76 +1,87 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, ActivityIndicator, Text, Pressable } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Pressable, Text } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
-import { useFocusEffect } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { AppLogo } from '@/components/AppLogo';
+import { MapPopupCard } from '@/components/MapPopupCard';
 import client, { BASE_URL } from '@/api/client';
-import { LEAFLET_HEAD, popupInnerHtml } from '@/utils/mapHtml';
 import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 
-function buildHtml(lat: number, lng: number, runs: RunMarker[], baseUrl: string) {
+function buildHtml(lat: number, lng: number, runs: RunMarker[]) {
   const runsJson = JSON.stringify(runs);
-  const popups = runs.reduce<Record<string, string>>((acc, run) => {
-    acc[run._id] = popupInnerHtml(run, baseUrl, true);
-    return acc;
-  }, {});
-  const popupsJson = JSON.stringify(popups);
 
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-  ${LEAFLET_HEAD}
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+  <style>
+    * { margin:0; padding:0; }
+    body { background: #0A0A0A; }
+    #map { width:100vw; height:100vh; }
+    .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
+    .leaflet-top.leaflet-left { top: 90px !important; }
+    @keyframes runDotPulse {
+      0%, 100% { transform: scale(1); opacity: 0.7; }
+      50% { transform: scale(2.6); opacity: 0; }
+    }
+    .run-dot-pulse { animation: runDotPulse 2s ease-out infinite; }
+  </style>
 </head>
 <body>
 <div id="map"></div>
-<div id="card" style="display:none;position:fixed;bottom:16px;left:12px;right:12px;background:#fff;border-radius:16px;box-shadow:0 4px 20px rgba(0,0,0,.18);overflow:hidden;z-index:9999;"></div>
 <script>
   var map = L.map('map',{zoomControl:true}).setView([${lat},${lng}],13);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM © CARTO'}).addTo(map);
-  L.circleMarker([${lat},${lng}],{radius:9,color:'#3b82f6',fillColor:'#3b82f6',fillOpacity:1,weight:3}).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM © CARTO',className:'map-tiles-dark'}).addTo(map);
+  L.circleMarker([${lat},${lng}],{radius:9,color:'#B3E5FC',fillColor:'#ffffff',fillOpacity:1,weight:3}).addTo(map);
 
-  var dotIcon=L.divIcon({html:'<div style="width:13px;height:13px;border-radius:50%;background:#e53935;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.3)"></div>',className:'',iconSize:[13,13],iconAnchor:[6,6]});
-  function clusterIcon(c){var n=c.getChildCount();return L.divIcon({html:'<div style="width:44px;height:44px;border-radius:22px;background:rgba(229,57,53,.88);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.22)">+'+n+'</div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});}
+  var dotIcon=L.divIcon({html:'<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:rgba(179,229,252,0.25)"></div><div style="width:11px;height:11px;border-radius:50%;background:#B3E5FC;border:2px solid #0A0A0A;box-shadow:0 0 8px rgba(179,229,252,0.7)"></div></div>',className:'',iconSize:[22,22],iconAnchor:[11,11]});
+  function clusterIcon(c){var n=c.getChildCount();return L.divIcon({html:'<div style="width:48px;height:48px;border-radius:50%;background:#0A0A0A;color:#B3E5FC;border:2px solid #B3E5FC;box-shadow:0 0 14px rgba(179,229,252,0.5),0 0 4px rgba(179,229,252,0.25);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+'+n+'</div>',className:'',iconSize:[48,48],iconAnchor:[24,24]});}
 
   var group=L.markerClusterGroup({iconCreateFunction:clusterIcon,showCoverageOnHover:false,maxClusterRadius:60});
   var runs=${runsJson};
-  var popups=${popupsJson};
-  var card=document.getElementById('card');
 
   runs.forEach(function(run){
     if(!run.startPoint)return;
     var m=L.marker([run.startPoint[1],run.startPoint[0]],{icon:dotIcon});
     m.on('click',function(){
-      card.innerHTML='<div onclick="card.style.display=\\'none\\'" style="position:absolute;top:10px;right:12px;font-size:18px;color:#71717a;cursor:pointer;z-index:1;">✕</div>'+(popups[run._id]||'');
-      card.style.display='block';
       window.ReactNativeWebView.postMessage(JSON.stringify(run));
     });
     group.addLayer(m);
   });
   map.addLayer(group);
-  map.on('click',function(){card.style.display='none';});
 </script>
 </body>
 </html>`;
 }
 
 export function MapFeed() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [loc, setLoc] = useState(SEOUL);
-  const [runs, setRuns] = useState<RunMarker[]>([]);
   const [loading, setLoading] = useState(true);
   const [html, setHtml] = useState('');
+  const [selected, setSelected] = useState<RunMarker | null>(null);
   const webViewRef = useRef<WebView>(null);
   const skipFirstFocus = useRef(true);
 
   const fetchRuns = useCallback(async (lat: number, lng: number) => {
+    let data: RunMarker[] = [];
     try {
-      const { data } = await client.get<RunMarker[]>(`/runs?lat=${lat}&lng=${lng}&radius=15000`);
-      setRuns(data);
-      setHtml(buildHtml(lat, lng, data, BASE_URL));
+      const res = await client.get<RunMarker[]>(`/runs?lat=${lat}&lng=${lng}&radius=15000`);
+      data = res.data;
     } catch {}
-    finally { setLoading(false); }
+    // 마커 조회가 실패해도 지도 자체는 항상 렌더링되도록 보장
+    setHtml(buildHtml(lat, lng, data));
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -103,7 +114,7 @@ export function MapFeed() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color="#e53935" size="large" />
+        <ActivityIndicator color="#B3E5FC" size="large" />
       </View>
     );
   }
@@ -117,23 +128,53 @@ export function MapFeed() {
         originWhitelist={['*']}
         javaScriptEnabled
         startInLoadingState
-        onMessage={() => {}}
+        onMessage={(e) => {
+          try {
+            setSelected(JSON.parse(e.nativeEvent.data));
+          } catch {}
+        }}
       />
+
+      {/* 헤더 오버레이 */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <AppLogo />
+      </View>
+
       <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
         <Text style={styles.myLocTxt}>📍</Text>
       </Pressable>
+
+      {selected && (
+        <MapPopupCard
+          run={selected}
+          baseUrl={BASE_URL}
+          onClose={() => setSelected(null)}
+          onUserPress={(userId) => {
+            setSelected(null);
+            router.push(`/user/${userId}`);
+          }}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' },
+  container: { flex: 1, backgroundColor: '#0A0A0A' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0A0A' },
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    alignItems: 'center',
+    paddingHorizontal: 20, paddingBottom: 14,
+    backgroundColor: 'rgba(10,10,10,0.88)',
+    borderBottomWidth: 1, borderBottomColor: '#1F1F1F',
+  },
   myLocBtn: {
     position: 'absolute', bottom: 100, right: 16,
     width: 44, height: 44, borderRadius: 22,
-    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 6, elevation: 4,
+    backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: '#1F1F1F',
+    shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
   },
   myLocTxt: { fontSize: 20 },
 });

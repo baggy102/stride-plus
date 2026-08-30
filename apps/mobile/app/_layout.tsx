@@ -2,7 +2,7 @@ import '../styles';
 import { useEffect } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Slot, useRouter, useSegments } from 'expo-router';
+import { Slot, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useAuthStore } from '@/store/auth';
 import { registerUnauthenticatedHandler } from '@/api/client';
@@ -11,6 +11,7 @@ export default function RootLayout() {
   const { isAuthenticated, isHydrating, hydrate, logout } = useAuthStore();
   const segments = useSegments();
   const router = useRouter();
+  const navigationState = useRootNavigationState();
 
   // 앱 시작: 리프레시 실패 핸들러 등록 후 토큰 유효성 확인
   useEffect(() => {
@@ -18,31 +19,27 @@ export default function RootLayout() {
     hydrate();
   }, []);
 
-  // isAuthenticated 변경 시 라우트 분기
+  // isAuthenticated 변경 시 라우트 분기 — navigationState.key 로 준비 여부 확인
   useEffect(() => {
+    if (!navigationState?.key) return;
     if (isHydrating) return;
     const inAuthGroup = segments[0] === '(auth)';
     const atRoot = segments.length === 0;
 
     if (!isAuthenticated && !inAuthGroup) {
-      // 미인증: 보호된 경로 → 로그인
       router.replace('/(auth)/login');
     } else if (isAuthenticated && (inAuthGroup || atRoot)) {
-      // 인증됨: auth 그룹이거나 루트(/)에 있으면 → 피드
       router.replace('/(tabs)/feed');
     }
-  }, [isAuthenticated, isHydrating, segments]);
+  }, [navigationState?.key, isAuthenticated, isHydrating, segments]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="auto" />
       <Slot />
       {isHydrating && (
-        <View
-          style={{ position: 'absolute', inset: 0 }}
-          className="items-center justify-center bg-white"
-        >
-          <ActivityIndicator size="large" color="#3b82f6" />
+        <View style={{ position: 'absolute', inset: 0, backgroundColor: '#0A0A0A', alignItems: 'center', justifyContent: 'center' }}>
+          <ActivityIndicator size="large" color="#B3E5FC" />
         </View>
       )}
     </GestureHandlerRootView>
