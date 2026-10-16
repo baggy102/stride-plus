@@ -12,9 +12,13 @@ import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 
-function buildHtml(lat: number, lng: number, runs: RunMarker[]) {
-  const runsJson = JSON.stringify(runs);
+// 서버 FindRunsDto의 radius 상한과 같다.
+const MAX_RADIUS_M = 300000;
 
+type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number };
+type RunMessage = { type: 'run'; run: RunMarker };
+
+function buildHtml(lat: number, lng: number) {
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -48,17 +52,31 @@ function buildHtml(lat: number, lng: number, runs: RunMarker[]) {
   function clusterIcon(c){var n=c.getChildCount();return L.divIcon({html:'<div style="width:48px;height:48px;border-radius:50%;background:#0A0A0A;color:#B3E5FC;border:2px solid #B3E5FC;box-shadow:0 0 14px rgba(179,229,252,0.5),0 0 4px rgba(179,229,252,0.25);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+'+n+'</div>',className:'',iconSize:[48,48],iconAnchor:[24,24]});}
 
   var group=L.markerClusterGroup({iconCreateFunction:clusterIcon,showCoverageOnHover:false,maxClusterRadius:60});
-  var runs=${runsJson};
-
-  runs.forEach(function(run){
-    if(!run.startPoint)return;
-    var m=L.marker([run.startPoint[1],run.startPoint[0]],{icon:dotIcon});
-    m.on('click',function(){
-      window.ReactNativeWebView.postMessage(JSON.stringify(run));
-    });
-    group.addLayer(m);
-  });
   map.addLayer(group);
+
+  window.__setRuns=function(runs){
+    group.clearLayers();
+    runs.forEach(function(run){
+      if(!run.startPoint)return;
+      var m=L.marker([run.startPoint[1],run.startPoint[0]],{icon:dotIcon});
+      m.on('click',function(){
+        window.ReactNativeWebView.postMessage(JSON.stringify({type:'run',run:run}));
+      });
+      group.addLayer(m);
+    });
+  };
+
+  function reportViewport(){
+    var c=map.getCenter();
+    var r=Math.min(Math.ceil(c.distanceTo(map.getBounds().getNorthEast())),${MAX_RADIUS_M});
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'viewport',lat:c.lat,lng:c.lng,radius:r}));
+  }
+  var moveTimer;
+  map.on('moveend',function(){
+    clearTimeout(moveTimer);
+    moveTimer=setTimeout(reportViewport,500);
+  });
+  reportViewport();
 </script>
 </body>
 </html>`;
@@ -67,22 +85,22 @@ function buildHtml(lat: number, lng: number, runs: RunMarker[]) {
 export function MapFeed() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [loc, setLoc] = useState(SEOUL);
-  const [loading, setLoading] = useState(true);
   const [html, setHtml] = useState('');
   const [selected, setSelected] = useState<RunMarker | null>(null);
   const webViewRef = useRef<WebView>(null);
   const skipFirstFocus = useRef(true);
+  const lastViewport = useRef<ViewportMessage | null>(null);
+  const requestSeq = useRef(0);
 
-  const fetchRuns = useCallback(async (lat: number, lng: number) => {
-    let data: RunMarker[] = [];
+  // WebView는 한 번만 로드하고, 마커는 __setRuns로만 갈아 끼운다.
+  const fetchRuns = useCallback(async ({ lat, lng, radius }: ViewportMessage) => {
+    const seq = ++requestSeq.current;
     try {
-      const res = await client.get<RunMarker[]>(`/runs?lat=${lat}&lng=${lng}&radius=15000`);
-      data = res.data;
+      const res = await client.get<RunMarker[]>(`/runs?lat=${lat}&lng=${lng}&radius=${radius}`);
+      // 늦게 도착한 이전 요청의 응답은 버린다
+      if (seq !== requestSeq.current) return;
+      webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(res.data)});true;`);
     } catch {}
-    // 마커 조회가 실패해도 지도 자체는 항상 렌더링되도록 보장
-    setHtml(buildHtml(lat, lng, data));
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -90,19 +108,17 @@ export function MapFeed() {
       const { status } = await Location.requestForegroundPermissionsAsync();
       if (status === 'granted') {
         const pos = await Location.getCurrentPositionAsync({});
-        const { latitude: lat, longitude: lng } = pos.coords;
-        setLoc({ lat, lng });
-        fetchRuns(lat, lng);
+        setHtml(buildHtml(pos.coords.latitude, pos.coords.longitude));
       } else {
-        fetchRuns(SEOUL.lat, SEOUL.lng);
+        setHtml(buildHtml(SEOUL.lat, SEOUL.lng));
       }
     })();
-  }, [fetchRuns]);
+  }, []);
 
   useFocusEffect(useCallback(() => {
     if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
-    fetchRuns(loc.lat, loc.lng);
-  }, [fetchRuns, loc]));
+    if (lastViewport.current) fetchRuns(lastViewport.current);
+  }, [fetchRuns]));
 
   const handleMyLocation = useCallback(async () => {
     try {
@@ -112,7 +128,7 @@ export function MapFeed() {
     } catch {}
   }, []);
 
-  if (loading) {
+  if (!html) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color="#B3E5FC" size="large" />
@@ -131,7 +147,13 @@ export function MapFeed() {
         startInLoadingState
         onMessage={(e) => {
           try {
-            setSelected(JSON.parse(e.nativeEvent.data));
+            const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage;
+            if (message.type === 'viewport') {
+              lastViewport.current = message;
+              fetchRuns(message);
+            } else {
+              setSelected(message.run);
+            }
           } catch {}
         }}
       />

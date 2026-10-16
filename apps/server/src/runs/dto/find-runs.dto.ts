@@ -15,7 +15,7 @@ export class FindRunsDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
-  @Max(50000)
+  @Max(300000)
   @Type(() => Number)
   radius?: number;
 
