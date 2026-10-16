@@ -8,6 +8,7 @@ import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { AppLogo } from '@/components/AppLogo';
 import { MapPopupCard } from '@/components/MapPopupCard';
+import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { RunMarker } from '../RunCard';
 
 interface UserProfile {
@@ -59,8 +60,8 @@ function buildHtml(runs: RunWithRoute[]) {
 <script>
   const runs = ${runsJson};
   const map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OSM © CARTO',
+  L.tileLayer('${CARTO_TILE_URL}', {
+    attribution: '${CARTO_ATTRIBUTION}',
     className: 'map-tiles-dark'
   }).addTo(map);
 

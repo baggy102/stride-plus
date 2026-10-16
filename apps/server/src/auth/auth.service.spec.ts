@@ -96,6 +96,7 @@ describe('AuthService', () => {
 
       const result = await service.refresh('valid-token');
       expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
       expect(storedToken.deleteOne).toHaveBeenCalled();
     });
 

@@ -42,6 +42,7 @@ describe('RunsService', () => {
       mockFind.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         populate: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
         lean: jest.fn().mockReturnThis(),
         exec: jest.fn().mockResolvedValue(raw),
       });
@@ -74,6 +75,7 @@ describe('RunsService', () => {
       mockFind.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         populate: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
         lean: jest.fn().mockReturnThis(),
         exec: jest.fn().mockResolvedValue(raw),
       });
@@ -86,6 +88,7 @@ describe('RunsService', () => {
       mockFind.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         populate: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
         lean: jest.fn().mockReturnThis(),
         exec: jest.fn().mockResolvedValue([]),
       });
@@ -107,6 +110,7 @@ describe('RunsService', () => {
       mockFind.mockReturnValue({
         select: jest.fn().mockReturnThis(),
         populate: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
         lean: jest.fn().mockReturnThis(),
         exec: jest.fn().mockResolvedValue([]),
       });
@@ -122,6 +126,21 @@ describe('RunsService', () => {
           }),
         }),
       );
+    });
+
+    it('넓은 반경에서도 결과를 500건으로 제한', async () => {
+      const limit = jest.fn().mockReturnThis();
+      mockFind.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        populate: jest.fn().mockReturnThis(),
+        limit,
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([]),
+      });
+
+      await service.findNearby(37.5, 127.0, 300000);
+
+      expect(limit).toHaveBeenCalledWith(500);
     });
   });
 

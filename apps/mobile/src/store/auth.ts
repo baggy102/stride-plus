@@ -90,10 +90,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
   refreshToken: async () => {
     const token = await SecureStorage.getItem('refresh_token');
     if (!token) throw new Error('no_refresh_token');
-    const { data } = await client.post<{ accessToken: string }>('/auth/refresh', {
+    const { data } = await client.post<{ accessToken: string; refreshToken: string }>('/auth/refresh', {
       refreshToken: token,
     });
     await SecureStorage.setItem('access_token', data.accessToken);
+    await SecureStorage.setItem('refresh_token', data.refreshToken);
   },
 
   clearError: () => set({ error: null }),
