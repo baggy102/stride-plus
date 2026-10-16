@@ -59,12 +59,13 @@ client.interceptors.response.use(
       const refreshToken = await SecureStorage.getItem('refresh_token');
       if (!refreshToken) throw new Error('no_refresh_token');
 
-      const { data } = await axios.post<{ accessToken: string }>(
+      const { data } = await axios.post<{ accessToken: string; refreshToken: string }>(
         `${BASE_URL}/auth/refresh`,
         { refreshToken },
       );
 
       await SecureStorage.setItem('access_token', data.accessToken);
+      await SecureStorage.setItem('refresh_token', data.refreshToken);
       client.defaults.headers.common.Authorization = `Bearer ${data.accessToken}`;
 
       drainQueue(null, data.accessToken);
