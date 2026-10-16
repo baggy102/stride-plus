@@ -7,6 +7,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { AppLogo } from '@/components/AppLogo';
 import { MapPopupCard } from '@/components/MapPopupCard';
 import client, { BASE_URL } from '@/api/client';
+import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
@@ -40,7 +41,7 @@ function buildHtml(lat: number, lng: number, runs: RunMarker[]) {
 <div id="map"></div>
 <script>
   var map = L.map('map',{zoomControl:true}).setView([${lat},${lng}],13);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',{attribution:'© OSM © CARTO',className:'map-tiles-dark'}).addTo(map);
+  L.tileLayer('${CARTO_TILE_URL}',{attribution:'${CARTO_ATTRIBUTION}',className:'map-tiles-dark'}).addTo(map);
   L.circleMarker([${lat},${lng}],{radius:9,color:'#B3E5FC',fillColor:'#ffffff',fillOpacity:1,weight:3}).addTo(map);
 
   var dotIcon=L.divIcon({html:'<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:rgba(179,229,252,0.25)"></div><div style="width:11px;height:11px;border-radius:50%;background:#B3E5FC;border:2px solid #0A0A0A;box-shadow:0 0 8px rgba(179,229,252,0.7)"></div></div>',className:'',iconSize:[22,22],iconAnchor:[11,11]});
