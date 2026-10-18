@@ -47,6 +47,8 @@ agent_docs/
 .claude/settings.local.json
 CLAUDE.md
 *.md
+# 약관 문서는 리포에서 버전 관리한다(C3)
+!docs/legal/*.md
 
 # Server uploads (user-generated files)
 apps/server/uploads/
