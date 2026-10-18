@@ -1,6 +1,7 @@
 import { create } from 'zustand';
+import axios from 'axios';
 import * as SecureStorage from '@/utils/secureStorage';
-import client from '@/api/client';
+import client, { BASE_URL } from '@/api/client';
 import { extractMessage } from '@/api/errors';
 
 interface User {
@@ -64,6 +65,12 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   logout: async () => {
+    // 갱신 실패로 불릴 때는 client.ts가 이미 토큰을 지웠으므로 서버 호출을 건너뛴다.
+    // 서버 호출이 실패해도 기기에서는 로그아웃한다. 401 인터셉터와 엮이지 않게 axios를 직접 쓴다.
+    const refreshToken = await SecureStorage.getItem('refresh_token');
+    if (refreshToken) {
+      await axios.post(`${BASE_URL}/auth/logout`, { refreshToken }, { timeout: 10_000 }).catch(() => {});
+    }
     await SecureStorage.deleteItem('access_token');
     await SecureStorage.deleteItem('refresh_token');
     set({ user: null, isAuthenticated: false, error: null });

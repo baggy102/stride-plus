@@ -67,6 +67,12 @@ export class AuthService {
     return this.issueTokens(payload.sub, user.email);
   }
 
+  // 이 기기의 refresh 토큰만 지운다. 없는 토큰이어도 성공(멱등) — 토큰 유효 여부를 드러내지 않는다.
+  // 만료된 토큰도 지울 수 있게 JWT 검증은 하지 않는다.
+  async logout(token: string) {
+    await this.refreshTokenModel.deleteOne({ token });
+  }
+
   private async issueTokens(userId: string, email: string) {
     const accessToken = this.jwtService.sign({ sub: userId, email });
     const refreshToken = this.jwtService.sign(
