@@ -3,12 +3,26 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { RunsService } from './runs.service';
 import { Run } from './runs.schema';
+import { User } from '../users/users.schema';
+import { Types } from 'mongoose';
 
 const mockFind = jest.fn();
 
 const mockRunModel = {
   find: mockFind,
   findById: jest.fn(),
+};
+
+const VIEWER = '64b7f0c2a1b2c3d4e5f60700';
+const BLOCKED = new Types.ObjectId('64b7f0c2a1b2c3d4e5f60701');
+const BLOCKER = new Types.ObjectId('64b7f0c2a1b2c3d4e5f60702');
+const leanExec = (value: unknown) => ({
+  select: () => ({ lean: () => ({ exec: jest.fn().mockResolvedValue(value) }) }),
+});
+// 차단 관계: VIEWER가 BLOCKED를 차단했고, BLOCKER가 VIEWER를 차단했다
+const mockUserModel = {
+  findById: jest.fn(() => leanExec({ blocked: [BLOCKED] })),
+  find: jest.fn(() => leanExec([{ _id: BLOCKER }])),
 };
 
 describe('RunsService', () => {
@@ -19,6 +33,7 @@ describe('RunsService', () => {
       providers: [
         RunsService,
         { provide: getModelToken(Run.name), useValue: mockRunModel },
+        { provide: getModelToken(User.name), useValue: mockUserModel },
       ],
     }).compile();
 
@@ -48,7 +63,7 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue(raw),
       });
 
-      const result = await service.findNearby(37.5, 127.1);
+      const result = await service.findNearby(VIEWER, 37.5, 127.1);
 
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
@@ -81,7 +96,7 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue(raw),
       });
 
-      const result = await service.findNearby(37.4, 126.9);
+      const result = await service.findNearby(VIEWER, 37.4, 126.9);
       expect(result[0].thumbnailUrl).toBeNull();
     });
 
@@ -94,7 +109,7 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue([]),
       });
 
-      await service.findNearby(37.5, 127.0);
+      await service.findNearby(VIEWER, 37.5, 127.0);
 
       expect(mockFind).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -116,7 +131,7 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue([]),
       });
 
-      await service.findNearby(37.5, 127.0, 10000);
+      await service.findNearby(VIEWER, 37.5, 127.0, 10000);
 
       expect(mockFind).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -139,7 +154,7 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue([]),
       });
 
-      await service.findNearby(37.5, 127.0, 300000);
+      await service.findNearby(VIEWER, 37.5, 127.0, 300000);
 
       expect(limit).toHaveBeenCalledWith(500);
     });
@@ -169,7 +184,7 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue(raw),
       });
 
-      const result = await service.findByUser('64b7f0c2a1b2c3d4e5f60718');
+      const result = await service.findByUser(VIEWER, '64b7f0c2a1b2c3d4e5f60718');
       expect(result[0]).toMatchObject({
         _id: 'run1',
         distanceKm: 5.2,
@@ -188,7 +203,7 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue(run),
       });
 
-      const result = await service.findById('64b7f0c2a1b2c3d4e5f60718');
+      const result = await service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718');
       expect(result).toEqual(run);
     });
 
@@ -199,14 +214,51 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue(null),
       });
 
-      await expect(service.findById('64b7f0c2a1b2c3d4e5f60718')).rejects.toThrow(
+      await expect(service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718')).rejects.toThrow(
         new NotFoundException('run_not_found'),
       );
     });
 
     it('형식이 틀린 ID면 조회 없이 NotFoundException', async () => {
-      await expect(service.findById('abc')).rejects.toThrow(new NotFoundException('run_not_found'));
+      await expect(service.findById(VIEWER, 'abc')).rejects.toThrow(new NotFoundException('run_not_found'));
       expect(mockRunModel.findById).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('차단 필터(양방향)', () => {
+    it('findNearby — 내가 차단한 사용자와 나를 차단한 사용자를 $nin으로 뺀다', async () => {
+      mockFind.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        populate: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([]),
+      });
+
+      await service.findNearby(VIEWER, 37.5, 127.0);
+
+      expect(mockFind).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: { $nin: [BLOCKED, BLOCKER] } }),
+      );
+      expect(mockUserModel.find).toHaveBeenCalledWith({ blocked: new Types.ObjectId(VIEWER) });
+    });
+
+    it('findByUser — 차단 관계인 사용자의 목록은 조회 없이 빈 배열', async () => {
+      expect(await service.findByUser(VIEWER, String(BLOCKED))).toEqual([]);
+      expect(await service.findByUser(VIEWER, String(BLOCKER))).toEqual([]);
+      expect(mockFind).not.toHaveBeenCalled();
+    });
+
+    it('findById — 차단 관계인 사용자의 러닝은 404', async () => {
+      mockRunModel.findById.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue({ _id: 'run1', userId: { _id: BLOCKER, username: 'x' } }),
+      });
+
+      await expect(service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718')).rejects.toThrow(
+        new NotFoundException('run_not_found'),
+      );
     });
   });
 });

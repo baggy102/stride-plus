@@ -22,16 +22,16 @@ export class RunsController {
   constructor(private readonly runsService: RunsService) {}
 
   @Get()
-  findRuns(@Query() dto: FindRunsDto) {
+  findRuns(@Req() req: { user: { sub: string } }, @Query() dto: FindRunsDto) {
     if (dto.userId) {
-      return this.runsService.findByUser(dto.userId, dto.page, dto.limit);
+      return this.runsService.findByUser(req.user.sub, dto.userId, dto.page, dto.limit);
     }
-    return this.runsService.findNearby(dto.lat ?? 0, dto.lng ?? 0, dto.radius ?? 5000);
+    return this.runsService.findNearby(req.user.sub, dto.lat ?? 0, dto.lng ?? 0, dto.radius ?? 5000);
   }
 
   @Get(':id')
-  findById(@Param('id') id: string) {
-    return this.runsService.findById(id);
+  findById(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    return this.runsService.findById(req.user.sub, id);
   }
 
   @Post()

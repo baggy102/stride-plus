@@ -1,4 +1,5 @@
 import { getModelToken } from '@nestjs/mongoose';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { Types } from 'mongoose';
 import { promises as fs } from 'fs';
@@ -16,6 +17,8 @@ const mockUserModel = {
   findById: jest.fn(),
   create: jest.fn(),
   updateMany: jest.fn(),
+  updateOne: jest.fn(),
+  exists: jest.fn(),
   deleteOne: jest.fn(),
 };
 const mockRunModel = { find: jest.fn(), deleteMany: jest.fn() };
@@ -73,6 +76,56 @@ describe('UsersService', () => {
     expect(mockUserModel.create).toHaveBeenCalledWith({ email: 'c@d.com', passwordHash: 'hash', username: 'charlie' });
   });
 
+  describe('block / unblock', () => {
+    const ME = '64b7f0c2a1b2c3d4e5f60710';
+    const TARGET = '64b7f0c2a1b2c3d4e5f60711';
+
+    it('block — 대상을 $addToSet으로 추가(중복 차단은 멱등)', async () => {
+      mockUserModel.exists.mockResolvedValue({ _id: TARGET });
+      mockUserModel.updateOne.mockReturnValue(execOf());
+
+      await service.block(ME, TARGET);
+      await service.block(ME, TARGET);
+
+      expect(mockUserModel.updateOne).toHaveBeenCalledTimes(2);
+      expect(mockUserModel.updateOne).toHaveBeenCalledWith(
+        { _id: ME },
+        { $addToSet: { blocked: new Types.ObjectId(TARGET) } },
+      );
+    });
+
+    it('block — 자기 자신이면 400(cannot_block_self)', async () => {
+      await expect(service.block(ME, ME)).rejects.toThrow(new BadRequestException('cannot_block_self'));
+      expect(mockUserModel.updateOne).not.toHaveBeenCalled();
+    });
+
+    it('block — 없는 사용자면 404', async () => {
+      mockUserModel.exists.mockResolvedValue(null);
+      await expect(service.block(ME, TARGET)).rejects.toThrow(new NotFoundException('user_not_found'));
+      expect(mockUserModel.updateOne).not.toHaveBeenCalled();
+    });
+
+    it('block — 형식이 틀린 ID면 조회 없이 404', async () => {
+      await expect(service.block(ME, 'abc')).rejects.toThrow(new NotFoundException('user_not_found'));
+      expect(mockUserModel.exists).not.toHaveBeenCalled();
+    });
+
+    it('unblock — 대상을 $pull', async () => {
+      mockUserModel.updateOne.mockReturnValue(execOf());
+      await service.unblock(ME, TARGET);
+      expect(mockUserModel.updateOne).toHaveBeenCalledWith(
+        { _id: ME },
+        { $pull: { blocked: new Types.ObjectId(TARGET) } },
+      );
+    });
+
+    it('isBlocking — 내 blocked에 있으면 true, 형식이 틀리면 false', async () => {
+      mockUserModel.exists.mockResolvedValue({ _id: ME });
+      expect(await service.isBlocking(ME, TARGET)).toBe(true);
+      expect(await service.isBlocking(ME, 'abc')).toBe(false);
+    });
+  });
+
   describe('deleteAccount', () => {
     const USER_ID = '64b7f0c2a1b2c3d4e5f60719';
     const oid = new Types.ObjectId(USER_ID);
@@ -106,7 +159,10 @@ describe('UsersService', () => {
       expect(mockPostModel.deleteMany).toHaveBeenCalledWith({ $or: [{ userId: oid }, { runId: { $in: [runId] } }] });
       expect(mockPostModel.updateMany).toHaveBeenCalledWith({ likes: oid }, { $pull: { likes: oid } });
       expect(mockRunModel.deleteMany).toHaveBeenCalledWith({ userId: oid });
-      expect(mockUserModel.updateMany).toHaveBeenCalledWith({ following: oid }, { $pull: { following: oid } });
+      expect(mockUserModel.updateMany).toHaveBeenCalledWith(
+        { $or: [{ following: oid }, { blocked: oid }] },
+        { $pull: { following: oid, blocked: oid } },
+      );
       expect(mockRefreshTokenModel.deleteMany).toHaveBeenCalledWith({ userId: oid });
       expect(mockUserModel.deleteOne).toHaveBeenCalledWith({ _id: oid });
       expect(order[order.length - 1]).toBe('users.deleteOne');
