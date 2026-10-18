@@ -43,7 +43,12 @@ describe('AuthService', () => {
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
       expect(result.user.email).toBe('a@b.com');
-      expect(mockUsersService.create).toHaveBeenCalledWith('a@b.com', expect.any(String), 'alice');
+      expect(mockUsersService.create).toHaveBeenCalledWith('a@b.com', expect.any(String), 'alice', {
+        terms: '2026-11-01',
+        privacy: '2026-11-01',
+        location: '2026-11-01',
+        agreedAt: expect.any(Date),
+      });
     });
 
     it('이미 존재하는 이메일이면 ConflictException', async () => {

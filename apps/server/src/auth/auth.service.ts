@@ -10,6 +10,7 @@ import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { RefreshToken, RefreshTokenDocument } from './auth.schema';
 import { UsersService } from '../users/users.service';
+import { LEGAL_VERSIONS } from './legal-versions';
 
 @Injectable()
 export class AuthService {
@@ -25,7 +26,11 @@ export class AuthService {
     const existing = await this.usersService.findByEmail(email);
     if (existing) throw new ConflictException('Email already in use');
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await this.usersService.create(email, passwordHash, username);
+    // 동의 버전은 RegisterDto가 현재 버전과 같은지 검증했다
+    const user = await this.usersService.create(email, passwordHash, username, {
+      ...LEGAL_VERSIONS,
+      agreedAt: new Date(),
+    });
     const tokens = await this.issueTokens(user._id.toString(), user.email);
     return {
       ...tokens,

@@ -7,6 +7,7 @@ import { User, UserDocument } from './users.schema';
 import { Run, RunDocument } from '../runs/runs.schema';
 import { Post, PostDocument } from '../posts/posts.schema';
 import { RefreshToken, RefreshTokenDocument } from '../auth/auth.schema';
+import type { Consents } from '../auth/legal-versions';
 
 @Injectable()
 export class UsersService {
@@ -29,8 +30,8 @@ export class UsersService {
     return this.userModel.findById(id).exec();
   }
 
-  create(email: string, passwordHash: string, username: string): Promise<UserDocument> {
-    return this.userModel.create({ email, passwordHash, username });
+  create(email: string, passwordHash: string, username: string, consents: Consents): Promise<UserDocument> {
+    return this.userModel.create({ email, passwordHash, username, consents });
   }
 
   // 차단은 멱등($addToSet). 형식이 틀리거나 없는 사용자는 404 — 앱은 「없는 사용자」 한 가지로 처리한다.
