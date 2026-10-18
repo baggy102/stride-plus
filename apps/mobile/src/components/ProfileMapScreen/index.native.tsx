@@ -8,6 +8,7 @@ import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { AppLogo } from '@/components/AppLogo';
 import { MapPopupCard } from '@/components/MapPopupCard';
+import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
 import { withAlpha, type Palette } from '@/theme/colors';
@@ -111,6 +112,9 @@ export function ProfileMapScreen({ userId }: Props) {
   const c = useColors();
   const dark = useScheme() === 'dark';
   const styles = useMemo(() => makeStyles(c), [c]);
+  // 내 프로필 탭(userId 없음)은 플로팅 탭바 위로 올린다. user/[id]는 탭바가 없다
+  const tabClearance = useTabBarClearance();
+  const bottomBase = userId ? 24 : tabClearance + 12;
   const { user } = useAuthStore();
   const insets = useSafeAreaInsets();
   const targetId = userId ?? user?._id;
@@ -180,7 +184,7 @@ export function ProfileMapScreen({ userId }: Props) {
               try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
             }}
           />
-          <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
+          <Pressable style={[styles.myLocBtn, { bottom: bottomBase + 64 }]} onPress={handleMyLocation}>
             <Text style={styles.myLocTxt}>📍</Text>
           </Pressable>
         </>
@@ -213,6 +217,7 @@ export function ProfileMapScreen({ userId }: Props) {
         <MapPopupCard
           run={selected}
           baseUrl={BASE_URL}
+          bottom={bottomBase}
           onClose={() => setSelected(null)}
         />
       )}
@@ -237,6 +242,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   headerInfo: { flex: 1 },
   username: { fontSize: 18, fontWeight: '700', color: c.text },
   stats: { fontSize: 13, color: c.text2, marginTop: 2 },
-  myLocBtn: { position: 'absolute', bottom: 100, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border, shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
+  myLocBtn: { position: 'absolute', right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border, shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
   myLocTxt: { fontSize: 20 },
 });

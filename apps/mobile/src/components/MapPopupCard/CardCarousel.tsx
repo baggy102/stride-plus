@@ -14,7 +14,7 @@ export function CardCarousel({ imgs, baseUrl }: Props) {
 
   return (
     <View
-      style={{ borderRadius: 10, overflow: 'hidden', marginBottom: 12 }}
+      style={{ borderRadius: 12, overflow: 'hidden' }}
       onLayout={(e) => setW(e.nativeEvent.layout.width)}
     >
       {w > 0 && (
