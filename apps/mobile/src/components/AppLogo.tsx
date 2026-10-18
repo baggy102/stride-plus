@@ -1,26 +1,15 @@
-import { Text, StyleSheet } from 'react-native';
-import { useColors } from '@/theme/useColors';
+import { Wordmark } from './Wordmark';
 
 interface Props {
   size?: 'sm' | 'md' | 'lg';
 }
 
+const WIDTH = { sm: 96, md: 120, lg: 160 } as const;
+
 /**
  * 앱 로고 공유 컴포넌트.
- * 폰트 교체 시 여기 fontFamily 하나만 변경하면 전 페이지 반영됨.
+ * 확정 UI의 STRIDE+ 워드마크(SVG)를 그린다. 색은 테마 공통 logo(#4B83B5).
  */
 export function AppLogo({ size = 'md' }: Props) {
-  const c = useColors();
-  const fontSize = size === 'sm' ? 18 : size === 'lg' ? 32 : 24;
-  return (
-    <Text style={[styles.logo, { color: c.text, fontSize, letterSpacing: fontSize * 0.28 }]}>
-      STRIDE+
-    </Text>
-  );
+  return <Wordmark width={WIDTH[size]} />;
 }
-
-const styles = StyleSheet.create({
-  logo: {
-    fontWeight: '900',
-  },
-});

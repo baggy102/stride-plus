@@ -5,6 +5,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Slot, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { vars } from 'nativewind';
+import { useFonts } from 'expo-font';
+import { FONT_ASSETS } from '@/theme/fonts';
 import { useAuthStore } from '@/store/auth';
 import { useThemeStore } from '@/store/theme';
 import { registerUnauthenticatedHandler } from '@/api/client';
@@ -19,6 +21,7 @@ export default function RootLayout() {
   const navigationState = useRootNavigationState();
   const scheme = useScheme();
   const c = useColors();
+  const [fontsLoaded] = useFonts(FONT_ASSETS);
 
   // tailwind brand-* 클래스가 읽는 CSS 변수
   const themeVars = useMemo(() => vars({
@@ -51,6 +54,9 @@ export default function RootLayout() {
       router.replace('/(tabs)/feed');
     }
   }, [navigationState?.key, isAuthenticated, isHydrating, segments]);
+
+  // 글꼴이 로드되기 전에는 배경색만 그린다(시스템 글꼴로 한 번 그렸다가 바뀌는 깜빡임 방지)
+  if (!fontsLoaded) return <View style={{ flex: 1, backgroundColor: c.bg }} />;
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
