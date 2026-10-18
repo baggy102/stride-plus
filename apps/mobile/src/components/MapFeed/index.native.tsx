@@ -91,13 +91,17 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOf
 
 type FeedState = 'normal' | 'empty' | 'error';
 
-// 피드 필터 칩: 러닝 거리 N km 이상만 표시 (캔버스는 칩 UI만 정의 — 해석은 2026-10-18 확인 필요)
+// 피드 필터 칩: 러닝 거리 구간(겹치지 않음) — 5km 이하 / 5~10km / 10km 초과 (2026-10-18 결정)
 const CHIPS = [
-  { label: '전체', minKm: 0 },
-  { label: '1km', minKm: 1 },
-  { label: '5km', minKm: 5 },
-  { label: '15km', minKm: 15 },
+  { label: '전체', overKm: -1, upToKm: Infinity },
+  { label: '5km', overKm: -1, upToKm: 5 },
+  { label: '10km', overKm: 5, upToKm: 10 },
+  { label: '10km+', overKm: 10, upToKm: Infinity },
 ] as const;
+
+function inChip(distanceKm: number, chip: (typeof CHIPS)[number]) {
+  return distanceKm > chip.overKm && distanceKm <= chip.upToKm;
+}
 
 export function MapFeed() {
   const router = useRouter();
@@ -114,20 +118,20 @@ export function MapFeed() {
   );
   const [selected, setSelected] = useState<RunMarker | null>(null);
   const [feedState, setFeedState] = useState<FeedState>('normal');
-  const [minKm, setMinKm] = useState(0);
+  const [chipIndex, setChipIndex] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const skipFirstFocus = useRef(true);
   const lastViewport = useRef<ViewportMessage | null>(null);
   const lastRuns = useRef<RunMarker[] | null>(null);
-  const minKmRef = useRef(minKm);
+  const chipRef = useRef(chipIndex);
   const requestSeq = useRef(0);
 
   // 마지막으로 받은 런을 칩 조건으로 걸러 지도에 반영한다(WebView는 다시 로드하지 않는다)
-  const showRuns = useCallback((min: number) => {
+  const showRuns = useCallback((index: number) => {
     const runs = lastRuns.current;
     if (!runs) return;
-    const visible = runs.filter((run) => run.distanceKm >= min);
+    const visible = runs.filter((run) => inChip(run.distanceKm, CHIPS[index]));
     setFeedState(visible.length > 0 ? 'normal' : 'empty');
     webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(visible)});true;`);
   }, []);
@@ -139,16 +143,16 @@ export function MapFeed() {
       // 늦게 도착한 이전 요청의 응답은 버린다
       if (seq !== requestSeq.current) return;
       lastRuns.current = res.data;
-      showRuns(minKmRef.current);
+      showRuns(chipRef.current);
     } catch {
       if (seq === requestSeq.current) setFeedState('error');
     }
   }, [showRuns]);
 
   useEffect(() => {
-    minKmRef.current = minKm;
-    showRuns(minKm);
-  }, [minKm, showRuns]);
+    chipRef.current = chipIndex;
+    showRuns(chipIndex);
+  }, [chipIndex, showRuns]);
 
   useEffect(() => {
     (async () => {
@@ -218,14 +222,14 @@ export function MapFeed() {
           <Wordmark width={71} />
         </View>
         <View style={styles.chips}>
-          {CHIPS.map((chip) => {
-            const on = chip.minKm === minKm;
+          {CHIPS.map((chip, index) => {
+            const on = index === chipIndex;
             return (
               <Pressable
                 key={chip.label}
                 accessibilityRole="button"
                 accessibilityState={{ selected: on }}
-                onPress={() => setMinKm(chip.minKm)}
+                onPress={() => setChipIndex(index)}
                 style={[styles.chip, on && styles.chipOn]}
               >
                 <Text style={[styles.chipText, on && styles.chipTextOn]}>{chip.label}</Text>
