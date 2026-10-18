@@ -1,4 +1,7 @@
 /** @type {import('tailwindcss').Config} */
+// brand-* 색은 app/_layout.tsx가 루트에서 주입하는 CSS 변수(팔레트 G, 다크·라이트)를 따른다.
+const themed = (name) => `rgb(var(--color-${name}) / <alpha-value>)`;
+
 module.exports = {
   content: ['./app/**/*.{js,jsx,ts,tsx}', './src/**/*.{js,jsx,ts,tsx}'],
   presets: [require('nativewind/preset')],
@@ -6,15 +9,15 @@ module.exports = {
     extend: {
       colors: {
         brand: {
-          lime:    '#B3E5FC',
-          green:   '#81D4FA',
-          dark:    '#0A0A0A',
-          surface: '#141414',
-          border:  '#1F1F1F',
-          muted:   '#404040',
+          lime:    themed('value'),
+          green:   themed('value'),
+          dark:    themed('bg'),
+          surface: themed('surface'),
+          border:  themed('border'),
+          muted:   themed('muted'),
           text: {
-            primary:   '#F5F5F5',
-            secondary: '#808080',
+            primary:   themed('text'),
+            secondary: themed('text2'),
           },
         },
       },

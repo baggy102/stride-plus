@@ -1,5 +1,8 @@
+import { useMemo } from 'react';
 import { View, Text, Pressable, Image, Alert, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { useColors } from '@/theme/useColors';
+import type { Palette } from '@/theme/colors';
 
 interface Props {
   photos: string[];
@@ -7,6 +10,8 @@ interface Props {
 }
 
 export function PhotoPicker({ photos, onChange }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const pick = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
@@ -55,20 +60,20 @@ export function PhotoPicker({ photos, onChange }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  label: { color: '#808080', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  label: { color: c.text2, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
   row: { flexDirection: 'row', gap: 12 },
   thumbWrap: { position: 'relative' },
   thumb: { width: 84, height: 84, borderRadius: 16 },
   removeBtn: {
     position: 'absolute', top: -6, right: -6,
-    backgroundColor: '#141414', borderColor: '#1F1F1F', borderWidth: 1,
+    backgroundColor: c.surface, borderColor: c.border, borderWidth: 1,
     borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center',
   },
-  removeText: { color: '#F5F5F5', fontSize: 12, lineHeight: 12 },
+  removeText: { color: c.text, fontSize: 12, lineHeight: 12 },
   addBtn: {
-    width: 84, height: 84, borderColor: '#1F1F1F', borderWidth: 1, borderStyle: 'dashed',
+    width: 84, height: 84, borderColor: c.border, borderWidth: 1, borderStyle: 'dashed',
     borderRadius: 16, alignItems: 'center', justifyContent: 'center',
   },
-  addText: { color: '#B3E5FC', fontSize: 24 },
+  addText: { color: c.value, fontSize: 24 },
 });

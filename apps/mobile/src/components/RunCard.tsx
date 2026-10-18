@@ -3,6 +3,7 @@ import { View, Text, Pressable, Image, ScrollView, useWindowDimensions } from 'r
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BASE_URL } from '@/api/client';
+import { useColors } from '@/theme/useColors';
 
 export interface RunMarker {
   _id: string;
@@ -27,6 +28,7 @@ function formatDate(iso: string) {
 }
 
 function ImageCarousel({ images }: { images: string[] }) {
+  const c = useColors();
   const { width: screenWidth } = useWindowDimensions();
   const [activeIdx, setActiveIdx] = useState(0);
 
@@ -71,7 +73,7 @@ function ImageCarousel({ images }: { images: string[] }) {
                 width: i === activeIdx ? 16 : 6,
                 height: 6,
                 borderRadius: 3,
-                backgroundColor: i === activeIdx ? '#B3E5FC' : 'rgba(255,255,255,0.35)',
+                backgroundColor: i === activeIdx ? c.value : 'rgba(255,255,255,0.35)',
               }}
             />
           ))}
@@ -86,11 +88,12 @@ interface Props {
 }
 
 export function RunCard({ run }: Props) {
+  const c = useColors();
   const router = useRouter();
   const images = [run.routeImageUrl, ...run.photoUrls].filter(Boolean) as string[];
 
   return (
-    <View style={{ borderBottomWidth: 1, borderBottomColor: '#1F1F1F', paddingBottom: 4 }}>
+    <View style={{ borderBottomWidth: 1, borderBottomColor: c.border, paddingBottom: 4 }}>
       {/* 프로필 헤더 */}
       <Pressable
         className="flex-row items-center gap-3 active:opacity-70 px-4 pt-4 pb-3"
@@ -104,9 +107,9 @@ export function RunCard({ run }: Props) {
         ) : (
           <View
             className="w-10 h-10 rounded-full items-center justify-center"
-            style={{ backgroundColor: '#B3E5FC' }}
+            style={{ backgroundColor: c.accent }}
           >
-            <Text style={{ color: '#01579B', fontSize: 14, fontWeight: 'bold' }}>
+            <Text style={{ color: c.ink, fontSize: 14, fontWeight: 'bold' }}>
               {(run.userId.username ?? '?')[0].toUpperCase()}
             </Text>
           </View>
@@ -126,7 +129,7 @@ export function RunCard({ run }: Props) {
       <View className="flex-row gap-6 px-4 pt-3 pb-2">
         <View>
           <Text className="text-brand-muted text-xs uppercase tracking-widest">거리</Text>
-          <Text className="text-2xl font-bold tabular-nums" style={{ color: '#B3E5FC' }}>
+          <Text className="text-2xl font-bold tabular-nums" style={{ color: c.value }}>
             {run.distanceKm.toFixed(2)}{' '}
             <Text className="text-brand-text-secondary text-sm">km</Text>
           </Text>
@@ -143,18 +146,18 @@ export function RunCard({ run }: Props) {
       {/* SNS 반응 바 */}
       <View
         className="flex-row gap-5 px-4 py-3"
-        style={{ borderTopWidth: 1, borderTopColor: '#1F1F1F' }}
+        style={{ borderTopWidth: 1, borderTopColor: c.border }}
       >
         <Pressable className="flex-row items-center gap-1.5 active:opacity-60">
-          <Ionicons name="heart-outline" size={20} color="#404040" />
+          <Ionicons name="heart-outline" size={20} color={c.muted} />
           <Text className="text-brand-muted text-sm">좋아요</Text>
         </Pressable>
         <Pressable className="flex-row items-center gap-1.5 active:opacity-60">
-          <Ionicons name="chatbubble-outline" size={19} color="#404040" />
+          <Ionicons name="chatbubble-outline" size={19} color={c.muted} />
           <Text className="text-brand-muted text-sm">댓글</Text>
         </Pressable>
         <Pressable className="flex-row items-center gap-1.5 active:opacity-60">
-          <Ionicons name="arrow-redo-outline" size={20} color="#404040" />
+          <Ionicons name="arrow-redo-outline" size={20} color={c.muted} />
           <Text className="text-brand-muted text-sm">공유</Text>
         </Pressable>
       </View>

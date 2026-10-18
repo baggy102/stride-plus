@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, Pressable, TextInput,
   ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet,
@@ -13,6 +13,8 @@ import { FadeInUp } from '@/components/RunSummary/FadeInUp';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
 import { MiniMap } from '@/components/RunSummary/MiniMap';
 import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
+import { useColors } from '@/theme/useColors';
+import { withAlpha, type Palette } from '@/theme/colors';
 
 function formatTime(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -31,6 +33,8 @@ function formatPace(sec: number) {
 
 export default function RunSummaryScreen() {
   const router = useRouter();
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const pendingSummary = useRunStore((s) => s.pendingSummary);
   const resetRun = useRunStore((s) => s.resetRun);
   const clearPendingSummary = useRunStore((s) => s.clearPendingSummary);
@@ -91,18 +95,18 @@ export default function RunSummaryScreen() {
   const [whole, frac] = summary.distanceKm.toFixed(2).split('.');
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
+    <View style={{ flex: 1, backgroundColor: c.bg }}>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
 
       <LinearGradient
-        colors={['#0D1A20', '#0A0A0A', '#0A0A0A']}
+        colors={[c.surface2, c.bg, c.bg]}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 420 }}
       />
 
       {/* 후광 효과 */}
       <View pointerEvents="none" style={{ position: 'absolute', top: 70, left: 0, right: 0, alignItems: 'center' }}>
-        <View style={{ width: 320, height: 320, borderRadius: 160, backgroundColor: 'rgba(179,229,252,0.06)' }} />
-        <View style={{ position: 'absolute', top: 60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(179,229,252,0.10)' }} />
+        <View style={{ width: 320, height: 320, borderRadius: 160, backgroundColor: withAlpha(c.value, 0.06) }} />
+        <View style={{ position: 'absolute', top: 60, width: 200, height: 200, borderRadius: 100, backgroundColor: withAlpha(c.value, 0.1) }} />
       </View>
 
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
@@ -122,19 +126,19 @@ export default function RunSummaryScreen() {
             {/* 히어로: 거리 */}
             <FadeInUp delay={120} duration={600} style={{ alignItems: 'center' }}>
               <View style={styles.runCompleteRow}>
-                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#B3E5FC' }} />
+                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: c.value }} />
                 <Text style={styles.runCompleteLabel}>
                   Run Complete
                 </Text>
               </View>
               <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
                 <Text
-                  style={{ color: '#F5F5F5', fontSize: 88, fontWeight: '900', letterSpacing: -3, lineHeight: 92, fontVariant: ['tabular-nums'] }}
+                  style={{ color: c.text, fontSize: 88, fontWeight: '900', letterSpacing: -3, lineHeight: 92, fontVariant: ['tabular-nums'] }}
                 >
                   {whole}
                 </Text>
                 <Text
-                  style={{ color: '#B3E5FC', fontSize: 44, fontWeight: '900', letterSpacing: -1, fontVariant: ['tabular-nums'] }}
+                  style={{ color: c.value, fontSize: 44, fontWeight: '900', letterSpacing: -1, fontVariant: ['tabular-nums'] }}
                 >
                   .{frac}
                 </Text>
@@ -150,7 +154,7 @@ export default function RunSummaryScreen() {
                   {formatTime(summary.elapsedSeconds)}
                 </Text>
               </View>
-              <View style={{ width: 1, backgroundColor: '#1F1F1F' }} />
+              <View style={{ width: 1, backgroundColor: c.border }} />
               <View style={styles.statCol}>
                 <Text style={styles.label}>페이스</Text>
                 <Text style={styles.statValue}>
@@ -178,12 +182,12 @@ export default function RunSummaryScreen() {
                 value={description}
                 onChangeText={setDescription}
                 placeholder="오늘 러닝은 어땠나요? (선택)"
-                placeholderTextColor="#808080"
+                placeholderTextColor={c.text2}
                 multiline
                 numberOfLines={3}
                 style={{
-                  backgroundColor: '#141414', borderColor: '#1F1F1F', borderWidth: 1,
-                  color: '#F5F5F5', borderRadius: 16, padding: 16, minHeight: 88,
+                  backgroundColor: c.surface, borderColor: c.border, borderWidth: 1,
+                  color: c.text, borderRadius: 16, padding: 16, minHeight: 88,
                   textAlignVertical: 'top',
                 }}
               />
@@ -210,11 +214,11 @@ export default function RunSummaryScreen() {
               disabled={saving}
               style={({ pressed }) => [
                 styles.saveButton,
-                { backgroundColor: saving ? '#404040' : '#B3E5FC', opacity: pressed ? 0.8 : 1 },
+                { backgroundColor: saving ? c.muted : c.accent, opacity: pressed ? 0.8 : 1 },
               ]}
             >
               {saving ? (
-                <ActivityIndicator color="#0A0A0A" />
+                <ActivityIndicator color={c.ink} />
               ) : (
                 <Text style={styles.saveText}>저장하기</Text>
               )}
@@ -226,20 +230,20 @@ export default function RunSummaryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   runCompleteRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  runCompleteLabel: { color: '#808080', fontSize: 12, textTransform: 'uppercase', letterSpacing: 3 },
-  kilometersLabel: { color: '#404040', fontSize: 14, textTransform: 'uppercase', letterSpacing: 4, marginTop: 4 },
+  runCompleteLabel: { color: c.text2, fontSize: 12, textTransform: 'uppercase', letterSpacing: 3 },
+  kilometersLabel: { color: c.muted, fontSize: 14, textTransform: 'uppercase', letterSpacing: 4, marginTop: 4 },
   statCol: { alignItems: 'center', flex: 1 },
-  label: { color: '#808080', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 4 },
-  statValue: { color: '#F5F5F5', fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  unit: { color: '#404040', fontSize: 12 },
-  sectionLabel: { color: '#808080', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
+  label: { color: c.text2, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 4 },
+  statValue: { color: c.text, fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  unit: { color: c.muted, fontSize: 12 },
+  sectionLabel: { color: c.text2, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
   discardButton: {
-    flex: 1, borderWidth: 1, borderColor: '#1F1F1F', borderRadius: 16,
+    flex: 1, borderWidth: 1, borderColor: c.border, borderRadius: 16,
     paddingVertical: 16, alignItems: 'center',
   },
-  discardText: { color: '#808080', fontWeight: '600' },
+  discardText: { color: c.text2, fontWeight: '600' },
   saveButton: { flex: 1, borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
-  saveText: { color: '#01579B', fontWeight: '700' },
+  saveText: { color: c.ink, fontWeight: '700' },
 });

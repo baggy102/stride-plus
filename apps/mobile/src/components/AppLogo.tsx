@@ -1,4 +1,5 @@
 import { Text, StyleSheet } from 'react-native';
+import { useColors } from '@/theme/useColors';
 
 interface Props {
   size?: 'sm' | 'md' | 'lg';
@@ -9,9 +10,10 @@ interface Props {
  * 폰트 교체 시 여기 fontFamily 하나만 변경하면 전 페이지 반영됨.
  */
 export function AppLogo({ size = 'md' }: Props) {
+  const c = useColors();
   const fontSize = size === 'sm' ? 18 : size === 'lg' ? 32 : 24;
   return (
-    <Text style={[styles.logo, { fontSize, letterSpacing: fontSize * 0.28 }]}>
+    <Text style={[styles.logo, { color: c.text, fontSize, letterSpacing: fontSize * 0.28 }]}>
       STRIDE+
     </Text>
   );
@@ -19,7 +21,6 @@ export function AppLogo({ size = 'md' }: Props) {
 
 const styles = StyleSheet.create({
   logo: {
-    color: '#F5F5F5',
     fontWeight: '900',
   },
 });

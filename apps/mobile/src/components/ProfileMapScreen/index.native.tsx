@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
@@ -9,6 +9,8 @@ import { useAuthStore } from '@/store/auth';
 import { AppLogo } from '@/components/AppLogo';
 import { MapPopupCard } from '@/components/MapPopupCard';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
+import { useColors, useScheme } from '@/theme/useColors';
+import { withAlpha, type Palette } from '@/theme/colors';
 import { RunMarker } from '../RunCard';
 
 interface UserProfile {
@@ -25,7 +27,8 @@ interface Props {
   userId?: string;
 }
 
-function buildHtml(runs: RunWithRoute[]) {
+function buildHtml(runs: RunWithRoute[], p: Palette, dark: boolean) {
+  const m = p.map;
   const runsJson = JSON.stringify(runs);
   return `<!DOCTYPE html>
 <html>
@@ -41,13 +44,13 @@ function buildHtml(runs: RunWithRoute[]) {
     #map { width:100vw; height:100vh; }
     .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
     .leaflet-popup-content-wrapper {
-      background: #141414 !important;
-      border: 1px solid #1F1F1F !important;
+      background: ${p.surface} !important;
+      border: 1px solid ${p.border} !important;
       border-radius: 12px !important;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.7) !important;
-      color: #F5F5F5 !important;
+      box-shadow: 0 4px 24px ${withAlpha(p.shadow, 0.7)} !important;
+      color: ${p.text} !important;
     }
-    .leaflet-popup-tip { background: #141414 !important; }
+    .leaflet-popup-tip { background: ${p.surface} !important; }
     @keyframes runDotPulse {
       0%, 100% { transform: scale(1); opacity: 0.7; }
       50% { transform: scale(2.6); opacity: 0; }
@@ -62,18 +65,18 @@ function buildHtml(runs: RunWithRoute[]) {
   const map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
   L.tileLayer('${CARTO_TILE_URL}', {
     attribution: '${CARTO_ATTRIBUTION}',
-    className: 'map-tiles-dark'
+    className: '${dark ? 'map-tiles-dark' : ''}'
   }).addTo(map);
 
   const dotIcon = L.divIcon({
-    html: '<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:rgba(179,229,252,0.25)"></div><div style="width:11px;height:11px;border-radius:50%;background:#B3E5FC;border:2px solid #0A0A0A;box-shadow:0 0 8px rgba(179,229,252,0.7)"></div></div>',
+    html: '<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:${m.pulse}"></div><div style="width:11px;height:11px;border-radius:50%;background:${m.dot};border:2px solid ${m.dotBorder};box-shadow:0 0 8px ${withAlpha(m.dot, 0.7)}"></div></div>',
     className: '', iconSize: [22,22], iconAnchor: [11,11],
   });
 
   function clusterIcon(cluster) {
     const n = cluster.getChildCount();
     return L.divIcon({
-      html: '<div style="width:48px;height:48px;border-radius:50%;background:#0A0A0A;color:#B3E5FC;border:2px solid #B3E5FC;box-shadow:0 0 14px rgba(179,229,252,0.5),0 0 4px rgba(179,229,252,0.25);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+' + n + '</div>',
+      html: '<div style="width:48px;height:48px;border-radius:50%;background:${m.clBg};color:${m.clRing};border:2px solid ${m.clRing};box-shadow:0 0 14px ${m.clGlow},0 0 4px ${withAlpha(m.clRing, 0.25)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+' + n + '</div>',
       className: '', iconSize: [48,48], iconAnchor: [24,24],
     });
   }
@@ -105,6 +108,9 @@ function buildHtml(runs: RunWithRoute[]) {
 }
 
 export function ProfileMapScreen({ userId }: Props) {
+  const c = useColors();
+  const dark = useScheme() === 'dark';
+  const styles = useMemo(() => makeStyles(c), [c]);
   const { user } = useAuthStore();
   const insets = useSafeAreaInsets();
   const targetId = userId ?? user?._id;
@@ -161,13 +167,13 @@ export function ProfileMapScreen({ userId }: Props) {
       {/* 지도 */}
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color="#e53935" size="large" />
+          <ActivityIndicator color={c.value} size="large" />
         </View>
       ) : (
         <>
           <WebView
             ref={webViewRef}
-            source={{ html: buildHtml(runs) }}
+            source={{ html: buildHtml(runs, c, dark) }}
             style={StyleSheet.absoluteFillObject}
             originWhitelist={['*']}
             onMessage={(e) => {
@@ -194,7 +200,7 @@ export function ProfileMapScreen({ userId }: Props) {
           <View style={styles.headerInfo}>
             <Text style={styles.username}>{displayName}</Text>
             {loading ? (
-              <ActivityIndicator size="small" color="#71717a" />
+              <ActivityIndicator size="small" color={c.text2} />
             ) : (
               <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
             )}
@@ -214,23 +220,23 @@ export function ProfileMapScreen({ userId }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   container: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0A0A' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg },
   header: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-    backgroundColor: 'rgba(10,10,10,0.93)',
+    backgroundColor: c.header,
     alignItems: 'center',
     paddingHorizontal: 20, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: '#1F1F1F',
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12, alignSelf: 'stretch' },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#B3E5FC', alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: 52, height: 52, borderRadius: 26 },
-  avatarLetter: { color: '#01579B', fontSize: 22, fontWeight: 'bold' },
+  avatarLetter: { color: c.ink, fontSize: 22, fontWeight: 'bold' },
   headerInfo: { flex: 1 },
-  username: { fontSize: 18, fontWeight: '700', color: '#F5F5F5' },
-  stats: { fontSize: 13, color: '#808080', marginTop: 2 },
-  myLocBtn: { position: 'absolute', bottom: 100, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1F1F1F', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
+  username: { fontSize: 18, fontWeight: '700', color: c.text },
+  stats: { fontSize: 13, color: c.text2, marginTop: 2 },
+  myLocBtn: { position: 'absolute', bottom: 100, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border, shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
   myLocTxt: { fontSize: 20 },
 });

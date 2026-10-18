@@ -1,6 +1,9 @@
+import { useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { CardCarousel } from './CardCarousel';
 import { RunMarker } from '../RunCard';
+import { useColors } from '@/theme/useColors';
+import type { Palette } from '@/theme/colors';
 
 interface Props {
   run: RunMarker;
@@ -16,6 +19,8 @@ function formatPace(sec: number) {
 
 /** 지도 마커 탭 시 뜨는 러닝 요약 카드 (네이티브 전용, WebView 밖에서 렌더링) */
 export function MapPopupCard({ run, baseUrl, onClose, onUserPress }: Props) {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const photos = [run.routeImageUrl, ...run.photoUrls].filter(Boolean) as string[];
 
   return (
@@ -57,24 +62,24 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   card: {
     position: 'absolute', bottom: 24, left: 16, right: 16,
-    backgroundColor: '#141414', borderRadius: 16, padding: 16,
-    borderWidth: 1, borderColor: '#1F1F1F',
-    shadowColor: '#000', shadowOpacity: 0.5, shadowRadius: 12, elevation: 6,
+    backgroundColor: c.surface, borderRadius: 16, padding: 16,
+    borderWidth: 1, borderColor: c.border,
+    shadowColor: c.shadow, shadowOpacity: 0.5, shadowRadius: 12, elevation: 6,
   },
   closeBtn: { position: 'absolute', top: 12, right: 12, padding: 4, zIndex: 1 },
-  closeTxt: { fontSize: 16, color: '#404040' },
+  closeTxt: { fontSize: 16, color: c.muted },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   avatar: {
-    width: 28, height: 28, borderRadius: 14, backgroundColor: '#B3E5FC',
+    width: 28, height: 28, borderRadius: 14, backgroundColor: c.accent,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarLetter: { color: '#01579B', fontSize: 12, fontWeight: '700' },
-  username: { fontWeight: '600', fontSize: 13, color: '#F5F5F5' },
+  avatarLetter: { color: c.ink, fontSize: 12, fontWeight: '700' },
+  username: { fontWeight: '600', fontSize: 13, color: c.text },
   statsRow: { flexDirection: 'row', gap: 20, marginBottom: 6 },
-  statLabel: { fontSize: 10, color: '#404040', textTransform: 'uppercase', letterSpacing: 1 },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#B3E5FC', marginTop: 2 },
-  date: { fontSize: 11, color: '#808080' },
+  statLabel: { fontSize: 10, color: c.muted, textTransform: 'uppercase', letterSpacing: 1 },
+  statValue: { fontSize: 18, fontWeight: '700', color: c.value, marginTop: 2 },
+  date: { fontSize: 11, color: c.text2 },
 });

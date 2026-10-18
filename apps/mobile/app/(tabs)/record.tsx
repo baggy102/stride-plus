@@ -1,10 +1,12 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, Pressable, Alert, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useRunStore } from '@/store/run';
 import { useHaversine } from '@/hooks/useHaversine';
 import { AppLogo } from '@/components/AppLogo';
+import { useColors } from '@/theme/useColors';
+import type { Palette } from '@/theme/colors';
 
 function formatTime(seconds: number) {
   const h = Math.floor(seconds / 3600);
@@ -22,6 +24,8 @@ function formatPace(secPerKm: number) {
 
 export default function RecordScreen() {
   const router = useRouter();
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const { isTracking, coordinates, elapsedSeconds, startTracking, stopTracking, resetRun } =
     useRunStore();
   const { distanceKm, paceSecPerKm } = useHaversine(coordinates, elapsedSeconds);
@@ -69,7 +73,7 @@ export default function RecordScreen() {
           <View style={styles.row}>
             <View style={styles.center}>
               <Text style={styles.label}>거리</Text>
-              <Text style={[styles.statValue, { color: '#B3E5FC' }]}>
+              <Text style={[styles.statValue, { color: c.value }]}>
                 {distanceKm.toFixed(2)}
               </Text>
               <Text style={styles.unit}>km</Text>
@@ -97,20 +101,20 @@ export default function RecordScreen() {
               onPress={handleStart}
               style={({ pressed }) => [
                 styles.mainButton,
-                { backgroundColor: '#B3E5FC', opacity: pressed ? 0.8 : 1 },
+                { backgroundColor: c.accent, opacity: pressed ? 0.8 : 1 },
               ]}
             >
-              <Text style={[styles.buttonText, { color: '#01579B' }]}>START</Text>
+              <Text style={[styles.buttonText, { color: c.ink }]}>START</Text>
             </Pressable>
           ) : (
             <Pressable
               onPress={handleStop}
               style={({ pressed }) => [
                 styles.mainButton,
-                { backgroundColor: '#EF4444', opacity: pressed ? 0.8 : 1 },
+                { backgroundColor: c.danger, opacity: pressed ? 0.8 : 1 },
               ]}
             >
-              <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>STOP</Text>
+              <Text style={[styles.buttonText, { color: c.ink }]}>STOP</Text>
             </Pressable>
           )}
           {!isTracking && elapsedSeconds > 0 && (
@@ -124,8 +128,8 @@ export default function RecordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#0A0A0A' },
+const makeStyles = (c: Palette) => StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: c.bg },
   container: {
     flex: 1,
     alignItems: 'center',
@@ -137,28 +141,28 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-around', width: '100%' },
   statsBlock: { width: '100%', gap: 24 },
   label: {
-    color: '#808080',
+    color: c.text2,
     fontSize: 14,
     textTransform: 'uppercase',
     letterSpacing: 2,
     marginBottom: 4,
   },
   timeValue: {
-    color: '#F5F5F5',
+    color: c.text,
     fontSize: 72,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
   statValue: {
-    color: '#F5F5F5',
+    color: c.text,
     fontSize: 36,
     fontWeight: '700',
     fontVariant: ['tabular-nums'],
   },
-  unit: { color: '#404040', fontSize: 14 },
+  unit: { color: c.muted, fontSize: 14 },
   liveRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#81D4FA' },
-  liveText: { color: '#808080', fontSize: 12, letterSpacing: 2 },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: c.value },
+  liveText: { color: c.text2, fontSize: 12, letterSpacing: 2 },
   mainButton: {
     width: 128,
     height: 128,
@@ -167,5 +171,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   buttonText: { fontSize: 20, fontWeight: '700' },
-  resetText: { color: '#404040', fontSize: 14, textDecorationLine: 'underline' },
+  resetText: { color: c.muted, fontSize: 14, textDecorationLine: 'underline' },
 });

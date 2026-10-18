@@ -11,8 +11,10 @@ import {
 import { Link } from 'expo-router';
 import { useAuthStore } from '@/store/auth';
 import { AppLogo } from '@/components/AppLogo';
+import { useColors } from '@/theme/useColors';
 
 export default function LoginScreen() {
+  const c = useColors();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, isLoading, error, clearError } = useAuthStore();
@@ -36,7 +38,7 @@ export default function LoginScreen() {
         <TextInput
           className="w-full bg-brand-surface text-brand-text-primary rounded-lg px-4 py-4 mb-3 text-base"
           placeholder="이메일"
-          placeholderTextColor="#808080"
+          placeholderTextColor={c.text2}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
@@ -49,7 +51,7 @@ export default function LoginScreen() {
         <TextInput
           className="w-full bg-brand-surface text-brand-text-primary rounded-lg px-4 py-4 mb-2 text-base"
           placeholder="비밀번호"
-          placeholderTextColor="#808080"
+          placeholderTextColor={c.text2}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
@@ -64,19 +66,19 @@ export default function LoginScreen() {
 
         {/* 로그인 버튼 */}
         <Pressable
-          style={{ backgroundColor: isLoading ? '#404040' : '#B3E5FC' }}
+          style={{ backgroundColor: isLoading ? c.muted : c.accent }}
           className="w-full rounded-lg py-4 items-center active:opacity-80"
           onPress={() => login(email, password)}
           disabled={isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#0A0A0A" />
+            <ActivityIndicator color={c.ink} />
           ) : (
-            <Text style={{ color: '#01579B' }} className="font-bold text-base">로그인</Text>
+            <Text style={{ color: c.ink }} className="font-bold text-base">로그인</Text>
           )}
         </Pressable>
 
-        <Link href="/(auth)/register" className="mt-5 text-sm" style={{ color: '#B3E5FC' }}>
+        <Link href="/(auth)/register" className="mt-5 text-sm" style={{ color: c.value }}>
           계정이 없으신가요? 회원가입
         </Link>
       </View>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, LayoutChangeEvent } from 'react-native';
+import { useColors } from '@/theme/useColors';
 
 interface Props {
   coordinates: [number, number][];
@@ -32,6 +33,7 @@ function buildPath(coords: [number, number][], w: number, h: number) {
 }
 
 export function MiniMap({ coordinates }: Props) {
+  const c = useColors();
   const [width, setWidth] = useState(0);
   const onLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
   const pts = width > 0 ? buildPath(coordinates, width, H) : [];
@@ -40,9 +42,9 @@ export function MiniMap({ coordinates }: Props) {
     return (
       <View
         onLayout={onLayout}
-        style={{ width: '100%', height: H, borderRadius: 20, backgroundColor: '#141414', borderWidth: 1, borderColor: '#1F1F1F', alignItems: 'center', justifyContent: 'center' }}
+        style={{ width: '100%', height: H, borderRadius: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' }}
       >
-        <Text style={{ color: '#404040', fontSize: 13 }}>경로 데이터 없음</Text>
+        <Text style={{ color: c.muted, fontSize: 13 }}>경로 데이터 없음</Text>
       </View>
     );
   }
@@ -50,7 +52,7 @@ export function MiniMap({ coordinates }: Props) {
   return (
     <View
       onLayout={onLayout}
-      style={{ width: '100%', height: H, borderRadius: 20, backgroundColor: '#141414', borderWidth: 1, borderColor: '#1F1F1F', overflow: 'hidden' }}
+      style={{ width: '100%', height: H, borderRadius: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, overflow: 'hidden' }}
     >
       {pts.slice(0, -1).map((a, i) => {
         const b = pts[i + 1];
@@ -67,9 +69,9 @@ export function MiniMap({ coordinates }: Props) {
               top: a.y - 1.5,
               width: len,
               height: 3,
-              backgroundColor: '#B3E5FC',
+              backgroundColor: c.value,
               borderRadius: 2,
-              shadowColor: '#B3E5FC',
+              shadowColor: c.value,
               shadowOpacity: 0.8,
               shadowRadius: 4,
               transform: [{ rotate: `${angle}deg` }],
@@ -83,13 +85,13 @@ export function MiniMap({ coordinates }: Props) {
           <View style={{
             position: 'absolute', left: pts[0].x - 6, top: pts[0].y - 6,
             width: 12, height: 12, borderRadius: 6,
-            backgroundColor: '#0A0A0A', borderWidth: 2, borderColor: '#B3E5FC',
+            backgroundColor: c.bg, borderWidth: 2, borderColor: c.value,
           }} />
           <View style={{
             position: 'absolute', left: pts[pts.length - 1].x - 5, top: pts[pts.length - 1].y - 5,
             width: 10, height: 10, borderRadius: 5,
-            backgroundColor: '#B3E5FC',
-            shadowColor: '#B3E5FC', shadowOpacity: 0.9, shadowRadius: 6,
+            backgroundColor: c.value,
+            shadowColor: c.value, shadowOpacity: 0.9, shadowRadius: 6,
           }} />
         </>
       )}
