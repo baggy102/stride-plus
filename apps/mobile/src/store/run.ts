@@ -8,9 +8,10 @@ export interface RunSummary {
   paceSecPerKm: number;
 }
 
-// 백그라운드에서 JS 타이머가 멈춰도 틀어지지 않게 경과 시간은 시작 시각 기준으로 계산한다
-export function elapsedSecondsSince(startedAtMs: number, nowMs: number): number {
-  return Math.max(0, Math.floor((nowMs - startedAtMs) / 1000));
+// 백그라운드에서 JS 타이머가 멈춰도 틀어지지 않게 경과 시간은 시작 시각 기준으로 계산한다.
+// 일시정지한 시간(pausedMs)은 뺀다(B7)
+export function elapsedSecondsSince(startedAtMs: number, nowMs: number, pausedMs = 0): number {
+  return Math.max(0, Math.floor((nowMs - startedAtMs - pausedMs) / 1000));
 }
 
 // GPS 오차 필터 — 정확도가 이보다 나쁜 점, 이보다 빠르게 움직인 점(순간 튐)은 버린다
@@ -22,6 +23,13 @@ export type TrackingMode = 'background' | 'foreground';
 
 interface RunStore {
   isTracking: boolean;
+  /** 일시정지 중 — 시간이 멈추고 들어오는 위치는 버린다 */
+  isPaused: boolean;
+  pausedAt: number | null;
+  /** 지금까지 일시정지한 시간 합계 */
+  pausedMs: number;
+  /** 재개 후 첫 점은 직전 점과 거리를 잇지 않는다(멈춘 동안 이동한 거리 제외) */
+  skipNextSegment: boolean;
   trackingMode: TrackingMode | null;
   startedAt: number | null;
   coordinates: [number, number][];
@@ -32,6 +40,8 @@ interface RunStore {
   pendingSummary: RunSummary | null;
   startTracking: () => Promise<void>;
   stopTracking: () => RunSummary;
+  pauseTracking: () => void;
+  resumeTracking: () => void;
   resetRun: () => void;
   clearPendingSummary: () => void;
   _tick: () => void;
@@ -72,6 +82,10 @@ async function startBackgroundUpdates(): Promise<boolean> {
 
 export const useRunStore = create<RunStore>((set, get) => ({
   isTracking: false,
+  isPaused: false,
+  pausedAt: null,
+  pausedMs: 0,
+  skipNextSegment: false,
   trackingMode: null,
   startedAt: null,
   coordinates: [],
@@ -81,22 +95,23 @@ export const useRunStore = create<RunStore>((set, get) => ({
   pendingSummary: null,
 
   _tick: () => {
-    const { startedAt } = get();
-    if (startedAt !== null) set({ elapsedSeconds: elapsedSecondsSince(startedAt, Date.now()) });
+    const { startedAt, pausedAt, pausedMs } = get();
+    if (startedAt !== null) set({ elapsedSeconds: elapsedSecondsSince(startedAt, pausedAt ?? Date.now(), pausedMs) });
   },
 
   _addCoordinate: (lng, lat, accuracy, timestamp) => {
+    if (get().isPaused) return;
     if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
     const now = timestamp ?? Date.now();
-    const { coordinates, distanceKm, lastSampleAt } = get();
+    const { coordinates, distanceKm, lastSampleAt, skipNextSegment } = get();
     const prev = coordinates[coordinates.length - 1];
     let addKm = 0;
-    if (prev && lastSampleAt !== null) {
+    if (prev && lastSampleAt !== null && !skipNextSegment) {
       addKm = haversineKm(prev, [lng, lat]);
       const seconds = (now - lastSampleAt) / 1000;
       if (seconds > 0 && (addKm * 1000) / seconds > MAX_SPEED_MPS) return;
     }
-    set({ coordinates: [...coordinates, [lng, lat]], distanceKm: distanceKm + addKm, lastSampleAt: now });
+    set({ coordinates: [...coordinates, [lng, lat]], distanceKm: distanceKm + addKm, lastSampleAt: now, skipNextSegment: false });
   },
 
   startTracking: async () => {
@@ -104,7 +119,10 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (status !== 'granted') throw new Error('location_permission_denied');
 
     // 권한 순서: 사용 중 허용(위) → 항상 허용(여기). 항상 허용을 거부해도 포그라운드로 계속한다
-    set({ isTracking: true, startedAt: Date.now(), coordinates: [], distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0 });
+    set({
+      isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false,
+      startedAt: Date.now(), coordinates: [], distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
+    });
 
     if (await startBackgroundUpdates()) {
       set({ trackingMode: 'background' });
@@ -118,8 +136,10 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   stopTracking: () => {
-    const { coordinates, startedAt, distanceKm } = get();
-    const elapsedSeconds = startedAt !== null ? elapsedSecondsSince(startedAt, Date.now()) : get().elapsedSeconds;
+    const { coordinates, startedAt, distanceKm, pausedAt, pausedMs } = get();
+    const elapsedSeconds = startedAt !== null
+      ? elapsedSecondsSince(startedAt, pausedAt ?? Date.now(), pausedMs)
+      : get().elapsedSeconds;
 
     nativeWatchSub?.remove();
     nativeWatchSub = null;
@@ -127,7 +147,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
       Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
     }
 
-    set({ isTracking: false, trackingMode: null, startedAt: null, elapsedSeconds });
+    set({ isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, trackingMode: null, startedAt: null, elapsedSeconds });
 
     const paceSecPerKm = distanceKm > 0 ? elapsedSeconds / distanceKm : 0;
 
@@ -136,8 +156,19 @@ export const useRunStore = create<RunStore>((set, get) => ({
     return summary;
   },
 
+  // 위치 수집은 유지한 채 받은 점만 버린다 — 재개 즉시 기록되고 권한을 다시 묻지 않는다
+  pauseTracking: () => {
+    if (get().isTracking && !get().isPaused) set({ isPaused: true, pausedAt: Date.now() });
+  },
+
+  resumeTracking: () => {
+    const { isPaused, pausedAt, pausedMs } = get();
+    if (!isPaused || pausedAt === null) return;
+    set({ isPaused: false, pausedAt: null, pausedMs: pausedMs + (Date.now() - pausedAt), skipNextSegment: true });
+  },
+
   resetRun: () => set({
-    isTracking: false, trackingMode: null, startedAt: null, coordinates: [], distanceKm: 0, lastSampleAt: null,
+    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], distanceKm: 0, lastSampleAt: null,
     elapsedSeconds: 0, pendingSummary: null,
   }),
 

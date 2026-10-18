@@ -36,7 +36,10 @@ export default function RecordScreen() {
   const { height: screenHeight } = useWindowDimensions();
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  const { isTracking, trackingMode, coordinates, distanceKm, elapsedSeconds, startTracking, stopTracking } = useRunStore();
+  const {
+    isTracking, isPaused, trackingMode, coordinates, distanceKm, elapsedSeconds,
+    startTracking, stopTracking, pauseTracking, resumeTracking,
+  } = useRunStore();
   // 50 m 전에는 페이스를 보여 주지 않는다(시작 직후 값이 튐)
   const paceSecPerKm = distanceKm >= MIN_PACE_DISTANCE_KM ? elapsedSeconds / distanceKm : 0;
   const tick = useRunStore((s) => s._tick);
@@ -136,8 +139,8 @@ export default function RecordScreen() {
       <View style={[styles.topBar, { top: insets.top + 6 }]}>
         {isTracking && (
           <View accessibilityRole="text" style={styles.gpsChip}>
-            <View style={[styles.gpsDot, { backgroundColor: gpsOk ? c.ok : c.muted }]} />
-            <Text style={styles.gpsText}>{gpsOk ? 'GPS 양호' : 'GPS 찾는 중'}</Text>
+            <View style={[styles.gpsDot, { backgroundColor: isPaused ? c.warn : gpsOk ? c.ok : c.muted }]} />
+            <Text style={styles.gpsText}>{isPaused ? '일시정지' : gpsOk ? 'GPS 양호' : 'GPS 찾는 중'}</Text>
           </View>
         )}
         <View style={styles.logo} pointerEvents="none">
@@ -193,7 +196,11 @@ export default function RecordScreen() {
       {/* 시작 / 종료 — 기록 중에는 탭바를 숨기므로 아래 여백이 다르다 */}
       <View style={[styles.control, { bottom: isTracking ? insets.bottom + 28 : tabClearance + 20 }]}>
         {isTracking ? (
-          <HoldToStopButton onComplete={handleStop} />
+          <HoldToStopButton
+            paused={isPaused}
+            onTap={isPaused ? resumeTracking : pauseTracking}
+            onComplete={handleStop}
+          />
         ) : (
           !denied && (
             <View style={styles.startWrap}>
