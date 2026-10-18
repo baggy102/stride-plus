@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, Pressable, TextInput, Modal,
-  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, useWindowDimensions,
+  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Dimensions,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -38,7 +38,8 @@ function formatFinishedAt(d: Date) {
 export default function RunSummaryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { height: screenHeight } = useWindowDimensions();
+  // 지도 높이는 화면 루트의 실제 높이 기준(창 크기 값이 다시 그릴 때 틀어져 지도가 접히던 문제, 2026-10-19 QR)
+  const [rootHeight, setRootHeight] = useState(() => Dimensions.get('screen').height);
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const pendingSummary = useRunStore((s) => s.pendingSummary);
@@ -58,7 +59,7 @@ export default function RunSummaryScreen() {
 
   if (!pendingSummary) return null;
   const summary = pendingSummary;
-  const mapHeight = Math.round(screenHeight * 0.39);
+  const mapHeight = Math.round(rootHeight * 0.39);
 
   const handleDiscard = () => {
     setConfirmDelete(false);
@@ -103,7 +104,7 @@ export default function RunSummaryScreen() {
   };
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={(e) => setRootHeight(e.nativeEvent.layout.height)}>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
@@ -118,11 +119,11 @@ export default function RunSummaryScreen() {
             <LinearGradient pointerEvents="none" colors={[withAlpha(c.bg, 0), c.bg]} style={styles.fadeBottom} />
             <View accessibilityLabel="지도 범례" style={styles.legend}>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { borderWidth: 2, borderColor: c.value }]} />
+                <View style={[styles.legendDot, styles.legendStart]} />
                 <Text style={styles.legendText}>출발</Text>
               </View>
               <View style={styles.legendItem}>
-                <View style={[styles.legendDot, { backgroundColor: c.value }]} />
+                <View style={[styles.legendDot, styles.legendEnd]} />
                 <Text style={styles.legendText}>도착</Text>
               </View>
             </View>
@@ -142,7 +143,7 @@ export default function RunSummaryScreen() {
               </View>
               <View style={[styles.cell, styles.cellDivider]}>
                 <Text style={styles.label}>Avg Pace</Text>
-                <Text style={[styles.cellValue, { color: c.value }]}>
+                <Text style={[styles.cellValue, styles.valueAccent]}>
                   {formatPace(summary.paceSecPerKm)}
                   <Text style={styles.cellUnit}> /KM</Text>
                 </Text>
@@ -223,6 +224,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: withAlpha(c.surface, 0.92), borderWidth: 1, borderColor: c.border,
   },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
+  legendStart: { borderWidth: 2, borderColor: c.value },
+  legendEnd: { backgroundColor: c.value },
+  valueAccent: { color: c.value },
   legendDot: { width: 9, height: 9, borderRadius: 5 },
   legendText: { fontFamily: FONT.semibold, fontSize: 12, color: c.text },
   topBar: { position: 'absolute', left: 0, right: 0, height: 44, justifyContent: 'center' },

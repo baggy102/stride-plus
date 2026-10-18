@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
-import { View, Text, Pressable, StyleSheet, Linking, useWindowDimensions } from 'react-native';
+import { View, Text, Pressable, StyleSheet, Linking, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
@@ -33,7 +33,8 @@ export default function RecordScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const tabClearance = useTabBarClearance();
-  const { height: screenHeight } = useWindowDimensions();
+  // 지도 높이는 화면 루트의 실제 높이 기준(창 크기 값이 다시 그릴 때 틀어져 지도가 접히던 문제, 2026-10-19 QR)
+  const [rootHeight, setRootHeight] = useState(() => Dimensions.get('screen').height);
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const {
@@ -49,7 +50,7 @@ export default function RecordScreen() {
   const [explainVisible, setExplainVisible] = useState(false);
   const [denied, setDenied] = useState(false);
 
-  const mapHeight = Math.round(screenHeight * 0.39);
+  const mapHeight = Math.round(rootHeight * 0.39);
 
   useEffect(() => {
     if (isTracking) {
@@ -104,7 +105,7 @@ export default function RecordScreen() {
   const gpsOk = coordinates.length > 0;
 
   return (
-    <View style={styles.root}>
+    <View style={styles.root} onLayout={(e) => setRootHeight(e.nativeEvent.layout.height)}>
       {/* 지도 배경 + 내 경로 */}
       <View style={{ height: mapHeight }}>
         <RouteMap
@@ -177,7 +178,7 @@ export default function RecordScreen() {
           <View style={styles.grid}>
             <View style={styles.cell}>
               <Text style={styles.label}>Distance</Text>
-              <Text style={[styles.value, { color: c.value }]}>
+              <Text style={[styles.value, styles.valueAccent]}>
                 {distanceKm.toFixed(2)}
                 <Text style={styles.unit}> KM</Text>
               </Text>
@@ -267,6 +268,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   cell: { flex: 1, alignItems: 'center', paddingVertical: 12 },
   cellDivider: { borderLeftWidth: 1, borderLeftColor: c.border },
   value: { fontFamily: FONT.num, fontSize: 34, lineHeight: 42, color: c.text, fontVariant: ['tabular-nums'] },
+  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
+  valueAccent: { color: c.value },
   unit: { fontFamily: FONT.num, fontSize: 14, color: c.text2 },
   control: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   startWrap: { alignItems: 'center', gap: 10 },

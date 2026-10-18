@@ -94,7 +94,7 @@ export default function RegisterScreen() {
         </Pressable>
         <View style={styles.progress} accessibilityLabel={`${step}단계 / 2단계`}>
           <View style={styles.progressBars}>
-            <View style={[styles.progressBar, { backgroundColor: c.value }]} />
+            <View style={[styles.progressBar, styles.progressOn]} />
             <View style={[styles.progressBar, { backgroundColor: step === 2 ? c.value : c.surface2 }]} />
           </View>
           <Text style={styles.progressLabel}>{step} / 2</Text>
@@ -257,6 +257,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   progress: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingRight: 16 },
   progressBars: { flexDirection: 'row', gap: 4 },
   progressBar: { width: 20, height: 4, borderRadius: 2 },
+  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
+  progressOn: { backgroundColor: c.value },
   progressLabel: { fontFamily: FONT.num, fontSize: 14, lineHeight: 18, color: c.text2 },
   body: { paddingHorizontal: 24, paddingTop: 17, paddingBottom: 24, gap: 24 },
   titleBlock: { gap: 6 },
