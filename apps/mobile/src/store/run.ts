@@ -8,8 +8,14 @@ export interface RunSummary {
   paceSecPerKm: number;
 }
 
+// 백그라운드에서 JS 타이머가 멈춰도 틀어지지 않게 경과 시간은 시작 시각 기준으로 계산한다
+export function elapsedSecondsSince(startedAtMs: number, nowMs: number): number {
+  return Math.max(0, Math.floor((nowMs - startedAtMs) / 1000));
+}
+
 interface RunStore {
   isTracking: boolean;
+  startedAt: number | null;
   coordinates: [number, number][];
   elapsedSeconds: number;
   pendingSummary: RunSummary | null;
@@ -25,11 +31,15 @@ let nativeWatchSub: Location.LocationSubscription | null = null;
 
 export const useRunStore = create<RunStore>((set, get) => ({
   isTracking: false,
+  startedAt: null,
   coordinates: [],
   elapsedSeconds: 0,
   pendingSummary: null,
 
-  _tick: () => set((s) => ({ elapsedSeconds: s.elapsedSeconds + 1 })),
+  _tick: () => {
+    const { startedAt } = get();
+    if (startedAt !== null) set({ elapsedSeconds: elapsedSecondsSince(startedAt, Date.now()) });
+  },
 
   _addCoordinate: (lng, lat) =>
     set((s) => ({ coordinates: [...s.coordinates, [lng, lat]] })),
@@ -38,7 +48,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('location_permission_denied');
 
-    set({ isTracking: true, coordinates: [], elapsedSeconds: 0 });
+    set({ isTracking: true, startedAt: Date.now(), coordinates: [], elapsedSeconds: 0 });
 
     nativeWatchSub = await Location.watchPositionAsync(
       {
@@ -53,12 +63,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   stopTracking: () => {
-    const { coordinates, elapsedSeconds } = get();
+    const { coordinates, startedAt } = get();
+    const elapsedSeconds = startedAt !== null ? elapsedSecondsSince(startedAt, Date.now()) : get().elapsedSeconds;
 
     nativeWatchSub?.remove();
     nativeWatchSub = null;
 
-    set({ isTracking: false });
+    set({ isTracking: false, startedAt: null, elapsedSeconds });
 
     const distanceKm = calcTotalDistance(coordinates);
     const paceSecPerKm = distanceKm > 0 ? elapsedSeconds / distanceKm : 0;
@@ -68,7 +79,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     return summary;
   },
 
-  resetRun: () => set({ isTracking: false, coordinates: [], elapsedSeconds: 0, pendingSummary: null }),
+  resetRun: () => set({ isTracking: false, startedAt: null, coordinates: [], elapsedSeconds: 0, pendingSummary: null }),
 
   clearPendingSummary: () => set({ pendingSummary: null }),
 }));
