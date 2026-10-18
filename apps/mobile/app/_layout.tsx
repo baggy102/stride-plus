@@ -24,7 +24,7 @@ export default function RootLayout() {
     if (!navigationState?.key) return;
     if (isHydrating) return;
     const inAuthGroup = segments[0] === '(auth)';
-    const atRoot = segments.length === 0;
+    const atRoot = (segments as string[]).length === 0;
 
     if (!isAuthenticated && !inAuthGroup) {
       router.replace('/(auth)/login');

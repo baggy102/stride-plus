@@ -123,12 +123,12 @@ export function ProfileMapScreen({ userId }: Props) {
 
     client.get<UserProfile>(`/users/${targetId}`)
       .then(({ data }) => setProfile(data))
-      .catch((e) => console.error('[profile] users fetch failed', e))
+      .catch(() => {}) // 실패 상태 화면은 U9에서 추가
       .finally(finish);
 
     client.get<RunWithRoute[]>(`/runs?userId=${targetId}&limit=50`)
       .then(({ data }) => setRuns(data))
-      .catch((e) => console.error('[profile] runs fetch failed', e))
+      .catch(() => {})
       .finally(finish);
   }, [targetId]);
 

@@ -117,6 +117,7 @@ module.exports = [
       '**/dist/**',
       '**/.expo/**',
       '**/.next/**',
+      '**/coverage/**',
       'eslint.config.js',
     ],
   },

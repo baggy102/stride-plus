@@ -1,0 +1,4 @@
+# 스테이징된 ts/tsx만 ESLint. tsc·test는 PR 전 수동 검증(CLAUDE.md)에서 돌린다.
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.tsx')
+[ -z "$files" ] && exit 0
+echo "$files" | xargs pnpm exec eslint --max-warnings=0

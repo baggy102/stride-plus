@@ -168,7 +168,7 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue(raw),
       });
 
-      const result = await service.findByUser('u1');
+      const result = await service.findByUser('64b7f0c2a1b2c3d4e5f60718');
       expect(result[0]).toMatchObject({
         _id: 'run1',
         distanceKm: 5.2,
