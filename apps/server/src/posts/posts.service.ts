@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Post, PostDocument } from './posts.schema';
@@ -17,6 +17,7 @@ export class PostsService {
   async create(userId: string, dto: CreatePostDto) {
     const run = await this.runModel.findById(dto.runId).lean().exec();
     if (!run) throw new NotFoundException('run_not_found');
+    if (String(run.userId) !== userId) throw new ForbiddenException('not_run_owner');
 
     const post = new this.postModel({ runId: dto.runId, userId });
     return post.save();

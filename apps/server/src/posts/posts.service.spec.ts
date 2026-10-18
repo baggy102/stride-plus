@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { PostsService } from './posts.service';
@@ -53,6 +53,15 @@ describe('PostsService', () => {
       );
       expect(mockPostModel).not.toHaveBeenCalled();
       expect(mockSave).not.toHaveBeenCalled();
+    });
+
+    it('남의 run이면 ForbiddenException(not_run_owner), 저장하지 않는다', async () => {
+      mockRunExec.mockResolvedValue({ _id: RUN_ID, userId: '64b7f0c2a1b2c3d4e5f607aa' });
+
+      await expect(service.create(USER_ID, { runId: RUN_ID })).rejects.toThrow(
+        new ForbiddenException('not_run_owner'),
+      );
+      expect(mockPostModel).not.toHaveBeenCalled();
     });
 
     it('dto.runId로 run을 조회한다', async () => {
