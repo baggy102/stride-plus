@@ -59,3 +59,11 @@ export function WarnIcon({ size = 20, color }: IconProps) {
     </Svg>
   );
 }
+
+export function PlusIcon({ size = 18, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}

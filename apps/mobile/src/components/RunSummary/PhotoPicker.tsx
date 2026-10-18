@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import { View, Text, Pressable, Image, Alert, Linking, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useColors } from '@/theme/useColors';
+import { FONT } from '@/theme/fonts';
+import { PlusIcon, CloseIcon } from '../icons';
 import type { Palette } from '@/theme/colors';
 
 interface Props {
@@ -40,27 +42,34 @@ export function PhotoPicker({ photos, onChange }: Props) {
 
   return (
     <View>
-      <Text style={styles.label}>
-        사진 ({photos.length}/3)
-      </Text>
+      {/* 확정 UI S07: 「사진 n/3」, 56px 썸네일·추가 버튼 */}
+      <View style={styles.header}>
+        <Text style={styles.label}>사진</Text>
+        <Text style={styles.label}>{photos.length}/3</Text>
+      </View>
       <View style={styles.row}>
         {photos.map((uri, i) => (
           <View key={i} style={styles.thumbWrap}>
             <Image source={{ uri }} style={styles.thumb} />
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="사진 빼기"
               onPress={() => onChange(photos.filter((_, j) => j !== i))}
               style={styles.removeBtn}
             >
-              <Text style={styles.removeText}>✕</Text>
+              <CloseIcon size={12} color={c.text} />
             </Pressable>
           </View>
         ))}
         {photos.length < 3 && (
           <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="사진 추가"
             onPress={pick}
             style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.6 : 1 }]}
           >
-            <Text style={styles.addText}>+</Text>
+            <PlusIcon color={c.text} />
+            <Text style={styles.addText}>추가</Text>
           </Pressable>
         )}
       </View>
@@ -69,19 +78,19 @@ export function PhotoPicker({ photos, onChange }: Props) {
 }
 
 const makeStyles = (c: Palette) => StyleSheet.create({
-  label: { color: c.text2, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
-  row: { flexDirection: 'row', gap: 12 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
+  label: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
+  row: { flexDirection: 'row', gap: 10 },
   thumbWrap: { position: 'relative' },
-  thumb: { width: 84, height: 84, borderRadius: 16 },
+  thumb: { width: 56, height: 56, borderRadius: 14 },
   removeBtn: {
     position: 'absolute', top: -6, right: -6,
     backgroundColor: c.surface, borderColor: c.border, borderWidth: 1,
     borderRadius: 12, width: 24, height: 24, alignItems: 'center', justifyContent: 'center',
   },
-  removeText: { color: c.text, fontSize: 12, lineHeight: 12 },
   addBtn: {
-    width: 84, height: 84, borderColor: c.border, borderWidth: 1, borderStyle: 'dashed',
-    borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    width: 56, height: 56, borderColor: c.border, borderWidth: 1, backgroundColor: c.input,
+    borderRadius: 14, alignItems: 'center', justifyContent: 'center', gap: 1,
   },
-  addText: { color: c.value, fontSize: 24 },
+  addText: { fontFamily: FONT.semibold, fontSize: 11, color: c.text },
 });

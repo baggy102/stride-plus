@@ -46,6 +46,7 @@ function buildHtml(p: Palette, dark: boolean) {
   var line = L.polyline([], { color:'${m.dot}', weight:4.5, lineCap:'round', lineJoin:'round' }).addTo(map);
   var start = L.circleMarker([0,0], { radius:5, color:'${m.dot}', weight:2.4, fillColor:'${m.bg}', fillOpacity:1 });
   var me = L.circleMarker([0,0], { radius:7, color:'${m.meRing}', weight:3, fillColor:'${m.meFill}', fillOpacity:1 });
+  var end = L.circleMarker([0,0], { radius:5, color:'${m.dot}', weight:2.4, fillColor:'${m.dot}', fillOpacity:1 });
   var mode = 'follow';
   function toLatLng(c){ return [c[1], c[0]]; }
   window.__setRoute = function(coords, fallback, showCurrent, fit){
@@ -53,6 +54,8 @@ function buildHtml(p: Palette, dark: boolean) {
     var pts = coords.map(toLatLng);
     line.setLatLngs(pts);
     if (pts.length > 0) { start.setLatLng(pts[0]).addTo(map); } else { map.removeLayer(start); }
+    // 요약·상세: 도착점을 채운 점으로(범례 출발 ○ · 도착 ●)
+    if (fit === 'route' && pts.length > 1) { end.setLatLng(pts[pts.length - 1]).addTo(map); } else { map.removeLayer(end); }
     var cur = pts.length > 0 ? pts[pts.length - 1] : (fallback ? toLatLng(fallback) : null);
     if (showCurrent && cur) { me.setLatLng(cur).addTo(map); } else { map.removeLayer(me); }
     if (fit === 'route' && pts.length > 1) { map.fitBounds(line.getBounds(), { padding:[24,24] }); }
