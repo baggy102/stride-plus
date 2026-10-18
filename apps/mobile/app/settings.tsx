@@ -4,7 +4,7 @@ import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/auth';
 import { BackIcon, ChevronIcon } from '@/components/icons';
-import { LEGAL_DOCS } from '@/config/legal';
+import { LEGAL_DOCS, SUPPORT_EMAIL } from '@/config/legal';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import type { Palette } from '@/theme/colors';
@@ -87,8 +87,7 @@ export default function SettingsScreen() {
         <View style={styles.group}>
           <View style={styles.row}>
             <Text style={styles.rowLabel}>운영자 연락처</Text>
-            {/* 운영자 이메일은 출시 준비(F 단계)에서 정한다 */}
-            <Text style={styles.rowValue}>준비 중</Text>
+            <Text selectable style={styles.rowValue}>{SUPPORT_EMAIL}</Text>
           </View>
         </View>
 

@@ -6,6 +6,9 @@ export const LEGAL_VERSIONS = {
   location: '2026-11-01',
 } as const;
 
+// 운영자 문의 — 설정 화면·약관 문서(docs/legal)에 같은 주소를 쓴다
+export const SUPPORT_EMAIL = 'stride.plus1@gmail.com';
+
 export const LEGAL_DOCS = [
   { key: 'terms', label: '이용약관', sub: '서비스 이용 조건' },
   { key: 'privacy', label: '개인정보처리방침', sub: '수집 항목과 보관 기간' },
