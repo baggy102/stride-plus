@@ -129,3 +129,23 @@ export function GearIcon({ size = 21, color }: IconProps) {
     </Svg>
   );
 }
+
+export function MapIcon({ size = 18, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round">
+      <Path d="M9 4 3 6.5V20l6-2.5 6 2.5 6-2.5V4l-6 2.5L9 4Z" />
+      <Path d="M9 4v13.5M15 6.5V20" />
+    </Svg>
+  );
+}
+
+export function ListIcon({ size = 18, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M9 6h11M9 12h11M9 18h11" />
+      <Circle cx={4.5} cy={6} r={1} fill={color} />
+      <Circle cx={4.5} cy={12} r={1} fill={color} />
+      <Circle cx={4.5} cy={18} r={1} fill={color} />
+    </Svg>
+  );
+}

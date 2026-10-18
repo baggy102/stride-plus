@@ -1,19 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable, type LayoutChangeEvent } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
-import { AppLogo } from '@/components/AppLogo';
+import { Wordmark } from '@/components/Wordmark';
 import { MapPopupCard } from '@/components/MapPopupCard';
-import { GearIcon } from '@/components/icons';
+import { BackIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
+import { FONT } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
-import { RunMarker } from '../RunCard';
+import { RunList, type ListState, type RunWithRoute } from './RunList';
 
 interface UserProfile {
   _id: string;
@@ -21,13 +22,13 @@ interface UserProfile {
   profileImageUrl?: string;
 }
 
-interface RunWithRoute extends RunMarker {
-  route: [number, number][];
-}
-
 interface Props {
   userId?: string;
 }
+
+type ProfileView = 'map' | 'list';
+
+const PAGE_SIZE = 20;
 
 function buildHtml(runs: RunWithRoute[], p: Palette, dark: boolean) {
   const m = p.map;
@@ -109,52 +110,82 @@ function buildHtml(runs: RunWithRoute[], p: Palette, dark: boolean) {
 </html>`;
 }
 
+// 확정 UI S08 내 프로필 / S09 다른 사용자 프로필 — 지도·목록 전환
 export function ProfileMapScreen({ userId }: Props) {
   const c = useColors();
   const dark = useScheme() === 'dark';
   const styles = useMemo(() => makeStyles(c), [c]);
   const router = useRouter();
-  // 내 프로필 탭(userId 없음)은 플로팅 탭바 위로 올린다. user/[id]는 탭바가 없다
-  const tabClearance = useTabBarClearance();
-  const bottomBase = userId ? 24 : tabClearance + 12;
   const { user } = useAuthStore();
   const insets = useSafeAreaInsets();
   const targetId = userId ?? user?._id;
+  const mine = !userId || userId === user?._id;
+  // 내 프로필 탭(userId 없음)은 플로팅 탭바 위로 올린다. user/[id]는 탭바가 없다
+  const tabClearance = useTabBarClearance();
+  const bottomBase = userId ? insets.bottom + 24 : tabClearance + 12;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [listState, setListState] = useState<ListState>('loading');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [view, setView] = useState<ProfileView>('map');
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const webViewRef = useRef<WebView>(null);
 
-  const fetchData = useCallback(() => {
+  const fetchPage = useCallback(
+    (nextPage: number) => client.get<RunWithRoute[]>(`/runs?userId=${targetId}&page=${nextPage}&limit=${PAGE_SIZE}`),
+    [targetId],
+  );
+
+  // 첫 페이지와 프로필을 다시 불러온다. refresh면 지금 화면을 유지한 채 당겨서 새로고침
+  const load = useCallback(async (mode: 'initial' | 'refresh') => {
     if (!targetId) return;
-    setLoading(true);
-    let done = 0;
-    const finish = () => { if (++done === 2) setLoading(false); };
+    if (mode === 'initial') setListState('loading');
+    else setRefreshing(true);
+    try {
+      const [profileRes, runsRes] = await Promise.all([client.get<UserProfile>(`/users/${targetId}`), fetchPage(1)]);
+      setProfile(profileRes.data);
+      setRuns(runsRes.data);
+      setPage(1);
+      setHasMore(runsRes.data.length === PAGE_SIZE);
+      setListState('ready');
+    } catch {
+      if (mode === 'initial') setListState('error');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [targetId, fetchPage]);
 
-    client.get<UserProfile>(`/users/${targetId}`)
-      .then(({ data }) => setProfile(data))
-      .catch(() => {}) // 실패 상태 화면은 U9에서 추가
-      .finally(finish);
-
-    client.get<RunWithRoute[]>(`/runs?userId=${targetId}&limit=50`)
-      .then(({ data }) => setRuns(data))
-      .catch(() => {})
-      .finally(finish);
-  }, [targetId]);
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore || refreshing || listState !== 'ready') return;
+    setLoadingMore(true);
+    try {
+      const { data } = await fetchPage(page + 1);
+      setRuns((prev) => [...prev, ...data]);
+      setPage(page + 1);
+      setHasMore(data.length === PAGE_SIZE);
+    } catch {
+      // 다음 페이지 실패는 목록을 유지하고 다음 스크롤에서 다시 시도한다
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, refreshing, listState, fetchPage, page]);
 
   // targetId가 hydration 후 처음 생길 때 fetch (SecureStore 비동기 타이밍 대응)
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    load('initial');
+  }, [load]);
 
-  // 탭 재진입 시 리페치
+  // 탭 재진입 시 화면을 유지한 채 다시 불러온다
   const skipFirstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
     if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
-    fetchData();
-  }, [fetchData]));
+    load('refresh');
+  }, [load]));
 
   const handleMyLocation = useCallback(async () => {
     try {
@@ -164,18 +195,17 @@ export function ProfileMapScreen({ userId }: Props) {
     } catch {}
   }, []);
 
-  const totalKm = runs.reduce((s, r) => s + r.distanceKm, 0);
-  const displayName = profile?.username ?? user?.username ?? '';
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/feed'));
+  const openRun = (runId: string) => router.push(`/run/${runId}`);
+
+  const totalKm = runs.reduce((sum, run) => sum + run.distanceKm, 0);
+  const displayName = profile?.username ?? (mine ? user?.username ?? '' : '');
   const avatarLetter = (displayName || '?')[0].toUpperCase();
+  const showMap = view === 'map' && listState === 'ready';
 
   return (
-    <View style={styles.container}>
-      {/* 지도 */}
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={c.value} size="large" />
-        </View>
-      ) : (
+    <View style={[styles.container, { backgroundColor: showMap ? c.map.bg : c.bg }]}>
+      {showMap ? (
         <>
           <WebView
             ref={webViewRef}
@@ -186,26 +216,65 @@ export function ProfileMapScreen({ userId }: Props) {
               try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
             }}
           />
-          <Pressable style={[styles.myLocBtn, { bottom: bottomBase + 64 }]} onPress={handleMyLocation}>
-            <Text style={styles.myLocTxt}>📍</Text>
-          </Pressable>
+          {!selected && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="내 위치로 이동"
+              style={[styles.myLocBtn, { bottom: bottomBase }]}
+              onPress={handleMyLocation}
+            >
+              <LocateIcon color={c.value} />
+            </Pressable>
+          )}
         </>
+      ) : view === 'map' && listState === 'loading' ? (
+        <View accessibilityLabel="불러오는 중" style={styles.center}>
+          <ActivityIndicator color={c.value} size="large" />
+        </View>
+      ) : (
+        <RunList
+          runs={runs}
+          state={listState}
+          baseUrl={BASE_URL}
+          mine={mine}
+          refreshing={refreshing}
+          loadingMore={loadingMore}
+          topInset={headerHeight}
+          bottomInset={bottomBase}
+          onRefresh={() => load('refresh')}
+          onEndReached={loadMore}
+          onRetry={() => load('initial')}
+          onRunPress={openRun}
+          onStartRun={() => router.push('/(tabs)/record')}
+        />
       )}
 
-      {/* 프로필 헤더 오버레이 */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <AppLogo />
-        {/* 내 프로필만 설정 진입(S11) */}
-        {!userId && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="설정"
-            onPress={() => router.push('/settings')}
-            style={[styles.gearBtn, { top: insets.top + 4 }]}
-          >
-            <GearIcon color={c.text2} />
-          </Pressable>
-        )}
+      {/* 프로필 헤더 */}
+      <View
+        onLayout={(e: LayoutChangeEvent) => setHeaderHeight(e.nativeEvent.layout.height)}
+        style={[styles.header, { paddingTop: insets.top + 4 }]}
+      >
+        <View style={styles.topRow}>
+          <View style={styles.logo} pointerEvents="none">
+            <Wordmark width={71} />
+          </View>
+          {userId ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="뒤로" onPress={goBack} style={[styles.iconBtn, styles.leftBtn]}>
+              <BackIcon size={24} color={c.text} />
+            </Pressable>
+          ) : (
+            // 내 프로필만 설정 진입(S11)
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="설정"
+              onPress={() => router.push('/settings')}
+              style={[styles.iconBtn, styles.rightBtn]}
+            >
+              <GearIcon color={c.text2} />
+            </Pressable>
+          )}
+        </View>
+
         <View style={styles.userRow}>
           <View style={styles.avatar}>
             {profile?.profileImageUrl ? (
@@ -215,24 +284,40 @@ export function ProfileMapScreen({ userId }: Props) {
             )}
           </View>
           <View style={styles.headerInfo}>
-            <Text style={styles.username}>{displayName}</Text>
-            {loading ? (
-              <ActivityIndicator size="small" color={c.text2} />
-            ) : (
-              <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
-            )}
+            <Text style={styles.username} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.stats}>
+              {listState === 'ready' ? `${totalKm.toFixed(1)} km · ${runs.length}${hasMore ? '+' : ''}회` : ' '}
+            </Text>
+          </View>
+          <View accessibilityRole="tablist" accessibilityLabel="기록 보기 방식" style={styles.segment}>
+            {(['map', 'list'] as const).map((id) => {
+              const on = view === id;
+              const Icon = id === 'map' ? MapIcon : ListIcon;
+              return (
+                <Pressable
+                  key={id}
+                  accessibilityRole="tab"
+                  accessibilityState={{ selected: on }}
+                  accessibilityLabel={id === 'map' ? '지도 보기' : '목록 보기'}
+                  onPress={() => { setView(id); setSelected(null); }}
+                  style={[styles.segmentBtn, on && { backgroundColor: c.accent }]}
+                >
+                  <Icon color={on ? c.ink : c.text2} />
+                </Pressable>
+              );
+            })}
           </View>
         </View>
       </View>
 
       {/* 선택된 런 카드 */}
-      {selected && (
+      {showMap && selected && (
         <MapPopupCard
           run={selected}
           baseUrl={BASE_URL}
           bottom={bottomBase}
           onClose={() => setSelected(null)}
-          onDetailPress={(runId) => router.push(`/run/${runId}`)}
+          onDetailPress={openRun}
         />
       )}
     </View>
@@ -245,18 +330,26 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   header: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
     backgroundColor: c.header,
-    alignItems: 'center',
-    paddingHorizontal: 20, paddingBottom: 16,
+    paddingHorizontal: 16, paddingBottom: 12,
     borderBottomWidth: 1, borderBottomColor: c.border,
   },
-  gearBtn: { position: 'absolute', right: 6, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12, alignSelf: 'stretch' },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
-  avatarImg: { width: 52, height: 52, borderRadius: 26 },
-  avatarLetter: { color: c.ink, fontSize: 22, fontWeight: 'bold' },
-  headerInfo: { flex: 1 },
-  username: { fontSize: 18, fontWeight: '700', color: c.text },
-  stats: { fontSize: 13, color: c.text2, marginTop: 2 },
-  myLocBtn: { position: 'absolute', right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: c.border, shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
-  myLocTxt: { fontSize: 20 },
+  topRow: { height: 32, justifyContent: 'center' },
+  logo: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  iconBtn: { position: 'absolute', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  leftBtn: { left: -10 },
+  rightBtn: { right: -10 },
+  userRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  avatarImg: { width: 46, height: 46, borderRadius: 23 },
+  avatarLetter: { fontFamily: FONT.semibold, fontSize: 18, color: c.ink },
+  headerInfo: { flex: 1, minWidth: 0 },
+  username: { fontFamily: FONT.semibold, fontSize: 16, lineHeight: 22, color: c.text },
+  stats: { fontFamily: FONT.num, fontSize: 13, lineHeight: 18, color: c.text2 },
+  segment: { height: 50, padding: 3, borderRadius: 13, backgroundColor: c.surface2, flexDirection: 'row', gap: 2 },
+  segmentBtn: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  myLocBtn: {
+    position: 'absolute', right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22,
+    backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: c.border, shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
+  },
 });
