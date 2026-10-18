@@ -94,13 +94,17 @@ function RunItem({ run, baseUrl, c, styles, onPress }: {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${date} 러닝 ${run.distanceKm.toFixed(2)} km, 페이스 ${pace}, 시간 ${time}${photoCount ? `, 사진 ${photoCount}장` : ''}`}
+      accessibilityLabel={`${run.description?.trim() || '러닝 기록'}, ${date} 러닝 ${run.distanceKm.toFixed(2)} km, 페이스 ${pace}, 시간 ${time}${photoCount ? `, 사진 ${photoCount}장` : ''}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.card, pressed && { opacity: 0.85 }]}
+      // 함수형 style은 NativeWind interop에서 적용되지 않아 정적 style을 쓴다
+      style={styles.card}
     >
       <RouteThumb route={run.route} c={c} />
       <View style={styles.cardBody}>
-        <Text style={styles.date}>{date}</Text>
+        <View style={photoCount > 0 && styles.besidePhoto}>
+          <Text style={styles.title} numberOfLines={1}>{run.description?.trim() || '러닝 기록'}</Text>
+          <Text style={styles.date}>{date}</Text>
+        </View>
         <Text style={styles.distance}>
           {run.distanceKm.toFixed(2)}
           <Text style={styles.distanceUnit}> KM</Text>
@@ -211,7 +215,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     padding: 12, borderRadius: 20, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
     flexDirection: 'row', gap: 14,
   },
-  cardBody: { flex: 1, minWidth: 0, paddingVertical: 2, justifyContent: 'space-between' },
+  cardBody: { flex: 1, minWidth: 0, paddingVertical: 2, gap: 4 },
+  besidePhoto: { paddingRight: 56 },
+  title: { fontFamily: FONT.semibold, fontSize: 15, lineHeight: 20, color: c.text },
   date: { fontFamily: FONT.regular, fontSize: 13, lineHeight: 18, color: c.text2 },
   distance: { fontFamily: FONT.num, fontSize: 24, lineHeight: 28, color: c.value },
   distanceUnit: { fontFamily: FONT.num, fontSize: 14, color: c.text2 },

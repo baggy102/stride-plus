@@ -4,7 +4,7 @@ import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import { LoadingView } from '@/components/LoadingView';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { Slot, useRouter, useSegments, useRootNavigationState } from 'expo-router';
+import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { vars } from 'nativewind';
 import { useFonts } from 'expo-font';
@@ -64,7 +64,8 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={[{ flex: 1, backgroundColor: c.bg }, themeVars]}>
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-        <Slot />
+        {/* 스택: 상세·설정·사용자 프로필에서 뒤로 가면 원래 화면(탭 상태 유지)으로 돌아간다 */}
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} />
         {isHydrating && (
           <View style={{ position: 'absolute', inset: 0 }}>
             <LoadingView />

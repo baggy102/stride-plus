@@ -66,7 +66,7 @@ export function PhotoPicker({ photos, onChange }: Props) {
             accessibilityRole="button"
             accessibilityLabel="사진 추가"
             onPress={pick}
-            style={({ pressed }) => [styles.addBtn, { opacity: pressed ? 0.6 : 1 }]}
+            style={styles.addBtn}
           >
             <PlusIcon color={c.text} />
             <Text style={styles.addText}>추가</Text>

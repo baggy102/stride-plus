@@ -181,7 +181,7 @@ export default function RunSummaryScreen() {
             accessibilityRole="button"
             onPress={handleSave}
             disabled={saving}
-            style={({ pressed }) => [styles.saveBtn, { opacity: pressed || saving ? 0.8 : 1 }]}
+            style={[styles.saveBtn, { opacity: saving ? 0.8 : 1 }]}
           >
             {saving ? <ActivityIndicator color={c.ink} /> : <Text style={styles.saveText}>저장하기</Text>}
           </Pressable>

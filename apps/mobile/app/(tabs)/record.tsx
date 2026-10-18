@@ -207,7 +207,7 @@ export default function RecordScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="러닝 시작"
                 onPress={handleStart}
-                style={({ pressed }) => [styles.startBtn, { opacity: pressed ? 0.85 : 1 }]}
+                style={styles.startBtn}
               >
                 <PlayIcon color={c.ink} />
               </Pressable>

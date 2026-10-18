@@ -64,7 +64,7 @@ export default function LoginScreen() {
 
         <Pressable
           accessibilityRole="button"
-          style={({ pressed }) => [styles.button, { opacity: pressed || isLoading ? 0.8 : 1 }]}
+          style={[styles.button, { opacity: isLoading ? 0.8 : 1 }]}
           onPress={() => login(email, password)}
           disabled={isLoading}
         >

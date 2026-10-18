@@ -98,6 +98,8 @@ describe('RunsService', () => {
 
       const result = await service.findNearby(VIEWER, 37.4, 126.9);
       expect(result[0].thumbnailUrl).toBeNull();
+      // 코스 소개가 없으면 빈 문자열
+      expect(result[0].description).toBe('');
     });
 
     it('기본 반경 5000m 적용', async () => {
@@ -169,6 +171,7 @@ describe('RunsService', () => {
           distanceKm: 5.2,
           paceSecPerKm: 330,
           photoUrls: ['photo1.jpg'],
+          description: '구성 코스',
           route: { type: 'LineString', coordinates: [[127.1, 37.5], [127.2, 37.6]] },
           createdAt: new Date('2026-01-01'),
         },
@@ -190,6 +193,7 @@ describe('RunsService', () => {
         distanceKm: 5.2,
         route: [[127.1, 37.5], [127.2, 37.6]],
         startPoint: [127.1, 37.5],
+        description: '구성 코스',
       });
     });
   });

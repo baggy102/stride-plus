@@ -5,7 +5,7 @@ import { Run, RunDocument } from './runs.schema';
 import { User, UserDocument } from '../users/users.schema';
 import { CreateRunDto } from './dto/create-run.dto';
 
-const MARKER_SELECT = 'userId distanceKm paceSecPerKm routeImageUrl photoUrls createdAt route';
+const MARKER_SELECT = 'userId distanceKm paceSecPerKm routeImageUrl photoUrls description createdAt route';
 const USER_SELECT = '_id username profileImageUrl';
 const DEFAULT_RADIUS = 5000;
 // 지도를 넓게 축소했을 때 응답 크기 상한. $near라 가까운 순으로 자른다.
@@ -60,6 +60,7 @@ export class RunsService {
         routeImageUrl: (run as unknown as { routeImageUrl?: string }).routeImageUrl ?? null,
         thumbnailUrl: photoUrls?.[0] ?? null,
         photoUrls: photoUrls ?? [],
+        description: (run as unknown as { description?: string }).description ?? '',
         startPoint: route?.coordinates?.[0] ?? null,
         createdAt,
       };
@@ -92,6 +93,7 @@ export class RunsService {
         routeImageUrl: (run as unknown as { routeImageUrl?: string }).routeImageUrl ?? null,
         thumbnailUrl: photoUrls?.[0] ?? null,
         photoUrls: photoUrls ?? [],
+        description: (run as unknown as { description?: string }).description ?? '',
         startPoint: route?.coordinates?.[0] ?? null,
         route: route?.coordinates ?? [],
         createdAt,
