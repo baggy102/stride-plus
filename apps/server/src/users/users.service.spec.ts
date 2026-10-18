@@ -21,7 +21,7 @@ const mockUserModel = {
   exists: jest.fn(),
   deleteOne: jest.fn(),
 };
-const mockRunModel = { find: jest.fn(), deleteMany: jest.fn() };
+const mockRunModel = { find: jest.fn(), deleteMany: jest.fn(), aggregate: jest.fn() };
 const mockPostModel = { deleteMany: jest.fn(), updateMany: jest.fn() };
 const mockRefreshTokenModel = { deleteMany: jest.fn() };
 
@@ -75,6 +75,27 @@ describe('UsersService', () => {
     const result = await service.create('c@d.com', 'hash', 'charlie', consents);
     expect(result).toEqual(newUser);
     expect(mockUserModel.create).toHaveBeenCalledWith({ email: 'c@d.com', passwordHash: 'hash', username: 'charlie', consents });
+  });
+
+  describe('runStats', () => {
+    const USER = '64b7f0c2a1b2c3d4e5f60712';
+
+    it('사용자 러닝 전체의 거리 합계와 횟수를 집계한다', async () => {
+      mockRunModel.aggregate.mockReturnValue(execOf([{ _id: null, totalDistanceKm: 212.5, runCount: 31 }]));
+      expect(await service.runStats(USER)).toEqual({ totalDistanceKm: 212.5, runCount: 31 });
+      expect(mockRunModel.aggregate).toHaveBeenCalledWith([
+        { $match: { userId: new Types.ObjectId(USER) } },
+        { $group: { _id: null, totalDistanceKm: { $sum: '$distanceKm' }, runCount: { $sum: 1 } } },
+      ]);
+    });
+
+    it('러닝이 없으면 0, 형식이 틀린 ID는 조회 없이 0', async () => {
+      mockRunModel.aggregate.mockReturnValue(execOf([]));
+      expect(await service.runStats(USER)).toEqual({ totalDistanceKm: 0, runCount: 0 });
+      mockRunModel.aggregate.mockClear();
+      expect(await service.runStats('abc')).toEqual({ totalDistanceKm: 0, runCount: 0 });
+      expect(mockRunModel.aggregate).not.toHaveBeenCalled();
+    });
   });
 
   describe('block / unblock', () => {

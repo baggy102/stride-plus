@@ -7,6 +7,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
+import { wearLevel } from '@/components/wordmarkWear';
 import { MapPopupCard } from '@/components/MapPopupCard';
 import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
 import { SafetyMenu } from '@/components/SafetyMenu';
@@ -23,6 +24,9 @@ interface UserProfile {
   profileImageUrl?: string;
   /** 내가 차단한 사용자(C1) */
   blockedByMe?: boolean;
+  /** 전체 러닝 집계(U11) — 목록은 페이지 단위라 서버 값을 쓴다 */
+  totalDistanceKm?: number;
+  runCount?: number;
 }
 
 interface Props {
@@ -195,7 +199,8 @@ export function ProfileMapScreen({ userId }: Props) {
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/feed'));
   const openRun = (runId: string) => router.push(`/run/${runId}`);
 
-  const totalKm = runs.reduce((sum, run) => sum + run.distanceKm, 0);
+  const totalKm = profile?.totalDistanceKm ?? 0;
+  const runCount = profile?.runCount ?? 0;
   const displayName = profile?.username ?? (mine ? user?.username ?? '' : '');
   const avatarLetter = (displayName || '?')[0].toUpperCase();
   const blocked = !mine && !!profile?.blockedByMe;
@@ -275,7 +280,8 @@ export function ProfileMapScreen({ userId }: Props) {
       >
         <View style={styles.topRow}>
           <View style={styles.logo} pointerEvents="none">
-            <Wordmark width={71} />
+            {/* 프로필 주인의 누적 거리 단계(U11) — 불러오기 전에는 Lv1 */}
+            <Wordmark width={71} level={wearLevel(totalKm)} />
           </View>
           {userId ? (
             <Pressable accessibilityRole="button" accessibilityLabel="뒤로" onPress={goBack} style={[styles.iconBtn, styles.leftBtn]}>
@@ -317,7 +323,7 @@ export function ProfileMapScreen({ userId }: Props) {
             <View style={styles.headerInfo}>
               <Text style={styles.username} numberOfLines={1}>{displayName}</Text>
               <Text style={styles.stats}>
-                {listState === 'ready' ? `${totalKm.toFixed(1)} km · ${runs.length}${hasMore ? '+' : ''}회` : ' '}
+                {listState === 'ready' ? `${totalKm.toFixed(1)} km · ${runCount}회` : ' '}
               </Text>
             </View>
             <View accessibilityRole="tablist" accessibilityLabel="기록 보기 방식" style={styles.segment}>

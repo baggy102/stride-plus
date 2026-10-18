@@ -57,6 +57,18 @@ export class UsersService {
     return !!(await this.userModel.exists({ _id: userId, blocked: new Types.ObjectId(targetId) }));
   }
 
+  // 프로필 헤더 통계·거리 단계 워드마크(U11) — 목록은 페이지 단위라 서버에서 전체를 집계한다
+  async runStats(userId: string): Promise<{ totalDistanceKm: number; runCount: number }> {
+    if (!isValidObjectId(userId)) return { totalDistanceKm: 0, runCount: 0 };
+    const [stats] = await this.runModel
+      .aggregate<{ totalDistanceKm: number; runCount: number }>([
+        { $match: { userId: new Types.ObjectId(userId) } },
+        { $group: { _id: null, totalDistanceKm: { $sum: '$distanceKm' }, runCount: { $sum: 1 } } },
+      ])
+      .exec();
+    return { totalDistanceKm: stats?.totalDistanceKm ?? 0, runCount: stats?.runCount ?? 0 };
+  }
+
   // 트랜잭션 없이 순서로 안전하게 지운다: 사용자 문서를 맨 마지막에 지우므로
   // 중간에 실패해도 계정이 남아 있고, 다시 호출하면 이어서 지워진다(각 단계 멱등).
   async deleteAccount(userId: string): Promise<void> {

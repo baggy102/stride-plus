@@ -1,4 +1,6 @@
-import Svg, { Path, Polygon } from 'react-native-svg';
+import { useId } from 'react';
+import Svg, { Circle, Defs, G, Mask, Path, Polygon, Rect } from 'react-native-svg';
+import { WEAR_LEVELS, WORDMARK_BASE } from './wordmarkWear';
 import { useColors } from '@/theme/useColors';
 
 // 확정 UI 캔버스의 STRIDE+ 워드마크 Lv1 (Saira 800 이탤릭 기반 패스, + 에 흙·자갈).
@@ -30,11 +32,43 @@ const GRAVEL = [
 interface Props {
   width: number;
   color?: string;
+  /** 거리 단계(U11). 주면 캔버스 LogoWear 단계로 그린다 — 프로필 헤더 */
+  level?: 1 | 2 | 3 | 4 | 5;
 }
 
-export function Wordmark({ width, color }: Props) {
+export function Wordmark({ width, color, level }: Props) {
   const c = useColors();
+  const maskId = `wear${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const fill = color ?? c.logo;
+
+  // 단계 자국은 캔버스처럼 배경색으로 덧칠하지 않고 마스크로 지운다(반투명 헤더 위에서도 자국이 점으로 보이지 않게)
+  if (level) {
+    const wear = WEAR_LEVELS[level];
+    return (
+      <Svg
+        width={width}
+        height={width * ASPECT}
+        viewBox={VIEW_BOX}
+        accessibilityRole="image"
+        accessibilityLabel={`STRIDE+ 워드마크 ${level}단계`}
+      >
+        <Defs>
+          <Mask id={maskId} maskUnits="userSpaceOnUse" x={0} y={0} width={641} height={200}>
+            <Rect x={0} y={0} width={641} height={200} fill="#FFFFFF" />
+            {wear.erosion && <Polygon points={wear.erosion} fill="#000000" />}
+            {[...wear.holes, ...wear.pits].map(([cx, cy, r]) => (
+              <Circle key={`${cx},${cy}`} cx={cx} cy={cy} r={r} fill="#000000" />
+            ))}
+          </Mask>
+        </Defs>
+        <G mask={`url(#${maskId})`}>
+          <Path d={WORDMARK_BASE} fill={fill} />
+          {wear.gravel.map((points) => <Polygon key={points} points={points} fill={fill} />)}
+        </G>
+      </Svg>
+    );
+  }
+
   return (
     <Svg width={width} height={width * ASPECT} viewBox={VIEW_BOX} accessibilityRole="image" accessibilityLabel="STRIDE+">
       <Path d={LETTERS} fill={fill} />

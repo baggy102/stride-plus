@@ -6,6 +6,7 @@ const mockUsersService = {
   findById: jest.fn(),
   deleteAccount: jest.fn(),
   isBlocking: jest.fn(),
+  runStats: jest.fn(),
   block: jest.fn(),
   unblock: jest.fn(),
 };
@@ -32,8 +33,9 @@ describe('UsersController', () => {
   it('getUser — 내가 차단했는지 blockedByMe로 알려 준다', async () => {
     mockUsersService.findById.mockResolvedValue({ _id: 'u2', username: 'bob' });
     mockUsersService.isBlocking.mockResolvedValue(true);
+    mockUsersService.runStats.mockResolvedValue({ totalDistanceKm: 52.3, runCount: 7 });
     const result = await controller.getUser({ user: { sub: 'u1' } }, 'u2');
-    expect(result).toMatchObject({ _id: 'u2', blockedByMe: true });
+    expect(result).toMatchObject({ _id: 'u2', blockedByMe: true, totalDistanceKm: 52.3, runCount: 7 });
     expect(mockUsersService.isBlocking).toHaveBeenCalledWith('u1', 'u2');
   });
 

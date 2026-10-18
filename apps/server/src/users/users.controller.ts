@@ -33,6 +33,7 @@ export class UsersController {
       username: user.username,
       profileImageUrl: user.profileImageUrl,
       blockedByMe: await this.usersService.isBlocking(req.user.sub, id),
+      ...(await this.usersService.runStats(id)),
     };
   }
 
