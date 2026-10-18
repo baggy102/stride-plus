@@ -1,8 +1,8 @@
 import {
-  Controller, Get, Post, Patch, Param, Query, Req,
-  UseInterceptors, UploadedFile, UploadedFiles, Body,
+  Controller, Get, Post, Param, Query, Req,
+  UseInterceptors, UploadedFiles, Body,
 } from '@nestjs/common';
-import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { RunsService } from './runs.service';
@@ -32,16 +32,6 @@ export class RunsController {
   @Get(':id')
   findById(@Param('id') id: string) {
     return this.runsService.findById(id);
-  }
-
-  @Patch(':id/route-image')
-  @UseInterceptors(FileInterceptor('routeImage', { storage }))
-  updateRouteImage(
-    @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    const routeImageUrl = file ? `/uploads/${file.filename}` : '';
-    return this.runsService.updateRouteImage(id, routeImageUrl);
   }
 
   @Post()
