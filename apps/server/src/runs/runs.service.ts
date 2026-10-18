@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { Model, Types, isValidObjectId } from 'mongoose';
 import { Run, RunDocument } from './runs.schema';
 import { CreateRunDto } from './dto/create-run.dto';
 
@@ -82,12 +82,16 @@ export class RunsService {
     });
   }
 
-  findById(id: string) {
-    return this.runModel
+  // 형식이 틀린 ID도 404로 — 앱은 「없는 러닝」 한 가지로 처리한다.
+  async findById(id: string) {
+    if (!isValidObjectId(id)) throw new NotFoundException('run_not_found');
+    const run = await this.runModel
       .findById(id)
       .populate('userId', USER_SELECT)
       .lean()
       .exec();
+    if (!run) throw new NotFoundException('run_not_found');
+    return run;
   }
 
   async create(

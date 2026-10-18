@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { RunsService } from './runs.service';
@@ -187,8 +188,25 @@ describe('RunsService', () => {
         exec: jest.fn().mockResolvedValue(run),
       });
 
-      const result = await service.findById('run1');
+      const result = await service.findById('64b7f0c2a1b2c3d4e5f60718');
       expect(result).toEqual(run);
+    });
+
+    it('없는 ID면 NotFoundException(run_not_found)', async () => {
+      mockRunModel.findById.mockReturnValue({
+        populate: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue(null),
+      });
+
+      await expect(service.findById('64b7f0c2a1b2c3d4e5f60718')).rejects.toThrow(
+        new NotFoundException('run_not_found'),
+      );
+    });
+
+    it('형식이 틀린 ID면 조회 없이 NotFoundException', async () => {
+      await expect(service.findById('abc')).rejects.toThrow(new NotFoundException('run_not_found'));
+      expect(mockRunModel.findById).not.toHaveBeenCalled();
     });
   });
 });
