@@ -67,3 +67,21 @@ export function PlusIcon({ size = 18, color }: IconProps) {
     </Svg>
   );
 }
+
+export function BackIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 5 8 12l7 7" />
+    </Svg>
+  );
+}
+
+export function PhotoIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 6.5h16v12H4z" />
+      <Circle cx={9} cy={10.5} r={1.5} />
+      <Path d="m20 15.5-4.5-4.5L7 18.5" />
+    </Svg>
+  );
+}
