@@ -5,7 +5,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import { useRunStore } from '@/store/run';
-import { useHaversine } from '@/hooks/useHaversine';
 import { Wordmark } from '@/components/Wordmark';
 import { RouteMap, type RouteMapHandle } from '@/components/RouteMap';
 import { HoldToStopButton } from '@/components/HoldToStopButton';
@@ -16,6 +15,7 @@ import * as SecureStorage from '@/utils/secureStorage';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
+import { formatPace, MIN_PACE_DISTANCE_KM } from '@/utils/pace';
 
 const EXPLAIN_SEEN_KEY = 'location_explain_seen';
 
@@ -27,13 +27,6 @@ function formatTime(seconds: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function formatPace(secPerKm: number) {
-  if (!secPerKm || !Number.isFinite(secPerKm)) return "--'--\"";
-  const m = Math.floor(secPerKm / 60);
-  const s = Math.round(secPerKm % 60);
-  return `${m}'${String(s).padStart(2, '0')}"`;
-}
-
 // 확정 UI S06 기록 — 최종 보드 Record(B1: 지도 배경 + Barlow, LIVE 없음, 종료 A 강조색).
 // 시작 전에도 같은 배치를 쓰고 종료 버튼 자리에 시작 버튼을 둔다(RecordStart 보드는 쓰지 않음, 2026-10-18 결정).
 export default function RecordScreen() {
@@ -43,8 +36,9 @@ export default function RecordScreen() {
   const { height: screenHeight } = useWindowDimensions();
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  const { isTracking, trackingMode, coordinates, elapsedSeconds, startTracking, stopTracking } = useRunStore();
-  const { distanceKm, paceSecPerKm } = useHaversine(coordinates, elapsedSeconds);
+  const { isTracking, trackingMode, coordinates, distanceKm, elapsedSeconds, startTracking, stopTracking } = useRunStore();
+  // 50 m 전에는 페이스를 보여 주지 않는다(시작 직후 값이 튐)
+  const paceSecPerKm = distanceKm >= MIN_PACE_DISTANCE_KM ? elapsedSeconds / distanceKm : 0;
   const tick = useRunStore((s) => s._tick);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const mapRef = useRef<RouteMapHandle>(null);

@@ -15,6 +15,7 @@ import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
+import { formatPace } from '@/utils/pace';
 
 function formatTime(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -22,13 +23,6 @@ function formatTime(sec: number) {
   const s = sec % 60;
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function formatPace(sec: number) {
-  if (sec === 0) return "--'--\"";
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}'${String(s).padStart(2, '0')}"`;
 }
 
 // 「10월 16일 목요일 · 오전 7:05」

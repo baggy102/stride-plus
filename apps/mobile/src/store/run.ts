@@ -13,6 +13,10 @@ export function elapsedSecondsSince(startedAtMs: number, nowMs: number): number 
   return Math.max(0, Math.floor((nowMs - startedAtMs) / 1000));
 }
 
+// GPS 오차 필터 — 정확도가 이보다 나쁜 점, 이보다 빠르게 움직인 점(순간 튐)은 버린다
+const MAX_ACCURACY_M = 30;
+const MAX_SPEED_MPS = 10;
+
 // 위치 수집 방식: background = 화면이 꺼져도 계속, foreground = 앱이 보일 때만(항상 허용 거부·Expo Go)
 export type TrackingMode = 'background' | 'foreground';
 
@@ -21,6 +25,9 @@ interface RunStore {
   trackingMode: TrackingMode | null;
   startedAt: number | null;
   coordinates: [number, number][];
+  /** 받은 점마다 누적한 거리(필터를 통과한 구간만) */
+  distanceKm: number;
+  lastSampleAt: number | null;
   elapsedSeconds: number;
   pendingSummary: RunSummary | null;
   startTracking: () => Promise<void>;
@@ -28,7 +35,7 @@ interface RunStore {
   resetRun: () => void;
   clearPendingSummary: () => void;
   _tick: () => void;
-  _addCoordinate: (lng: number, lat: number) => void;
+  _addCoordinate: (lng: number, lat: number, accuracy?: number | null, timestamp?: number) => void;
 }
 
 let nativeWatchSub: Location.LocationSubscription | null = null;
@@ -68,6 +75,8 @@ export const useRunStore = create<RunStore>((set, get) => ({
   trackingMode: null,
   startedAt: null,
   coordinates: [],
+  distanceKm: 0,
+  lastSampleAt: null,
   elapsedSeconds: 0,
   pendingSummary: null,
 
@@ -76,15 +85,26 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (startedAt !== null) set({ elapsedSeconds: elapsedSecondsSince(startedAt, Date.now()) });
   },
 
-  _addCoordinate: (lng, lat) =>
-    set((s) => ({ coordinates: [...s.coordinates, [lng, lat]] })),
+  _addCoordinate: (lng, lat, accuracy, timestamp) => {
+    if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
+    const now = timestamp ?? Date.now();
+    const { coordinates, distanceKm, lastSampleAt } = get();
+    const prev = coordinates[coordinates.length - 1];
+    let addKm = 0;
+    if (prev && lastSampleAt !== null) {
+      addKm = haversineKm(prev, [lng, lat]);
+      const seconds = (now - lastSampleAt) / 1000;
+      if (seconds > 0 && (addKm * 1000) / seconds > MAX_SPEED_MPS) return;
+    }
+    set({ coordinates: [...coordinates, [lng, lat]], distanceKm: distanceKm + addKm, lastSampleAt: now });
+  },
 
   startTracking: async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('location_permission_denied');
 
     // 권한 순서: 사용 중 허용(위) → 항상 허용(여기). 항상 허용을 거부해도 포그라운드로 계속한다
-    set({ isTracking: true, startedAt: Date.now(), coordinates: [], elapsedSeconds: 0 });
+    set({ isTracking: true, startedAt: Date.now(), coordinates: [], distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0 });
 
     if (await startBackgroundUpdates()) {
       set({ trackingMode: 'background' });
@@ -93,12 +113,12 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     set({ trackingMode: 'foreground' });
     nativeWatchSub = await Location.watchPositionAsync(TRACKING_OPTIONS, (loc) => {
-      useRunStore.getState()._addCoordinate(loc.coords.longitude, loc.coords.latitude);
+      useRunStore.getState()._addCoordinate(loc.coords.longitude, loc.coords.latitude, loc.coords.accuracy, loc.timestamp);
     });
   },
 
   stopTracking: () => {
-    const { coordinates, startedAt } = get();
+    const { coordinates, startedAt, distanceKm } = get();
     const elapsedSeconds = startedAt !== null ? elapsedSecondsSince(startedAt, Date.now()) : get().elapsedSeconds;
 
     nativeWatchSub?.remove();
@@ -109,7 +129,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     set({ isTracking: false, trackingMode: null, startedAt: null, elapsedSeconds });
 
-    const distanceKm = calcTotalDistance(coordinates);
     const paceSecPerKm = distanceKm > 0 ? elapsedSeconds / distanceKm : 0;
 
     const summary = { coordinates, distanceKm, elapsedSeconds, paceSecPerKm };
@@ -117,7 +136,10 @@ export const useRunStore = create<RunStore>((set, get) => ({
     return summary;
   },
 
-  resetRun: () => set({ isTracking: false, trackingMode: null, startedAt: null, coordinates: [], elapsedSeconds: 0, pendingSummary: null }),
+  resetRun: () => set({
+    isTracking: false, trackingMode: null, startedAt: null, coordinates: [], distanceKm: 0, lastSampleAt: null,
+    elapsedSeconds: 0, pendingSummary: null,
+  }),
 
   clearPendingSummary: () => set({ pendingSummary: null }),
 }));
@@ -136,13 +158,5 @@ function haversineKm(a: [number, number], b: [number, number]) {
     sinDLat * sinDLat +
     Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * sinDLng * sinDLng;
   return R * 2 * Math.atan2(Math.sqrt(c), Math.sqrt(1 - c));
-}
-
-function calcTotalDistance(coords: [number, number][]) {
-  let total = 0;
-  for (let i = 1; i < coords.length; i++) {
-    total += haversineKm(coords[i - 1], coords[i]);
-  }
-  return total;
 }
 

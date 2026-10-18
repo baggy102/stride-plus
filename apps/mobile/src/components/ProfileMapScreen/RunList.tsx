@@ -8,6 +8,7 @@ import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import type { Palette } from '@/theme/colors';
 import type { RunMarker } from '../RunCard';
+import { formatPace } from '@/utils/pace';
 
 export interface RunWithRoute extends RunMarker {
   route: [number, number][];
@@ -33,11 +34,6 @@ interface Props {
 
 const THUMB = 96;
 const THUMB_PADDING = 14;
-
-function formatPace(sec: number) {
-  if (!sec) return "--'--\"";
-  return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
-}
 
 // 서버에 시간 필드가 없어 페이스 × 거리로 계산한다(B4와 같음)
 function formatDuration(paceSecPerKm: number, distanceKm: number) {

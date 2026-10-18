@@ -6,6 +6,7 @@ import { CloseIcon } from '../icons';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import type { Palette } from '@/theme/colors';
+import { formatPace } from '@/utils/pace';
 
 interface Props {
   run: RunMarker;
@@ -16,11 +17,6 @@ interface Props {
   onDetailPress?: (runId: string) => void;
   /** 화면 아래에서 띄울 거리. 탭 화면은 탭바 위로 올린다 */
   bottom?: number;
-}
-
-function formatPace(sec: number) {
-  if (!sec) return "--'--\"";
-  return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
 }
 
 /** 지도 마커 탭 시 뜨는 러닝 요약 카드 — 확정 UI S05 (네이티브 전용, WebView 밖에서 렌더링) */

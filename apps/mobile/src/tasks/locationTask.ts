@@ -10,6 +10,6 @@ TaskManager.defineTask<{ locations: LocationObject[] }>(LOCATION_TASK, async ({ 
   const { isTracking, _addCoordinate } = useRunStore.getState();
   if (!isTracking) return;
   for (const loc of data.locations) {
-    _addCoordinate(loc.coords.longitude, loc.coords.latitude); // GeoJSON [lng, lat]
+    _addCoordinate(loc.coords.longitude, loc.coords.latitude, loc.coords.accuracy, loc.timestamp); // GeoJSON [lng, lat]
   }
 });

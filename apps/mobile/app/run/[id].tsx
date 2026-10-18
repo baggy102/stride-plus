@@ -13,6 +13,7 @@ import { BackIcon, RouteIcon } from '@/components/icons';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import type { Palette } from '@/theme/colors';
+import { formatPace } from '@/utils/pace';
 
 interface RunDetail {
   _id: string;
@@ -26,11 +27,6 @@ interface RunDetail {
 }
 
 type LoadState = 'loading' | 'ready' | 'notfound' | 'error';
-
-function formatPace(sec: number) {
-  if (!sec) return "--'--\"";
-  return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
-}
 
 // 서버에 러닝 시간 필드가 없어 페이스 × 거리로 계산한다(PRD Q12)
 function formatDuration(paceSecPerKm: number, distanceKm: number) {
