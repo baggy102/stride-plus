@@ -7,6 +7,7 @@ export interface Palette {
   surface: string;
   surface2: string;
   border: string;
+  input: string; // 입력창 배경
   muted: string;
   text: string;
   text2: string;
@@ -36,6 +37,7 @@ export const palettes: Record<Scheme, Palette> = {
     surface: '#292C31',
     surface2: '#34383E',
     border: '#3D4148',
+    input: '#292C31',
     muted: '#7B8189',
     text: '#F6F7F9',
     text2: '#B8BEC6',
@@ -63,6 +65,7 @@ export const palettes: Record<Scheme, Palette> = {
     surface: '#FFFFFF',
     surface2: '#EEF0F2',
     border: '#E3E6E9',
+    input: '#EEF0F2',
     muted: '#9AA0A6',
     text: '#111316',
     text2: '#6B7079',
