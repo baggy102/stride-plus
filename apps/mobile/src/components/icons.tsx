@@ -149,3 +149,12 @@ export function ListIcon({ size = 18, color }: IconProps) {
     </Svg>
   );
 }
+
+export function BlockedIcon({ size = 32, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Circle cx={12} cy={12} r={8.5} />
+      <Path d="M6 6l12 12" />
+    </Svg>
+  );
+}

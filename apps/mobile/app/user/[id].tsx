@@ -1,14 +1,13 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { ProfileMapScreen } from '@/components/ProfileMapScreen';
-import { useColors } from '@/theme/useColors';
 
 export default function UserProfileScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const c = useColors();
 
   return (
     <>
-      <Stack.Screen options={{ title: '프로필', headerTransparent: true, headerTintColor: c.text }} />
+      {/* S09 헤더(뒤로·워드마크·사용자 메뉴)는 ProfileMapScreen이 그린다 */}
+      <Stack.Screen options={{ headerShown: false }} />
       <ProfileMapScreen userId={id} />
     </>
   );

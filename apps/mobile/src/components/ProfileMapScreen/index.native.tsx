@@ -8,7 +8,8 @@ import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
 import { MapPopupCard } from '@/components/MapPopupCard';
-import { BackIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
+import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
+import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
@@ -20,6 +21,8 @@ interface UserProfile {
   _id: string;
   username: string;
   profileImageUrl?: string;
+  /** 내가 차단한 사용자(C1) */
+  blockedByMe?: boolean;
 }
 
 interface Props {
@@ -201,11 +204,24 @@ export function ProfileMapScreen({ userId }: Props) {
   const totalKm = runs.reduce((sum, run) => sum + run.distanceKm, 0);
   const displayName = profile?.username ?? (mine ? user?.username ?? '' : '');
   const avatarLetter = (displayName || '?')[0].toUpperCase();
-  const showMap = view === 'map' && listState === 'ready';
+  const blocked = !mine && !!profile?.blockedByMe;
+  const showMap = view === 'map' && listState === 'ready' && !blocked;
 
   return (
     <View style={[styles.container, { backgroundColor: showMap ? c.map.bg : c.bg }]}>
-      {showMap ? (
+      {blocked ? (
+        // S09 차단 상태 — 프로필·러닝을 보여 주지 않는다
+        <View style={styles.blocked}>
+          <View style={styles.blockedIcon}>
+            <BlockedIcon color={c.text2} />
+          </View>
+          <Text style={styles.blockedTitle}>차단한 사용자입니다</Text>
+          <Text style={styles.blockedBody}>이 사용자의 프로필과 러닝을 볼 수 없어요.</Text>
+          <Pressable accessibilityRole="button" onPress={goBack} style={styles.blockedBtn}>
+            <Text style={styles.blockedBtnText}>뒤로 가기</Text>
+          </Pressable>
+        </View>
+      ) : showMap ? (
         <>
           <WebView
             ref={webViewRef}
@@ -252,7 +268,7 @@ export function ProfileMapScreen({ userId }: Props) {
       {/* 프로필 헤더 */}
       <View
         onLayout={(e: LayoutChangeEvent) => setHeaderHeight(e.nativeEvent.layout.height)}
-        style={[styles.header, { paddingTop: insets.top + 4 }]}
+        style={[styles.header, { paddingTop: insets.top + 4 }, blocked && styles.headerBlocked]}
       >
         <View style={styles.topRow}>
           <View style={styles.logo} pointerEvents="none">
@@ -273,41 +289,54 @@ export function ProfileMapScreen({ userId }: Props) {
               <GearIcon color={c.text2} />
             </Pressable>
           )}
+          {userId && !mine && !blocked && profile && (
+            <View style={styles.rightMenu}>
+              <SafetyMenu
+                label="사용자 메뉴"
+                targetType="user"
+                targetId={profile._id}
+                author={{ id: profile._id, username: profile.username }}
+                onBlocked={() => { setSelected(null); setProfile({ ...profile, blockedByMe: true }); }}
+              />
+            </View>
+          )}
         </View>
 
-        <View style={styles.userRow}>
-          <View style={styles.avatar}>
-            {profile?.profileImageUrl ? (
-              <Image source={{ uri: profile.profileImageUrl }} style={styles.avatarImg} />
-            ) : (
-              <Text style={styles.avatarLetter}>{avatarLetter}</Text>
-            )}
+        {!blocked && (
+          <View style={styles.userRow}>
+            <View style={styles.avatar}>
+              {profile?.profileImageUrl ? (
+                <Image source={{ uri: profile.profileImageUrl }} style={styles.avatarImg} />
+              ) : (
+                <Text style={styles.avatarLetter}>{avatarLetter}</Text>
+              )}
+            </View>
+            <View style={styles.headerInfo}>
+              <Text style={styles.username} numberOfLines={1}>{displayName}</Text>
+              <Text style={styles.stats}>
+                {listState === 'ready' ? `${totalKm.toFixed(1)} km · ${runs.length}${hasMore ? '+' : ''}회` : ' '}
+              </Text>
+            </View>
+            <View accessibilityRole="tablist" accessibilityLabel="기록 보기 방식" style={styles.segment}>
+              {(['map', 'list'] as const).map((id) => {
+                const on = view === id;
+                const Icon = id === 'map' ? MapIcon : ListIcon;
+                return (
+                  <Pressable
+                    key={id}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={id === 'map' ? '지도 보기' : '목록 보기'}
+                    onPress={() => { setView(id); setSelected(null); }}
+                    style={[styles.segmentBtn, on && { backgroundColor: c.accent }]}
+                  >
+                    <Icon color={on ? c.ink : c.text2} />
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
-          <View style={styles.headerInfo}>
-            <Text style={styles.username} numberOfLines={1}>{displayName}</Text>
-            <Text style={styles.stats}>
-              {listState === 'ready' ? `${totalKm.toFixed(1)} km · ${runs.length}${hasMore ? '+' : ''}회` : ' '}
-            </Text>
-          </View>
-          <View accessibilityRole="tablist" accessibilityLabel="기록 보기 방식" style={styles.segment}>
-            {(['map', 'list'] as const).map((id) => {
-              const on = view === id;
-              const Icon = id === 'map' ? MapIcon : ListIcon;
-              return (
-                <Pressable
-                  key={id}
-                  accessibilityRole="tab"
-                  accessibilityState={{ selected: on }}
-                  accessibilityLabel={id === 'map' ? '지도 보기' : '목록 보기'}
-                  onPress={() => { setView(id); setSelected(null); }}
-                  style={[styles.segmentBtn, on && { backgroundColor: c.accent }]}
-                >
-                  <Icon color={on ? c.ink : c.text2} />
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
+        )}
       </View>
 
       {/* 선택된 런 카드 */}
@@ -333,6 +362,20 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingHorizontal: 16, paddingBottom: 12,
     borderBottomWidth: 1, borderBottomColor: c.border,
   },
+  headerBlocked: { backgroundColor: c.bg, borderBottomColor: 'transparent' },
+  rightMenu: { position: 'absolute', right: -10 },
+  blocked: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 12, backgroundColor: c.bg },
+  blockedIcon: {
+    width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+  },
+  blockedTitle: { marginTop: 8, fontFamily: FONT.semibold, fontSize: 20, lineHeight: 28, color: c.text },
+  blockedBody: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 22, color: c.text2, textAlign: 'center' },
+  blockedBtn: {
+    marginTop: 16, width: 200, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+  },
+  blockedBtnText: { fontFamily: FONT.semibold, fontSize: 16, color: c.text },
   topRow: { height: 32, justifyContent: 'center' },
   logo: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   iconBtn: { position: 'absolute', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },

@@ -7,6 +7,8 @@ import * as Location from 'expo-location';
 import client, { BASE_URL } from '@/api/client';
 import { RouteMap } from '@/components/RouteMap';
 import { Wordmark } from '@/components/Wordmark';
+import { SafetyMenu } from '@/components/SafetyMenu';
+import { useAuthStore } from '@/store/auth';
 import { BackIcon, RouteIcon } from '@/components/icons';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
@@ -58,6 +60,7 @@ export default function RunDetailScreen() {
   const [run, setRun] = useState<RunDetail | null>(null);
   const [state, setState] = useState<LoadState>('loading');
   const [placeName, setPlaceName] = useState<string | null>(null);
+  const me = useAuthStore((s) => s.user?._id);
 
   const load = useCallback(async () => {
     setState('loading');
@@ -91,7 +94,7 @@ export default function RunDetailScreen() {
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* 위쪽: 뒤로 · 작성자 (신고·차단 메뉴는 C7) */}
+      {/* 위쪽: 뒤로 · 작성자 · 신고·차단 메뉴(남의 러닝만, S13) */}
       <View style={[styles.topBar, { paddingTop: insets.top }]}>
         <View style={styles.logo} pointerEvents="none">
           <Wordmark width={71} />
@@ -110,6 +113,16 @@ export default function RunDetailScreen() {
             </View>
             <Text style={styles.authorName}>{username}</Text>
           </Pressable>
+        )}
+        {state === 'ready' && run && run.userId._id !== me && (
+          <SafetyMenu
+            label="러닝 메뉴"
+            targetType="run"
+            targetId={run._id}
+            author={{ id: run.userId._id, username }}
+            // 차단한 사용자의 러닝은 더 볼 수 없다 — 피드로(피드는 포커스 시 다시 불러온다)
+            onBlocked={() => router.replace('/(tabs)/feed')}
+          />
         )}
       </View>
 
