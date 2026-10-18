@@ -1,7 +1,5 @@
 import Constants from 'expo-constants';
 
-// 개발용 CARTO 타일. 운영은 Phase 4 D3(protomaps)에서 교체한다.
-const CARTO_KEY = (Constants.expoConfig?.extra?.cartoKey as string | undefined) ?? '';
-
-export const CARTO_TILE_URL = `https://basemaps.cartocdn.com/rastertiles/light_all/{z}/{x}/{y}{r}.png?key=${encodeURIComponent(CARTO_KEY)}`;
-export const CARTO_ATTRIBUTION = '© OpenStreetMap contributors © CARTO';
+// 지도 벡터 타일 URL 템플릿 — 설정값 하나(.env.local EXPO_PUBLIC_MAP_TILE_URL, app.config.js extra.mapTileUrl).
+// 개발: Protomaps API(비상업 무료, 키 포함). 운영: 한국 영역 PMTiles 자체 호스팅 URL로 이 값만 바꾼다(F6).
+export const MAP_TILE_URL = (Constants.expoConfig?.extra?.mapTileUrl as string | undefined) ?? '';

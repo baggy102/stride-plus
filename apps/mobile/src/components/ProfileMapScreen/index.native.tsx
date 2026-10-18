@@ -11,10 +11,10 @@ import { MapPopupCard } from '@/components/MapPopupCard';
 import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
-import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
+import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme } from '@/components/map/mapHtml';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
 
 interface UserProfile {
@@ -33,22 +33,16 @@ type ProfileView = 'map' | 'list';
 
 const PAGE_SIZE = 20;
 
-function buildHtml(runs: RunWithRoute[], p: Palette, dark: boolean) {
-  const m = p.map;
-  const runsJson = JSON.stringify(runs);
+// 테마가 바뀔 때만 새로 만든다. 러닝은 window.__setRuns로 넣는다(D2 — 재로드 없음)
+function buildHtml(p: Palette, dark: boolean) {
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+  ${leafletHead({ cluster: true })}
   <style>
     * { margin:0; padding:0; }
     #map { width:100vw; height:100vh; }
-    .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
     .leaflet-popup-content-wrapper {
       background: ${p.surface} !important;
       border: 1px solid ${p.border} !important;
@@ -57,57 +51,45 @@ function buildHtml(runs: RunWithRoute[], p: Palette, dark: boolean) {
       color: ${p.text} !important;
     }
     .leaflet-popup-tip { background: ${p.surface} !important; }
-    @keyframes runDotPulse {
-      0%, 100% { transform: scale(1); opacity: 0.7; }
-      50% { transform: scale(2.6); opacity: 0; }
-    }
-    .run-dot-pulse { animation: runDotPulse 2s ease-out infinite; }
+${MARKER_PULSE_CSS}
   </style>
 </head>
 <body>
 <div id="map"></div>
 <script>
-  const runs = ${runsJson};
-  const map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
-  L.tileLayer('${CARTO_TILE_URL}', {
-    attribution: '${CARTO_ATTRIBUTION}',
-    className: '${dark ? 'map-tiles-dark' : ''}'
-  }).addTo(map);
-
-  const dotIcon = L.divIcon({
-    html: '<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:${m.pulse}"></div><div style="width:11px;height:11px;border-radius:50%;background:${m.dot};border:2px solid ${m.dotBorder};box-shadow:0 0 8px ${withAlpha(m.dot, 0.7)}"></div></div>',
-    className: '', iconSize: [22,22], iconAnchor: [11,11],
-  });
-
-  function clusterIcon(cluster) {
-    const n = cluster.getChildCount();
-    return L.divIcon({
-      html: '<div style="width:48px;height:48px;border-radius:50%;background:${m.clBg};color:${m.clRing};border:2px solid ${m.clRing};box-shadow:0 0 14px ${m.clGlow},0 0 4px ${withAlpha(m.clRing, 0.25)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+' + n + '</div>',
-      className: '', iconSize: [48,48], iconAnchor: [24,24],
-    });
-  }
-
-  const group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
-  const allLatLng = [];
-
-  runs.forEach(function(run) {
-    if (!run.startPoint) return;
-    const lat = run.startPoint[1], lng = run.startPoint[0];
-    allLatLng.push([lat, lng]);
-    const m = L.marker([lat, lng], { icon: dotIcon });
-    m.on('click', function() {
-      window.ReactNativeWebView.postMessage(JSON.stringify(run));
-    });
-    group.addLayer(m);
-  });
-
+  var map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
+${baseMapScript(p, dark)}
+${markerIconsScript(p)}
+  var group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   map.addLayer(group);
+  var fitted = false;
 
-  if (allLatLng.length > 1) {
-    map.fitBounds(allLatLng, { padding: [40, 40] });
-  } else if (allLatLng.length === 1) {
-    map.setView(allLatLng[0], 14);
-  }
+  // 처음 받은 러닝에만 화면을 맞춘다(새로고침·다음 페이지로 다시 들어와도 보던 위치 유지)
+  var lastRuns = [];
+  window.__onTheme = function(c) {
+    makeIcons(c);
+    window.__setRuns(lastRuns);
+  };
+
+  window.__setRuns = function(runs) {
+    lastRuns = runs;
+    group.clearLayers();
+    var all = [];
+    runs.forEach(function(run) {
+      if (!run.startPoint) return;
+      var latLng = [run.startPoint[1], run.startPoint[0]];
+      all.push(latLng);
+      var marker = L.marker(latLng, { icon: dotIcon });
+      marker.on('click', function() {
+        window.ReactNativeWebView.postMessage(JSON.stringify(run));
+      });
+      group.addLayer(marker);
+    });
+    if (fitted) return;
+    fitted = true;
+    if (all.length > 1) map.fitBounds(all, { padding: [40, 40] });
+    else if (all.length === 1) map.setView(all[0], 14);
+  };
 </script>
 </body>
 </html>`;
@@ -138,6 +120,18 @@ export function ProfileMapScreen({ userId }: Props) {
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
   const webViewRef = useRef<WebView>(null);
+  const mapLoaded = useRef(false);
+  // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
+  const { initial: initialTheme, applyTheme } = useMapTheme(webViewRef, c, dark);
+  const html = useMemo(() => buildHtml(initialTheme.p, initialTheme.dark), [initialTheme]);
+
+  // 지도에 러닝을 넣는다 — WebView를 다시 로드하지 않는다
+  const pushRuns = useCallback(() => {
+    if (!mapLoaded.current) return;
+    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs)});true;`);
+  }, [runs]);
+
+  useEffect(pushRuns, [pushRuns]);
 
   const fetchPage = useCallback(
     (nextPage: number) => client.get<RunWithRoute[]>(`/runs?userId=${targetId}&page=${nextPage}&limit=${PAGE_SIZE}`),
@@ -206,6 +200,8 @@ export function ProfileMapScreen({ userId }: Props) {
   const avatarLetter = (displayName || '?')[0].toUpperCase();
   const blocked = !mine && !!profile?.blockedByMe;
   const showMap = view === 'map' && listState === 'ready' && !blocked;
+  // 지도 WebView는 목록 보기 중에도 유지한다(전환 시 재로드 없음)
+  const mapMounted = listState === 'ready' && !blocked;
 
   return (
     <View style={[styles.container, { backgroundColor: showMap ? c.map.bg : c.bg }]}>
@@ -221,18 +217,22 @@ export function ProfileMapScreen({ userId }: Props) {
             <Text style={styles.blockedBtnText}>뒤로 가기</Text>
           </Pressable>
         </View>
-      ) : showMap ? (
+      ) : (
         <>
-          <WebView
-            ref={webViewRef}
-            source={{ html: buildHtml(runs, c, dark) }}
-            style={StyleSheet.absoluteFillObject}
-            originWhitelist={['*']}
-            onMessage={(e) => {
-              try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
-            }}
-          />
-          {!selected && (
+          {mapMounted && (
+            <WebView
+              ref={webViewRef}
+              source={{ html }}
+              style={StyleSheet.absoluteFillObject}
+              originWhitelist={['*']}
+              onLoadStart={() => { mapLoaded.current = false; }}
+              onLoadEnd={() => { mapLoaded.current = true; applyTheme(); pushRuns(); }}
+              onMessage={(e) => {
+                try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
+              }}
+            />
+          )}
+          {showMap && !selected && (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="내 위치로 이동"
@@ -242,27 +242,30 @@ export function ProfileMapScreen({ userId }: Props) {
               <LocateIcon color={c.value} />
             </Pressable>
           )}
+          {showMap ? null : view === 'map' && listState === 'loading' ? (
+            <View accessibilityLabel="불러오는 중" style={styles.center}>
+              <ActivityIndicator color={c.value} size="large" />
+            </View>
+          ) : (
+            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: c.bg }]}>
+              <RunList
+                runs={runs}
+                state={listState}
+                baseUrl={BASE_URL}
+                mine={mine}
+                refreshing={refreshing}
+                loadingMore={loadingMore}
+                topInset={headerHeight}
+                bottomInset={bottomBase}
+                onRefresh={() => load('refresh')}
+                onEndReached={loadMore}
+                onRetry={() => load('initial')}
+                onRunPress={openRun}
+                onStartRun={() => router.push('/(tabs)/record')}
+              />
+            </View>
+          )}
         </>
-      ) : view === 'map' && listState === 'loading' ? (
-        <View accessibilityLabel="불러오는 중" style={styles.center}>
-          <ActivityIndicator color={c.value} size="large" />
-        </View>
-      ) : (
-        <RunList
-          runs={runs}
-          state={listState}
-          baseUrl={BASE_URL}
-          mine={mine}
-          refreshing={refreshing}
-          loadingMore={loadingMore}
-          topInset={headerHeight}
-          bottomInset={bottomBase}
-          onRefresh={() => load('refresh')}
-          onEndReached={loadMore}
-          onRetry={() => load('initial')}
-          onRunPress={openRun}
-          onStartRun={() => router.push('/(tabs)/record')}
-        />
       )}
 
       {/* 프로필 헤더 */}
