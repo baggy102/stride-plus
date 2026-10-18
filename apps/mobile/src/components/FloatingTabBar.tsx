@@ -38,6 +38,15 @@ const ICONS: Record<string, { label: string; draw: (color: string) => ReactEleme
   },
 };
 
+const BAR_HEIGHT = 64;
+const barBottom = (safeBottom: number) => Math.max(safeBottom, 24);
+
+// 탭 화면에서 탭바에 가리지 않으려면 이 값만큼 아래를 비운다(탭바 윗변까지의 거리)
+export function useTabBarClearance(): number {
+  const insets = useSafeAreaInsets();
+  return barBottom(insets.bottom) + BAR_HEIGHT;
+}
+
 export function FloatingTabBar({ state, navigation }: TabBarProps) {
   const c = useColors();
   const insets = useSafeAreaInsets();
@@ -48,7 +57,7 @@ export function FloatingTabBar({ state, navigation }: TabBarProps) {
       style={[
         styles.bar,
         {
-          bottom: Math.max(insets.bottom, 24),
+          bottom: barBottom(insets.bottom),
           backgroundColor: c.surface,
           borderColor: c.border,
           shadowColor: c.shadow,
@@ -84,7 +93,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 16,
     right: 16,
-    height: 64,
+    height: BAR_HEIGHT,
     paddingHorizontal: 28,
     borderRadius: 32,
     borderWidth: 1,

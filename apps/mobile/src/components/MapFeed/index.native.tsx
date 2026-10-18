@@ -1,10 +1,13 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, StyleSheet, ActivityIndicator, Pressable, Text } from 'react-native';
+import { Wordmark } from '@/components/Wordmark';
+import { LocateIcon, RouteIcon, AlertIcon } from '@/components/icons';
+import { useTabBarClearance } from '@/components/FloatingTabBar';
+import { FONT } from '@/theme/fonts';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { AppLogo } from '@/components/AppLogo';
 import { MapPopupCard } from '@/components/MapPopupCard';
 import client, { BASE_URL } from '@/api/client';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
@@ -20,7 +23,8 @@ const MAX_RADIUS_M = 300000;
 type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number };
 type RunMessage = { type: 'run'; run: RunMarker };
 
-function buildHtml(lat: number, lng: number, p: Palette, dark: boolean) {
+// bottomOffset: 탭바에 가리지 않게 Leaflet 출처 표기를 올리는 높이
+function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOffset: number) {
   const m = p.map;
   return `<!DOCTYPE html>
 <html>
@@ -36,7 +40,7 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean) {
     body { background: ${m.bg}; }
     #map { width:100vw; height:100vh; }
     .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
-    .leaflet-top.leaflet-left { top: 90px !important; }
+    .leaflet-bottom { bottom: ${bottomOffset}px !important; }
     @keyframes runDotPulse {
       0%, 100% { transform: scale(1); opacity: 0.7; }
       50% { transform: scale(2.6); opacity: 0; }
@@ -47,7 +51,7 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean) {
 <body>
 <div id="map"></div>
 <script>
-  var map = L.map('map',{zoomControl:true}).setView([${lat},${lng}],13);
+  var map = L.map('map',{zoomControl:false}).setView([${lat},${lng}],13);
   L.tileLayer('${CARTO_TILE_URL}',{attribution:'${CARTO_ATTRIBUTION}',className:'${dark ? 'map-tiles-dark' : ''}'}).addTo(map);
   L.circleMarker([${lat},${lng}],{radius:9,color:'${m.meRing}',fillColor:'${m.meFill}',fillOpacity:1,weight:3}).addTo(map);
 
@@ -85,31 +89,66 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean) {
 </html>`;
 }
 
+type FeedState = 'normal' | 'empty' | 'error';
+
+// 피드 필터 칩: 러닝 거리 N km 이상만 표시 (캔버스는 칩 UI만 정의 — 해석은 2026-10-18 확인 필요)
+const CHIPS = [
+  { label: '전체', minKm: 0 },
+  { label: '1km', minKm: 1 },
+  { label: '5km', minKm: 5 },
+  { label: '15km', minKm: 15 },
+] as const;
+
 export function MapFeed() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const tabClearance = useTabBarClearance();
   const c = useColors();
   const dark = useScheme() === 'dark';
   const styles = useMemo(() => makeStyles(c), [c]);
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
   // 테마가 바뀌면 지도를 다시 그린다(재로드 없는 전환은 D2 __setTheme)
-  const html = useMemo(() => (center ? buildHtml(center.lat, center.lng, c, dark) : ''), [center, c, dark]);
+  const html = useMemo(
+    () => (center ? buildHtml(center.lat, center.lng, c, dark, tabClearance + 8) : ''),
+    [center, c, dark, tabClearance],
+  );
   const [selected, setSelected] = useState<RunMarker | null>(null);
+  const [feedState, setFeedState] = useState<FeedState>('normal');
+  const [minKm, setMinKm] = useState(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const skipFirstFocus = useRef(true);
   const lastViewport = useRef<ViewportMessage | null>(null);
+  const lastRuns = useRef<RunMarker[] | null>(null);
+  const minKmRef = useRef(minKm);
   const requestSeq = useRef(0);
 
-  // WebView는 한 번만 로드하고, 마커는 __setRuns로만 갈아 끼운다.
+  // 마지막으로 받은 런을 칩 조건으로 걸러 지도에 반영한다(WebView는 다시 로드하지 않는다)
+  const showRuns = useCallback((min: number) => {
+    const runs = lastRuns.current;
+    if (!runs) return;
+    const visible = runs.filter((run) => run.distanceKm >= min);
+    setFeedState(visible.length > 0 ? 'normal' : 'empty');
+    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(visible)});true;`);
+  }, []);
+
   const fetchRuns = useCallback(async ({ lat, lng, radius }: ViewportMessage) => {
     const seq = ++requestSeq.current;
     try {
       const res = await client.get<RunMarker[]>(`/runs?lat=${lat}&lng=${lng}&radius=${radius}`);
       // 늦게 도착한 이전 요청의 응답은 버린다
       if (seq !== requestSeq.current) return;
-      webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(res.data)});true;`);
-    } catch {}
-  }, []);
+      lastRuns.current = res.data;
+      showRuns(minKmRef.current);
+    } catch {
+      if (seq === requestSeq.current) setFeedState('error');
+    }
+  }, [showRuns]);
+
+  useEffect(() => {
+    minKmRef.current = minKm;
+    showRuns(minKm);
+  }, [minKm, showRuns]);
 
   useEffect(() => {
     (async () => {
@@ -135,6 +174,10 @@ export function MapFeed() {
       webViewRef.current?.injectJavaScript(`map.flyTo([${latitude},${longitude}],14);true;`);
     } catch {}
   }, []);
+
+  const retry = useCallback(() => {
+    if (lastViewport.current) fetchRuns(lastViewport.current);
+  }, [fetchRuns]);
 
   if (!html) {
     return (
@@ -166,19 +209,69 @@ export function MapFeed() {
         }}
       />
 
-      {/* 헤더 오버레이 */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <AppLogo />
+      {/* 헤더: 워드마크 + 거리 필터 칩 */}
+      <View
+        style={[styles.header, { paddingTop: insets.top + 8 }]}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+      >
+        <View style={styles.logoRow}>
+          <Wordmark width={71} />
+        </View>
+        <View style={styles.chips}>
+          {CHIPS.map((chip) => {
+            const on = chip.minKm === minKm;
+            return (
+              <Pressable
+                key={chip.label}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                onPress={() => setMinKm(chip.minKm)}
+                style={[styles.chip, on && styles.chipOn]}
+              >
+                <Text style={[styles.chipText, on && styles.chipTextOn]}>{chip.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
 
-      <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
-        <Text style={styles.myLocTxt}>📍</Text>
+      {/* 빈 상태 · 조회 실패 */}
+      {feedState !== 'normal' && headerHeight > 0 && (
+        <View
+          accessibilityRole={feedState === 'error' ? 'alert' : 'summary'}
+          style={[styles.notice, { top: headerHeight + 12 }]}
+        >
+          <View style={styles.noticeIcon}>
+            {feedState === 'error' ? <AlertIcon color={c.text2} /> : <RouteIcon color={c.text2} />}
+          </View>
+          <View style={styles.noticeBody}>
+            <Text style={styles.noticeTitle}>
+              {feedState === 'error' ? '불러오지 못했어요' : '이 근처에는 아직 러닝 기록이 없어요'}
+            </Text>
+            {feedState === 'empty' && <Text style={styles.noticeSub}>지도를 옮기거나 첫 러닝을 기록해 보세요</Text>}
+          </View>
+          {feedState === 'error' && (
+            <Pressable accessibilityRole="button" onPress={retry} style={styles.retryBtn}>
+              <Text style={styles.retryText}>다시 시도</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="내 위치로 이동"
+        style={[styles.myLocBtn, { bottom: tabClearance + 16 }]}
+        onPress={handleMyLocation}
+      >
+        <LocateIcon color={c.value} />
       </Pressable>
 
       {selected && (
         <MapPopupCard
           run={selected}
           baseUrl={BASE_URL}
+          bottom={tabClearance + 12}
           onClose={() => setSelected(null)}
           onUserPress={(userId) => {
             setSelected(null);
@@ -191,21 +284,47 @@ export function MapFeed() {
 }
 
 const makeStyles = (c: Palette) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.bg },
+  container: { flex: 1, backgroundColor: c.map.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg },
   header: {
     position: 'absolute', top: 0, left: 0, right: 0,
-    alignItems: 'center',
-    paddingHorizontal: 20, paddingBottom: 14,
+    paddingHorizontal: 16, paddingBottom: 12,
     backgroundColor: c.header,
     borderBottomWidth: 1, borderBottomColor: c.border,
   },
+  logoRow: { alignItems: 'center', marginVertical: 6 },
+  chips: { flexDirection: 'row', gap: 6, marginTop: 10 },
+  chip: {
+    height: 34, paddingHorizontal: 14, borderRadius: 17, justifyContent: 'center',
+    borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
+  },
+  chipOn: { borderColor: c.accent, backgroundColor: c.accent },
+  chipText: { fontFamily: FONT.semibold, fontSize: 13, color: c.text2 },
+  chipTextOn: { fontFamily: FONT.bold, color: c.ink },
+  notice: {
+    position: 'absolute', left: 16, right: 16,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingVertical: 12, paddingLeft: 14, paddingRight: 12, borderRadius: 16,
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+    shadowColor: c.shadow, shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4,
+  },
+  noticeIcon: {
+    width: 36, height: 36, borderRadius: 18, backgroundColor: c.surface2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  noticeBody: { flex: 1, gap: 2 },
+  noticeTitle: { fontFamily: FONT.semibold, fontSize: 15, lineHeight: 20, color: c.text },
+  noticeSub: { fontFamily: FONT.regular, fontSize: 13, lineHeight: 18, color: c.text2 },
+  retryBtn: {
+    height: 44, paddingHorizontal: 16, borderRadius: 22, justifyContent: 'center',
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+  },
+  retryText: { fontFamily: FONT.semibold, fontSize: 14, color: c.text },
   myLocBtn: {
-    position: 'absolute', bottom: 100, right: 16,
+    position: 'absolute', right: 16,
     width: 44, height: 44, borderRadius: 22,
     backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: c.border,
     shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
   },
-  myLocTxt: { fontSize: 20 },
 });
