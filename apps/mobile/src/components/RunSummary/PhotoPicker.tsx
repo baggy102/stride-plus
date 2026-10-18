@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { View, Text, Pressable, Image, Alert, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Image, Alert, Linking, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useColors } from '@/theme/useColors';
 import type { Palette } from '@/theme/colors';
@@ -15,7 +15,15 @@ export function PhotoPicker({ photos, onChange }: Props) {
   const pick = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
-      Alert.alert('권한 필요', '사진 접근 권한이 필요합니다.');
+      // 거부해도 기록 저장은 계속할 수 있다. 사진만 못 붙인다
+      Alert.alert(
+        '사진 접근이 꺼져 있어요',
+        '러닝 기록에 사진을 붙이려면 설정에서 사진 접근을 허용해 주세요.',
+        [
+          { text: '나중에', style: 'cancel' },
+          { text: '설정 열기', onPress: () => { Linking.openSettings(); } },
+        ],
+      );
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
