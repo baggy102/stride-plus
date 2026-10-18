@@ -1,4 +1,3 @@
-import { Platform } from 'react-native';
 import { create } from 'zustand';
 import * as Location from 'expo-location';
 
@@ -22,7 +21,6 @@ interface RunStore {
   _addCoordinate: (lng: number, lat: number) => void;
 }
 
-let webWatchId: number | null = null;
 let nativeWatchSub: Location.LocationSubscription | null = null;
 
 export const useRunStore = create<RunStore>((set, get) => ({
@@ -37,35 +35,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
     set((s) => ({ coordinates: [...s.coordinates, [lng, lat]] })),
 
   startTracking: async () => {
-    if (Platform.OS === 'web') {
-      if (!navigator.geolocation) throw new Error('geolocation_not_supported');
-
-      // 좌표 초기화 → getCurrentPosition으로 권한 요청 + 첫 좌표 즉시 확보
-      set({ coordinates: [], elapsedSeconds: 0 });
-
-      await new Promise<void>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            useRunStore.getState()._addCoordinate(pos.coords.longitude, pos.coords.latitude);
-            resolve();
-          },
-          (err) => reject(new Error(err.message)),
-          { enableHighAccuracy: false, timeout: 15000 },
-        );
-      });
-
-      set({ isTracking: true });
-
-      webWatchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          useRunStore.getState()._addCoordinate(pos.coords.longitude, pos.coords.latitude);
-        },
-        (err) => console.warn('[run] watchPosition error:', err.message),
-        { enableHighAccuracy: false, maximumAge: 3000 },
-      );
-      return;
-    }
-
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('location_permission_denied');
 
@@ -86,15 +55,8 @@ export const useRunStore = create<RunStore>((set, get) => ({
   stopTracking: () => {
     const { coordinates, elapsedSeconds } = get();
 
-    if (Platform.OS === 'web') {
-      if (webWatchId !== null) {
-        navigator.geolocation.clearWatch(webWatchId);
-        webWatchId = null;
-      }
-    } else {
-      nativeWatchSub?.remove();
-      nativeWatchSub = null;
-    }
+    nativeWatchSub?.remove();
+    nativeWatchSub = null;
 
     set({ isTracking: false });
 
