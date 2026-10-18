@@ -1,4 +1,4 @@
-import { Controller, Get, Req, Param, NotFoundException } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, Req, Param, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
 
 @Controller('users')
@@ -16,6 +16,12 @@ export class UsersController {
       username: user.username,
       profileImageUrl: user.profileImageUrl,
     };
+  }
+
+  @Delete('me')
+  @HttpCode(204)
+  deleteMe(@Req() req: { user: { sub: string } }) {
+    return this.usersService.deleteAccount(req.user.sub);
   }
 
   @Get(':id')

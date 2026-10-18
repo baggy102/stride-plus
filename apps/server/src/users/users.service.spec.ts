@@ -1,13 +1,26 @@
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
+import { Types } from 'mongoose';
+import { promises as fs } from 'fs';
+import { join } from 'path';
 import { UsersService } from './users.service';
 import { User } from './users.schema';
+import { Run } from '../runs/runs.schema';
+import { Post } from '../posts/posts.schema';
+import { RefreshToken } from '../auth/auth.schema';
+
+const execOf = (value: unknown = {}) => ({ exec: jest.fn().mockResolvedValue(value) });
 
 const mockUserModel = {
   findOne: jest.fn(),
   findById: jest.fn(),
   create: jest.fn(),
+  updateMany: jest.fn(),
+  deleteOne: jest.fn(),
 };
+const mockRunModel = { find: jest.fn(), deleteMany: jest.fn() };
+const mockPostModel = { deleteMany: jest.fn(), updateMany: jest.fn() };
+const mockRefreshTokenModel = { deleteMany: jest.fn() };
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -17,6 +30,9 @@ describe('UsersService', () => {
       providers: [
         UsersService,
         { provide: getModelToken(User.name), useValue: mockUserModel },
+        { provide: getModelToken(Run.name), useValue: mockRunModel },
+        { provide: getModelToken(Post.name), useValue: mockPostModel },
+        { provide: getModelToken(RefreshToken.name), useValue: mockRefreshTokenModel },
       ],
     }).compile();
 
@@ -55,5 +71,60 @@ describe('UsersService', () => {
     const result = await service.create('c@d.com', 'hash', 'charlie');
     expect(result).toEqual(newUser);
     expect(mockUserModel.create).toHaveBeenCalledWith({ email: 'c@d.com', passwordHash: 'hash', username: 'charlie' });
+  });
+
+  describe('deleteAccount', () => {
+    const USER_ID = '64b7f0c2a1b2c3d4e5f60719';
+    const oid = new Types.ObjectId(USER_ID);
+    const runId = new Types.ObjectId();
+    let unlinkSpy: jest.SpyInstance;
+    const order: string[] = [];
+
+    beforeEach(() => {
+      order.length = 0;
+      const track = (name: string, value: unknown = {}) =>
+        jest.fn(() => { order.push(name); return execOf(value); });
+      mockRunModel.find.mockReturnValue({
+        select: () => ({ lean: () => execOf([
+          { _id: runId, photoUrls: ['/uploads/a.jpg', '/uploads/../../evil.txt'], routeImageUrl: '/uploads/r.png' },
+        ]) }),
+      });
+      mockPostModel.deleteMany.mockImplementation(track('posts.deleteMany'));
+      mockPostModel.updateMany.mockImplementation(track('posts.updateMany'));
+      mockRunModel.deleteMany.mockImplementation(track('runs.deleteMany'));
+      mockUserModel.updateMany.mockImplementation(track('users.updateMany'));
+      mockRefreshTokenModel.deleteMany.mockImplementation(track('tokens.deleteMany'));
+      mockUserModel.deleteOne.mockImplementation(track('users.deleteOne'));
+      unlinkSpy = jest.spyOn(fs, 'unlink').mockResolvedValue(undefined);
+    });
+
+    afterEach(() => unlinkSpy.mockRestore());
+
+    it('연관 데이터를 각 조건으로 지우고 사용자 문서는 마지막에 지운다', async () => {
+      await service.deleteAccount(USER_ID);
+
+      expect(mockPostModel.deleteMany).toHaveBeenCalledWith({ $or: [{ userId: oid }, { runId: { $in: [runId] } }] });
+      expect(mockPostModel.updateMany).toHaveBeenCalledWith({ likes: oid }, { $pull: { likes: oid } });
+      expect(mockRunModel.deleteMany).toHaveBeenCalledWith({ userId: oid });
+      expect(mockUserModel.updateMany).toHaveBeenCalledWith({ following: oid }, { $pull: { following: oid } });
+      expect(mockRefreshTokenModel.deleteMany).toHaveBeenCalledWith({ userId: oid });
+      expect(mockUserModel.deleteOne).toHaveBeenCalledWith({ _id: oid });
+      expect(order[order.length - 1]).toBe('users.deleteOne');
+    });
+
+    it('업로드 파일은 파일명만으로 uploads 폴더 안에서 지운다', async () => {
+      await service.deleteAccount(USER_ID);
+
+      const uploads = join(process.cwd(), 'uploads');
+      expect(unlinkSpy).toHaveBeenCalledWith(join(uploads, 'a.jpg'));
+      expect(unlinkSpy).toHaveBeenCalledWith(join(uploads, 'r.png'));
+      expect(unlinkSpy).toHaveBeenCalledWith(join(uploads, 'evil.txt'));
+      for (const [path] of unlinkSpy.mock.calls) expect(String(path).startsWith(uploads)).toBe(true);
+    });
+
+    it('파일 삭제가 실패해도 예외 없이 끝난다', async () => {
+      unlinkSpy.mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+      await expect(service.deleteAccount(USER_ID)).resolves.toBeUndefined();
+    });
   });
 });
