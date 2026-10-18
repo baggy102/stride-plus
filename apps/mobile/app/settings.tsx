@@ -3,9 +3,10 @@ import { View, Text, Pressable, ScrollView, Modal, ActivityIndicator, StyleSheet
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/auth';
-import { BackIcon, ChevronIcon } from '@/components/icons';
+import { BackIcon, CheckIcon, ChevronIcon } from '@/components/icons';
 import { LEGAL_DOCS, SUPPORT_EMAIL } from '@/config/legal';
 import { useColors } from '@/theme/useColors';
+import { useThemeStore, type ThemeMode } from '@/store/theme';
 import { FONT } from '@/theme/fonts';
 import type { Palette } from '@/theme/colors';
 
@@ -16,6 +17,13 @@ const SETTINGS_LEGAL_LABELS: Record<string, string> = { location: '위치기반�
 
 type Dialog = 'none' | 'legal' | 'delete';
 
+// 화면 테마(U13) — 캔버스 Profile-ThemeMenu 제안안의 3항목
+const THEME_OPTIONS: { mode: ThemeMode; label: string }[] = [
+  { mode: 'system', label: '시스템 설정' },
+  { mode: 'light', label: '라이트' },
+  { mode: 'dark', label: '다크' },
+];
+
 // 확정 UI S11 설정 · S12 계정 삭제 확인 · S14 약관 준비 중 안내 (캔버스 추가 화면 ③)
 export default function SettingsScreen() {
   const c = useColors();
@@ -23,6 +31,7 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { user, logout, deleteAccount } = useAuthStore();
+  const { mode: themeMode, setMode: setThemeMode } = useThemeStore();
   const [dialog, setDialog] = useState<Dialog>('none');
   const [deleting, setDeleting] = useState(false);
   const [deleteFailed, setDeleteFailed] = useState(false);
@@ -66,6 +75,25 @@ export default function SettingsScreen() {
             <Text style={styles.rowLabel}>이메일</Text>
             <Text style={styles.rowValue} numberOfLines={1}>{user?.email ?? ''}</Text>
           </View>
+        </View>
+
+        <Text style={[styles.sectionTitle, styles.sectionGap]}>화면 테마</Text>
+        <View accessibilityRole="radiogroup" style={styles.group}>
+          {THEME_OPTIONS.map((option, index) => {
+            const on = themeMode === option.mode;
+            return (
+              <Pressable
+                key={option.mode}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: on }}
+                onPress={() => setThemeMode(option.mode)}
+                style={[styles.row, styles.linkRow, index > 0 && styles.rowDivider]}
+              >
+                <Text style={styles.rowLabel}>{option.label}</Text>
+                {on && <CheckIcon size={22} color={c.value} />}
+              </Pressable>
+            );
+          })}
         </View>
 
         <Text style={[styles.sectionTitle, styles.sectionGap]}>약관 및 정책</Text>
