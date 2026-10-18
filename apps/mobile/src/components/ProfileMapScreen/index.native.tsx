@@ -8,6 +8,7 @@ import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { AppLogo } from '@/components/AppLogo';
 import { MapPopupCard } from '@/components/MapPopupCard';
+import { GearIcon } from '@/components/icons';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
@@ -194,6 +195,17 @@ export function ProfileMapScreen({ userId }: Props) {
       {/* 프로필 헤더 오버레이 */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <AppLogo />
+        {/* 내 프로필만 설정 진입(S11) */}
+        {!userId && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="설정"
+            onPress={() => router.push('/settings')}
+            style={[styles.gearBtn, { top: insets.top + 4 }]}
+          >
+            <GearIcon color={c.text2} />
+          </Pressable>
+        )}
         <View style={styles.userRow}>
           <View style={styles.avatar}>
             {profile?.profileImageUrl ? (
@@ -237,6 +249,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingHorizontal: 20, paddingBottom: 16,
     borderBottomWidth: 1, borderBottomColor: c.border,
   },
+  gearBtn: { position: 'absolute', right: 6, width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   userRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12, alignSelf: 'stretch' },
   avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   avatarImg: { width: 52, height: 52, borderRadius: 26 },

@@ -21,6 +21,8 @@ interface AuthStore {
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  /** 계정 삭제(A6). 실패하면 예외를 그대로 던진다 — 화면이 오류를 표시한다 */
+  deleteAccount: () => Promise<void>;
   register: (username: string, email: string, password: string) => Promise<void>;
   refreshToken: () => Promise<void>;
   clearError: () => void;
@@ -72,6 +74,13 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (refreshToken) {
       await axios.post(`${BASE_URL}/auth/logout`, { refreshToken }, { timeout: 10_000 }).catch(() => {});
     }
+    await SecureStorage.deleteItem('access_token');
+    await SecureStorage.deleteItem('refresh_token');
+    set({ user: null, isAuthenticated: false, error: null });
+  },
+
+  deleteAccount: async () => {
+    await client.delete('/users/me');
     await SecureStorage.deleteItem('access_token');
     await SecureStorage.deleteItem('refresh_token');
     set({ user: null, isAuthenticated: false, error: null });
