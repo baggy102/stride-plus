@@ -3,6 +3,7 @@ import axios from 'axios';
 import * as SecureStorage from '@/utils/secureStorage';
 import client, { BASE_URL } from '@/api/client';
 import { extractMessage } from '@/api/errors';
+import { LEGAL_VERSIONS } from '@/config/legal';
 
 interface User {
   _id: string;
@@ -83,7 +84,15 @@ export const useAuthStore = create<AuthStore>((set) => ({
         accessToken: string;
         refreshToken: string;
         user: User;
-      }>('/auth/register', { username, email, password });
+      }>('/auth/register', {
+        username,
+        email,
+        password,
+        // 가입 화면은 필수 약관 3종에 모두 동의해야 이 함수를 부른다(C5)
+        termsVersion: LEGAL_VERSIONS.terms,
+        privacyVersion: LEGAL_VERSIONS.privacy,
+        locationVersion: LEGAL_VERSIONS.location,
+      });
       await SecureStorage.setItem('access_token', data.accessToken);
       await SecureStorage.setItem('refresh_token', data.refreshToken);
       set({ user: data.user, isAuthenticated: true });
