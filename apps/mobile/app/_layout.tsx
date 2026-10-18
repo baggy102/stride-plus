@@ -1,4 +1,5 @@
 import '../styles';
+import '@/tasks/locationTask'; // 백그라운드 위치 태스크 등록(모듈 최상위)
 import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import { LoadingView } from '@/components/LoadingView';
