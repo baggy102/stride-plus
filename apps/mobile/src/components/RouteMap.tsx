@@ -4,6 +4,7 @@ import { WebView } from 'react-native-webview';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
 import type { Palette } from '@/theme/colors';
+import { leafletHead } from '@/components/map/mapHtml';
 
 // 경로를 보여 주는 정적 지도(손으로 움직이지 않음). 기록 중(S06)·요약(S07)·상세(S10)에서 쓴다.
 // 좌표는 GeoJSON [lng, lat]. HTML은 테마가 바뀔 때만 다시 만들고, 경로는 __setRoute로만 갱신한다.
@@ -28,8 +29,7 @@ function buildHtml(p: Palette, dark: boolean) {
 <html>
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  ${leafletHead({ cluster: false })}
   <style>
     * { margin:0; padding:0; }
     html, body, #map { width:100%; height:100%; background:${m.bg}; }

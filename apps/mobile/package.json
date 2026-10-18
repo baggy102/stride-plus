@@ -6,7 +6,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "css:build": "tailwindcss -i ./global.css -o ./tailwind.output.css --content './app/**/*.{js,jsx,ts,tsx}' --content './src/**/*.{js,jsx,ts,tsx}'"
+    "css:build": "tailwindcss -i ./global.css -o ./tailwind.output.css --content './app/**/*.{js,jsx,ts,tsx}' --content './src/**/*.{js,jsx,ts,tsx}'",
+    "gen:map-assets": "node scripts/gen-map-assets.js"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -43,6 +44,7 @@
   "devDependencies": {
     "@babel/core": "^7.24.0",
     "@types/react": "~19.1.17",
+    "leaflet.markercluster": "1.4.1",
     "tailwindcss": "3.4.10",
     "typescript": "^5.3.3"
   }

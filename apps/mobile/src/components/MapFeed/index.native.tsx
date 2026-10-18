@@ -12,7 +12,8 @@ import { MapPopupCard } from '@/components/MapPopupCard';
 import client, { BASE_URL } from '@/api/client';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
-import { withAlpha, type Palette } from '@/theme/colors';
+import type { Palette } from '@/theme/colors';
+import { leafletHead, markerIconsScript, MARKER_PULSE_CSS } from '@/components/map/mapHtml';
 import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
@@ -30,22 +31,14 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOf
 <html>
 <head>
   <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.css"/>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.4.1/dist/MarkerCluster.Default.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.4.1/dist/leaflet.markercluster.js"></script>
+  ${leafletHead({ cluster: true })}
   <style>
     * { margin:0; padding:0; }
     body { background: ${m.bg}; }
     #map { width:100vw; height:100vh; }
     .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
     .leaflet-bottom { bottom: ${bottomOffset}px !important; }
-    @keyframes runDotPulse {
-      0%, 100% { transform: scale(1); opacity: 0.7; }
-      50% { transform: scale(2.6); opacity: 0; }
-    }
-    .run-dot-pulse { animation: runDotPulse 2s ease-out infinite; }
+${MARKER_PULSE_CSS}
   </style>
 </head>
 <body>
@@ -55,8 +48,7 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOf
   L.tileLayer('${CARTO_TILE_URL}',{attribution:'${CARTO_ATTRIBUTION}',className:'${dark ? 'map-tiles-dark' : ''}'}).addTo(map);
   L.circleMarker([${lat},${lng}],{radius:9,color:'${m.meRing}',fillColor:'${m.meFill}',fillOpacity:1,weight:3}).addTo(map);
 
-  var dotIcon=L.divIcon({html:'<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:${m.pulse}"></div><div style="width:11px;height:11px;border-radius:50%;background:${m.dot};border:2px solid ${m.dotBorder};box-shadow:0 0 8px ${withAlpha(m.dot, 0.7)}"></div></div>',className:'',iconSize:[22,22],iconAnchor:[11,11]});
-  function clusterIcon(c){var n=c.getChildCount();return L.divIcon({html:'<div style="width:48px;height:48px;border-radius:50%;background:${m.clBg};color:${m.clRing};border:2px solid ${m.clRing};box-shadow:0 0 14px ${m.clGlow},0 0 4px ${withAlpha(m.clRing, 0.25)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+'+n+'</div>',className:'',iconSize:[48,48],iconAnchor:[24,24]});}
+${markerIconsScript(p)}
 
   var group=L.markerClusterGroup({iconCreateFunction:clusterIcon,showCoverageOnHover:false,maxClusterRadius:60});
   map.addLayer(group);
