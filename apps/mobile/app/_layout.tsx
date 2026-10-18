@@ -1,6 +1,7 @@
 import '../styles';
 import { useEffect, useMemo } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View } from 'react-native';
+import { LoadingView } from '@/components/LoadingView';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Slot, useRouter, useSegments, useRootNavigationState } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -64,8 +65,8 @@ export default function RootLayout() {
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         <Slot />
         {isHydrating && (
-          <View style={{ position: 'absolute', inset: 0, backgroundColor: c.bg, alignItems: 'center', justifyContent: 'center' }}>
-            <ActivityIndicator size="large" color={c.value} />
+          <View style={{ position: 'absolute', inset: 0 }}>
+            <LoadingView />
           </View>
         )}
       </View>
