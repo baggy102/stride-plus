@@ -6,6 +6,7 @@ const mockAuthService = {
   register: jest.fn(),
   login: jest.fn(),
   refresh: jest.fn(),
+  logout: jest.fn(),
 };
 
 describe('AuthController', () => {
@@ -43,5 +44,11 @@ describe('AuthController', () => {
     const result = await controller.refresh({ refreshToken: 'old-rt' });
     expect(result).toEqual({ accessToken: 'new-at', refreshToken: 'new-rt' });
     expect(mockAuthService.refresh).toHaveBeenCalledWith('old-rt');
+  });
+
+  it('logout — body의 refreshToken으로 폐기', async () => {
+    mockAuthService.logout.mockResolvedValue(undefined);
+    await controller.logout({ refreshToken: 'rt' });
+    expect(mockAuthService.logout).toHaveBeenCalledWith('rt');
   });
 });

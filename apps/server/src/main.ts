@@ -11,7 +11,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableShutdownHooks();
   app.enableCors({
-    origin: process.env.CORS_ALLOW_ALL === 'true'
+    origin: app.get(ConfigService).get('CORS_ALLOW_ALL') === 'true'
       ? true
       : ['http://localhost:8081', 'http://localhost:8082', 'http://localhost:8083'],
     credentials: true,

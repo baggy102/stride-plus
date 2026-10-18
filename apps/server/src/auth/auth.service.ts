@@ -10,6 +10,7 @@ import { Model } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { RefreshToken, RefreshTokenDocument } from './auth.schema';
 import { UsersService } from '../users/users.service';
+import { LEGAL_VERSIONS } from './legal-versions';
 
 @Injectable()
 export class AuthService {
@@ -25,7 +26,11 @@ export class AuthService {
     const existing = await this.usersService.findByEmail(email);
     if (existing) throw new ConflictException('Email already in use');
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = await this.usersService.create(email, passwordHash, username);
+    // 동의 버전은 RegisterDto가 현재 버전과 같은지 검증했다
+    const user = await this.usersService.create(email, passwordHash, username, {
+      ...LEGAL_VERSIONS,
+      agreedAt: new Date(),
+    });
     const tokens = await this.issueTokens(user._id.toString(), user.email);
     return {
       ...tokens,
@@ -65,6 +70,12 @@ export class AuthService {
 
     await stored.deleteOne();
     return this.issueTokens(payload.sub, user.email);
+  }
+
+  // 이 기기의 refresh 토큰만 지운다. 없는 토큰이어도 성공(멱등) — 토큰 유효 여부를 드러내지 않는다.
+  // 만료된 토큰도 지울 수 있게 JWT 검증은 하지 않는다.
+  async logout(token: string) {
+    await this.refreshTokenModel.deleteOne({ token });
   }
 
   private async issueTokens(userId: string, email: string) {

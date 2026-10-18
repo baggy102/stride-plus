@@ -6,7 +6,8 @@ export default function UserProfileScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: '프로필', headerTransparent: true, headerTintColor: '#18181b' }} />
+      {/* S09 헤더(뒤로·워드마크·사용자 메뉴)는 ProfileMapScreen이 그린다 */}
+      <Stack.Screen options={{ headerShown: false }} />
       <ProfileMapScreen userId={id} />
     </>
   );

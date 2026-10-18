@@ -1,18 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, Pressable, TextInput,
-  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet,
+  View, Text, Pressable, TextInput, Modal,
+  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Dimensions,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRunStore } from '@/store/run';
 import client from '@/api/client';
-import { AppLogo } from '@/components/AppLogo';
-import { FadeInUp } from '@/components/RunSummary/FadeInUp';
+import { Wordmark } from '@/components/Wordmark';
+import { RouteMap } from '@/components/RouteMap';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
-import { MiniMap } from '@/components/RunSummary/MiniMap';
 import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
+import { useColors } from '@/theme/useColors';
+import { FONT } from '@/theme/fonts';
+import { withAlpha, type Palette } from '@/theme/colors';
+import { formatPace } from '@/utils/pace';
 
 function formatTime(sec: number) {
   const h = Math.floor(sec / 3600);
@@ -22,15 +25,23 @@ function formatTime(sec: number) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function formatPace(sec: number) {
-  if (sec === 0) return "--'--\"";
-  const m = Math.floor(sec / 60);
-  const s = Math.round(sec % 60);
-  return `${m}'${String(s).padStart(2, '0')}"`;
+// 「10월 16일 목요일 · 오전 7:05」
+function formatFinishedAt(d: Date) {
+  const weekday = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
+  const h = d.getHours();
+  const ampm = h < 12 ? '오전' : '오후';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${weekday}요일 · ${ampm} ${h12}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+// 확정 UI S07 러닝 요약 — 최종 보드 Summary (경로 지도·거리 크게·Time/Avg Pace·사진·코스 소개·저장, 삭제 확인)
 export default function RunSummaryScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  // 지도 높이는 화면 루트의 실제 높이 기준(창 크기 값이 다시 그릴 때 틀어져 지도가 접히던 문제, 2026-10-19 QR)
+  const [rootHeight, setRootHeight] = useState(() => Dimensions.get('screen').height);
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const pendingSummary = useRunStore((s) => s.pendingSummary);
   const resetRun = useRunStore((s) => s.resetRun);
   const clearPendingSummary = useRunStore((s) => s.clearPendingSummary);
@@ -38,6 +49,8 @@ export default function RunSummaryScreen() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [finishedAt] = useState(() => new Date());
 
   // 요약 데이터 없이 직접 진입한 경우(새로고침 등) 기록 탭으로 되돌림
   useEffect(() => {
@@ -46,8 +59,10 @@ export default function RunSummaryScreen() {
 
   if (!pendingSummary) return null;
   const summary = pendingSummary;
+  const mapHeight = Math.round(rootHeight * 0.39);
 
   const handleDiscard = () => {
+    setConfirmDelete(false);
     resetRun();
     router.replace('/(tabs)/record');
   };
@@ -88,158 +103,167 @@ export default function RunSummaryScreen() {
     }
   };
 
-  const [whole, frac] = summary.distanceKm.toFixed(2).split('.');
-
   return (
-    <View style={{ flex: 1, backgroundColor: '#0A0A0A' }}>
+    <View style={styles.root} onLayout={(e) => setRootHeight(e.nativeEvent.layout.height)}>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
-
-      <LinearGradient
-        colors={['#0D1A20', '#0A0A0A', '#0A0A0A']}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 420 }}
-      />
-
-      {/* 후광 효과 */}
-      <View pointerEvents="none" style={{ position: 'absolute', top: 70, left: 0, right: 0, alignItems: 'center' }}>
-        <View style={{ width: 320, height: 320, borderRadius: 160, backgroundColor: 'rgba(179,229,252,0.06)' }} />
-        <View style={{ position: 'absolute', top: 60, width: 200, height: 200, borderRadius: 100, backgroundColor: 'rgba(179,229,252,0.10)' }} />
-      </View>
-
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          <ScrollView
-            contentContainerStyle={{ paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24, gap: 28 }}
-            keyboardShouldPersistTaps="handled"
-            showsVerticalScrollIndicator={false}
-          >
-            <FadeInUp duration={450} style={{ alignItems: 'center' }}>
-              <AppLogo size="sm" />
-            </FadeInUp>
-
-            {/* 히어로: 거리 */}
-            <FadeInUp delay={120} duration={600} style={{ alignItems: 'center' }}>
-              <View style={styles.runCompleteRow}>
-                <View style={{ width: 7, height: 7, borderRadius: 3.5, backgroundColor: '#B3E5FC' }} />
-                <Text style={styles.runCompleteLabel}>
-                  Run Complete
-                </Text>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+          {/* 경로 지도 */}
+          <View style={{ height: mapHeight }}>
+            <RouteMap coordinates={summary.coordinates} fit="route" style={StyleSheet.absoluteFillObject} />
+            <LinearGradient
+              pointerEvents="none"
+              colors={[withAlpha(c.bg, 0.9), withAlpha(c.bg, 0)]}
+              style={[styles.fadeTop, { height: insets.top + 64 }]}
+            />
+            <LinearGradient pointerEvents="none" colors={[withAlpha(c.bg, 0), c.bg]} style={styles.fadeBottom} />
+            <View accessibilityLabel="지도 범례" style={styles.legend}>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, styles.legendStart]} />
+                <Text style={styles.legendText}>출발</Text>
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'baseline' }}>
-                <Text
-                  style={{ color: '#F5F5F5', fontSize: 88, fontWeight: '900', letterSpacing: -3, lineHeight: 92, fontVariant: ['tabular-nums'] }}
-                >
-                  {whole}
-                </Text>
-                <Text
-                  style={{ color: '#B3E5FC', fontSize: 44, fontWeight: '900', letterSpacing: -1, fontVariant: ['tabular-nums'] }}
-                >
-                  .{frac}
-                </Text>
+              <View style={styles.legendItem}>
+                <View style={[styles.legendDot, styles.legendEnd]} />
+                <Text style={styles.legendText}>도착</Text>
               </View>
-              <Text style={styles.kilometersLabel}>Kilometers</Text>
-            </FadeInUp>
+            </View>
+          </View>
 
-            {/* 시간 / 페이스 */}
-            <FadeInUp delay={220} duration={500} style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
-              <View style={styles.statCol}>
-                <Text style={styles.label}>시간</Text>
-                <Text style={styles.statValue}>
-                  {formatTime(summary.elapsedSeconds)}
-                </Text>
+          {/* 러닝 결과 */}
+          <View accessibilityLabel="러닝 결과" style={styles.result}>
+            <Text style={styles.date}>{formatFinishedAt(finishedAt)}</Text>
+            <View accessibilityLabel={`거리 ${summary.distanceKm.toFixed(2)} km`} style={styles.distanceRow}>
+              <Text style={styles.distance}>{summary.distanceKm.toFixed(2)}</Text>
+              <Text style={styles.distanceUnit}>KM</Text>
+            </View>
+            <View style={styles.grid}>
+              <View style={styles.cell}>
+                <Text style={styles.label}>Time</Text>
+                <Text style={styles.cellValue}>{formatTime(summary.elapsedSeconds)}</Text>
               </View>
-              <View style={{ width: 1, backgroundColor: '#1F1F1F' }} />
-              <View style={styles.statCol}>
-                <Text style={styles.label}>페이스</Text>
-                <Text style={styles.statValue}>
+              <View style={[styles.cell, styles.cellDivider]}>
+                <Text style={styles.label}>Avg Pace</Text>
+                <Text style={[styles.cellValue, styles.valueAccent]}>
                   {formatPace(summary.paceSecPerKm)}
+                  <Text style={styles.cellUnit}> /KM</Text>
                 </Text>
-                <Text style={styles.unit}>/km</Text>
               </View>
-            </FadeInUp>
+            </View>
+          </View>
 
-            {/* 경로 */}
-            <FadeInUp delay={320} duration={500}>
-              <Text style={styles.sectionLabel}>경로</Text>
-              <MiniMap coordinates={summary.coordinates} />
-            </FadeInUp>
+          <View style={styles.form}>
+            <PhotoPicker photos={photos} onChange={setPhotos} />
 
-            {/* 사진 */}
-            <FadeInUp delay={400} duration={500}>
-              <PhotoPicker photos={photos} onChange={setPhotos} />
-            </FadeInUp>
-
-            {/* 소감 */}
-            <FadeInUp delay={480} duration={500}>
-              <Text style={styles.sectionLabel}>소감</Text>
+            <View style={{ gap: 6 }}>
+              <Text style={styles.label}>
+                코스 소개 <Text style={{ fontFamily: FONT.regular }}>(선택)</Text>
+              </Text>
               <TextInput
+                accessibilityLabel="코스 소개"
                 value={description}
                 onChangeText={setDescription}
-                placeholder="오늘 러닝은 어땠나요? (선택)"
-                placeholderTextColor="#808080"
-                multiline
-                numberOfLines={3}
-                style={{
-                  backgroundColor: '#141414', borderColor: '#1F1F1F', borderWidth: 1,
-                  color: '#F5F5F5', borderRadius: 16, padding: 16, minHeight: 88,
-                  textAlignVertical: 'top',
-                }}
+                placeholder="풍경, 경사, 추천 시간대 등"
+                placeholderTextColor={c.muted}
+                style={styles.input}
               />
-            </FadeInUp>
-          </ScrollView>
+              <Text style={styles.help}>다른 러너가 코스를 고를 때 보여요</Text>
+            </View>
+          </View>
+        </ScrollView>
 
-          <FadeInUp
-            delay={560}
-            duration={500}
-            style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 4 }}
+        <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleSave}
+            disabled={saving}
+            style={[styles.saveBtn, { opacity: saving ? 0.8 : 1 }]}
           >
-            <Pressable
-              onPress={handleDiscard}
-              disabled={saving}
-              style={({ pressed }) => [
-                styles.discardButton,
-                { opacity: pressed ? 0.7 : 1 },
-              ]}
-            >
-              <Text style={styles.discardText}>취소</Text>
-            </Pressable>
-            <Pressable
-              onPress={handleSave}
-              disabled={saving}
-              style={({ pressed }) => [
-                styles.saveButton,
-                { backgroundColor: saving ? '#404040' : '#B3E5FC', opacity: pressed ? 0.8 : 1 },
-              ]}
-            >
-              {saving ? (
-                <ActivityIndicator color="#0A0A0A" />
-              ) : (
-                <Text style={styles.saveText}>저장하기</Text>
-              )}
-            </Pressable>
-          </FadeInUp>
-        </KeyboardAvoidingView>
-      </SafeAreaView>
+            {saving ? <ActivityIndicator color={c.ink} /> : <Text style={styles.saveText}>저장하기</Text>}
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+
+      {/* 위쪽: 워드마크 + 삭제 */}
+      <View style={[styles.topBar, { top: insets.top + 4 }]} pointerEvents="box-none">
+        <View style={styles.logo} pointerEvents="none">
+          <Wordmark width={71} />
+        </View>
+        <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(true)} style={styles.deleteBtn}>
+          <Text style={styles.deleteText}>삭제</Text>
+        </Pressable>
+      </View>
+
+      {/* 삭제 확인 */}
+      <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
+        <View style={[styles.scrim, { backgroundColor: c.scrim }]}>
+          <View accessibilityViewIsModal style={styles.dialog}>
+            <Text style={styles.dialogTitle}>이 기록을 저장하지 않고 삭제할까요?</Text>
+            <Text style={styles.dialogBody}>삭제한 기록은 되돌릴 수 없어요.</Text>
+            <View style={styles.dialogActions}>
+              <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(false)} style={styles.dialogKeep}>
+                <Text style={styles.dialogKeepText}>계속 편집</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={handleDiscard} style={styles.dialogDelete}>
+                <Text style={styles.dialogDeleteText}>삭제</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  runCompleteRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
-  runCompleteLabel: { color: '#808080', fontSize: 12, textTransform: 'uppercase', letterSpacing: 3 },
-  kilometersLabel: { color: '#404040', fontSize: 14, textTransform: 'uppercase', letterSpacing: 4, marginTop: 4 },
-  statCol: { alignItems: 'center', flex: 1 },
-  label: { color: '#808080', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 4 },
-  statValue: { color: '#F5F5F5', fontSize: 24, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  unit: { color: '#404040', fontSize: 12 },
-  sectionLabel: { color: '#808080', fontSize: 12, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
-  discardButton: {
-    flex: 1, borderWidth: 1, borderColor: '#1F1F1F', borderRadius: 16,
-    paddingVertical: 16, alignItems: 'center',
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg },
+  fadeTop: { position: 'absolute', left: 0, right: 0, top: 0 },
+  fadeBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 80 },
+  legend: {
+    position: 'absolute', left: 16, bottom: 66, height: 28, paddingHorizontal: 10, borderRadius: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: withAlpha(c.surface, 0.92), borderWidth: 1, borderColor: c.border,
   },
-  discardText: { color: '#808080', fontWeight: '600' },
-  saveButton: { flex: 1, borderRadius: 16, paddingVertical: 16, alignItems: 'center' },
-  saveText: { color: '#01579B', fontWeight: '700' },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
+  legendStart: { borderWidth: 2, borderColor: c.value },
+  legendEnd: { backgroundColor: c.value },
+  valueAccent: { color: c.value },
+  legendDot: { width: 9, height: 9, borderRadius: 5 },
+  legendText: { fontFamily: FONT.semibold, fontSize: 12, color: c.text },
+  topBar: { position: 'absolute', left: 0, right: 0, height: 44, justifyContent: 'center' },
+  logo: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  deleteBtn: { position: 'absolute', right: 8, height: 44, paddingHorizontal: 12, justifyContent: 'center' },
+  deleteText: { fontFamily: FONT.semibold, fontSize: 15, color: c.text2 },
+  result: { marginTop: 10, paddingHorizontal: 24, alignItems: 'center' },
+  date: { fontFamily: FONT.regular, fontSize: 13, lineHeight: 18, color: c.text2 },
+  distanceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  distance: { fontFamily: FONT.num, fontSize: 80, lineHeight: 90, color: c.text, fontVariant: ['tabular-nums'] },
+  distanceUnit: { fontFamily: FONT.num, fontSize: 20, color: c.text2 },
+  grid: {
+    marginTop: 12, alignSelf: 'stretch', flexDirection: 'row',
+    borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.border,
+  },
+  cell: { flex: 1, alignItems: 'center', paddingVertical: 10 },
+  cellDivider: { borderLeftWidth: 1, borderLeftColor: c.border },
+  label: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
+  cellValue: { fontFamily: FONT.num, fontSize: 26, lineHeight: 34, color: c.text, fontVariant: ['tabular-nums'] },
+  cellUnit: { fontFamily: FONT.num, fontSize: 13, color: c.text2 },
+  form: { marginTop: 24, paddingHorizontal: 24, gap: 24 },
+  input: {
+    height: 46, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: c.border,
+    backgroundColor: c.input, color: c.text, fontFamily: FONT.regular, fontSize: 15,
+  },
+  help: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: c.text2 },
+  footer: { paddingHorizontal: 24, paddingTop: 8, backgroundColor: c.bg },
+  saveBtn: { height: 54, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  saveText: { fontFamily: FONT.semibold, fontSize: 16, color: c.ink },
+  scrim: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 35 },
+  dialog: { alignSelf: 'stretch', paddingTop: 24, paddingHorizontal: 20, paddingBottom: 20, borderRadius: 20, backgroundColor: c.surface, gap: 8 },
+  dialogTitle: { fontFamily: FONT.semibold, fontSize: 18, lineHeight: 26, color: c.text },
+  dialogBody: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 22, color: c.text2 },
+  dialogActions: { marginTop: 12, flexDirection: 'row', gap: 8 },
+  dialogKeep: { flex: 1, height: 48, borderRadius: 12, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
+  dialogKeepText: { fontFamily: FONT.semibold, fontSize: 15, color: c.text },
+  dialogDelete: { flex: 1, height: 48, borderRadius: 12, backgroundColor: c.danger, alignItems: 'center', justifyContent: 'center' },
+  dialogDeleteText: { fontFamily: FONT.semibold, fontSize: 15, color: '#FFFFFF' },
 });

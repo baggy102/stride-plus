@@ -1,31 +1,40 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable, type LayoutChangeEvent } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
-import { AppLogo } from '@/components/AppLogo';
+import { Wordmark } from '@/components/Wordmark';
 import { MapPopupCard } from '@/components/MapPopupCard';
+import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
+import { SafetyMenu } from '@/components/SafetyMenu';
+import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
-import { RunMarker } from '../RunCard';
+import { useColors, useScheme } from '@/theme/useColors';
+import { FONT } from '@/theme/fonts';
+import { withAlpha, type Palette } from '@/theme/colors';
+import { RunList, type ListState, type RunWithRoute } from './RunList';
 
 interface UserProfile {
   _id: string;
   username: string;
   profileImageUrl?: string;
-}
-
-interface RunWithRoute extends RunMarker {
-  route: [number, number][];
+  /** 내가 차단한 사용자(C1) */
+  blockedByMe?: boolean;
 }
 
 interface Props {
   userId?: string;
 }
 
-function buildHtml(runs: RunWithRoute[]) {
+type ProfileView = 'map' | 'list';
+
+const PAGE_SIZE = 20;
+
+function buildHtml(runs: RunWithRoute[], p: Palette, dark: boolean) {
+  const m = p.map;
   const runsJson = JSON.stringify(runs);
   return `<!DOCTYPE html>
 <html>
@@ -41,13 +50,13 @@ function buildHtml(runs: RunWithRoute[]) {
     #map { width:100vw; height:100vh; }
     .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
     .leaflet-popup-content-wrapper {
-      background: #141414 !important;
-      border: 1px solid #1F1F1F !important;
+      background: ${p.surface} !important;
+      border: 1px solid ${p.border} !important;
       border-radius: 12px !important;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.7) !important;
-      color: #F5F5F5 !important;
+      box-shadow: 0 4px 24px ${withAlpha(p.shadow, 0.7)} !important;
+      color: ${p.text} !important;
     }
-    .leaflet-popup-tip { background: #141414 !important; }
+    .leaflet-popup-tip { background: ${p.surface} !important; }
     @keyframes runDotPulse {
       0%, 100% { transform: scale(1); opacity: 0.7; }
       50% { transform: scale(2.6); opacity: 0; }
@@ -62,18 +71,18 @@ function buildHtml(runs: RunWithRoute[]) {
   const map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
   L.tileLayer('${CARTO_TILE_URL}', {
     attribution: '${CARTO_ATTRIBUTION}',
-    className: 'map-tiles-dark'
+    className: '${dark ? 'map-tiles-dark' : ''}'
   }).addTo(map);
 
   const dotIcon = L.divIcon({
-    html: '<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:rgba(179,229,252,0.25)"></div><div style="width:11px;height:11px;border-radius:50%;background:#B3E5FC;border:2px solid #0A0A0A;box-shadow:0 0 8px rgba(179,229,252,0.7)"></div></div>',
+    html: '<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:${m.pulse}"></div><div style="width:11px;height:11px;border-radius:50%;background:${m.dot};border:2px solid ${m.dotBorder};box-shadow:0 0 8px ${withAlpha(m.dot, 0.7)}"></div></div>',
     className: '', iconSize: [22,22], iconAnchor: [11,11],
   });
 
   function clusterIcon(cluster) {
     const n = cluster.getChildCount();
     return L.divIcon({
-      html: '<div style="width:48px;height:48px;border-radius:50%;background:#0A0A0A;color:#B3E5FC;border:2px solid #B3E5FC;box-shadow:0 0 14px rgba(179,229,252,0.5),0 0 4px rgba(179,229,252,0.25);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+' + n + '</div>',
+      html: '<div style="width:48px;height:48px;border-radius:50%;background:${m.clBg};color:${m.clRing};border:2px solid ${m.clRing};box-shadow:0 0 14px ${m.clGlow},0 0 4px ${withAlpha(m.clRing, 0.25)};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;letter-spacing:-0.5px;font-family:system-ui">+' + n + '</div>',
       className: '', iconSize: [48,48], iconAnchor: [24,24],
     });
   }
@@ -104,45 +113,82 @@ function buildHtml(runs: RunWithRoute[]) {
 </html>`;
 }
 
+// 확정 UI S08 내 프로필 / S09 다른 사용자 프로필 — 지도·목록 전환
 export function ProfileMapScreen({ userId }: Props) {
+  const c = useColors();
+  const dark = useScheme() === 'dark';
+  const styles = useMemo(() => makeStyles(c), [c]);
+  const router = useRouter();
   const { user } = useAuthStore();
   const insets = useSafeAreaInsets();
   const targetId = userId ?? user?._id;
+  const mine = !userId || userId === user?._id;
+  // 내 프로필 탭(userId 없음)은 플로팅 탭바 위로 올린다. user/[id]는 탭바가 없다
+  const tabClearance = useTabBarClearance();
+  const bottomBase = userId ? insets.bottom + 24 : tabClearance + 12;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [listState, setListState] = useState<ListState>('loading');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [view, setView] = useState<ProfileView>('map');
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const webViewRef = useRef<WebView>(null);
 
-  const fetchData = useCallback(() => {
+  const fetchPage = useCallback(
+    (nextPage: number) => client.get<RunWithRoute[]>(`/runs?userId=${targetId}&page=${nextPage}&limit=${PAGE_SIZE}`),
+    [targetId],
+  );
+
+  // 첫 페이지와 프로필을 다시 불러온다. refresh면 지금 화면을 유지한 채 당겨서 새로고침
+  const load = useCallback(async (mode: 'initial' | 'refresh') => {
     if (!targetId) return;
-    setLoading(true);
-    let done = 0;
-    const finish = () => { if (++done === 2) setLoading(false); };
+    if (mode === 'initial') setListState('loading');
+    else setRefreshing(true);
+    try {
+      const [profileRes, runsRes] = await Promise.all([client.get<UserProfile>(`/users/${targetId}`), fetchPage(1)]);
+      setProfile(profileRes.data);
+      setRuns(runsRes.data);
+      setPage(1);
+      setHasMore(runsRes.data.length === PAGE_SIZE);
+      setListState('ready');
+    } catch {
+      if (mode === 'initial') setListState('error');
+    } finally {
+      setRefreshing(false);
+    }
+  }, [targetId, fetchPage]);
 
-    client.get<UserProfile>(`/users/${targetId}`)
-      .then(({ data }) => setProfile(data))
-      .catch((e) => console.error('[profile] users fetch failed', e))
-      .finally(finish);
-
-    client.get<RunWithRoute[]>(`/runs?userId=${targetId}&limit=50`)
-      .then(({ data }) => setRuns(data))
-      .catch((e) => console.error('[profile] runs fetch failed', e))
-      .finally(finish);
-  }, [targetId]);
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore || refreshing || listState !== 'ready') return;
+    setLoadingMore(true);
+    try {
+      const { data } = await fetchPage(page + 1);
+      setRuns((prev) => [...prev, ...data]);
+      setPage(page + 1);
+      setHasMore(data.length === PAGE_SIZE);
+    } catch {
+      // 다음 페이지 실패는 목록을 유지하고 다음 스크롤에서 다시 시도한다
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, refreshing, listState, fetchPage, page]);
 
   // targetId가 hydration 후 처음 생길 때 fetch (SecureStore 비동기 타이밍 대응)
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    load('initial');
+  }, [load]);
 
-  // 탭 재진입 시 리페치
+  // 탭 재진입 시 화면을 유지한 채 다시 불러온다
   const skipFirstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
     if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
-    fetchData();
-  }, [fetchData]));
+    load('refresh');
+  }, [load]));
 
   const handleMyLocation = useCallback(async () => {
     try {
@@ -152,85 +198,201 @@ export function ProfileMapScreen({ userId }: Props) {
     } catch {}
   }, []);
 
-  const totalKm = runs.reduce((s, r) => s + r.distanceKm, 0);
-  const displayName = profile?.username ?? user?.username ?? '';
+  const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/feed'));
+  const openRun = (runId: string) => router.push(`/run/${runId}`);
+
+  const totalKm = runs.reduce((sum, run) => sum + run.distanceKm, 0);
+  const displayName = profile?.username ?? (mine ? user?.username ?? '' : '');
   const avatarLetter = (displayName || '?')[0].toUpperCase();
+  const blocked = !mine && !!profile?.blockedByMe;
+  const showMap = view === 'map' && listState === 'ready' && !blocked;
 
   return (
-    <View style={styles.container}>
-      {/* 지도 */}
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color="#e53935" size="large" />
+    <View style={[styles.container, { backgroundColor: showMap ? c.map.bg : c.bg }]}>
+      {blocked ? (
+        // S09 차단 상태 — 프로필·러닝을 보여 주지 않는다
+        <View style={styles.blocked}>
+          <View style={styles.blockedIcon}>
+            <BlockedIcon color={c.text2} />
+          </View>
+          <Text style={styles.blockedTitle}>차단한 사용자입니다</Text>
+          <Text style={styles.blockedBody}>이 사용자의 프로필과 러닝을 볼 수 없어요.</Text>
+          <Pressable accessibilityRole="button" onPress={goBack} style={styles.blockedBtn}>
+            <Text style={styles.blockedBtnText}>뒤로 가기</Text>
+          </Pressable>
         </View>
-      ) : (
+      ) : showMap ? (
         <>
           <WebView
             ref={webViewRef}
-            source={{ html: buildHtml(runs) }}
+            source={{ html: buildHtml(runs, c, dark) }}
             style={StyleSheet.absoluteFillObject}
             originWhitelist={['*']}
             onMessage={(e) => {
               try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
             }}
           />
-          <Pressable style={styles.myLocBtn} onPress={handleMyLocation}>
-            <Text style={styles.myLocTxt}>📍</Text>
-          </Pressable>
+          {!selected && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="내 위치로 이동"
+              style={[styles.myLocBtn, { bottom: bottomBase }]}
+              onPress={handleMyLocation}
+            >
+              <LocateIcon color={c.value} />
+            </Pressable>
+          )}
         </>
+      ) : view === 'map' && listState === 'loading' ? (
+        <View accessibilityLabel="불러오는 중" style={styles.center}>
+          <ActivityIndicator color={c.value} size="large" />
+        </View>
+      ) : (
+        <RunList
+          runs={runs}
+          state={listState}
+          baseUrl={BASE_URL}
+          mine={mine}
+          refreshing={refreshing}
+          loadingMore={loadingMore}
+          topInset={headerHeight}
+          bottomInset={bottomBase}
+          onRefresh={() => load('refresh')}
+          onEndReached={loadMore}
+          onRetry={() => load('initial')}
+          onRunPress={openRun}
+          onStartRun={() => router.push('/(tabs)/record')}
+        />
       )}
 
-      {/* 프로필 헤더 오버레이 */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        <AppLogo />
-        <View style={styles.userRow}>
-          <View style={styles.avatar}>
-            {profile?.profileImageUrl ? (
-              <Image source={{ uri: profile.profileImageUrl }} style={styles.avatarImg} />
-            ) : (
-              <Text style={styles.avatarLetter}>{avatarLetter}</Text>
-            )}
+      {/* 프로필 헤더 */}
+      <View
+        onLayout={(e: LayoutChangeEvent) => setHeaderHeight(e.nativeEvent.layout.height)}
+        style={[styles.header, { paddingTop: insets.top + 4 }, blocked && styles.headerBlocked]}
+      >
+        <View style={styles.topRow}>
+          <View style={styles.logo} pointerEvents="none">
+            <Wordmark width={71} />
           </View>
-          <View style={styles.headerInfo}>
-            <Text style={styles.username}>{displayName}</Text>
-            {loading ? (
-              <ActivityIndicator size="small" color="#71717a" />
-            ) : (
-              <Text style={styles.stats}>{totalKm.toFixed(1)} km · {runs.length}회</Text>
-            )}
-          </View>
+          {userId ? (
+            <Pressable accessibilityRole="button" accessibilityLabel="뒤로" onPress={goBack} style={[styles.iconBtn, styles.leftBtn]}>
+              <BackIcon size={24} color={c.text} />
+            </Pressable>
+          ) : (
+            // 내 프로필만 설정 진입(S11)
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="설정"
+              onPress={() => router.push('/settings')}
+              style={[styles.iconBtn, styles.rightBtn]}
+            >
+              <GearIcon color={c.text2} />
+            </Pressable>
+          )}
+          {userId && !mine && !blocked && profile && (
+            <View style={styles.rightMenu}>
+              <SafetyMenu
+                label="사용자 메뉴"
+                targetType="user"
+                targetId={profile._id}
+                author={{ id: profile._id, username: profile.username }}
+                onBlocked={() => { setSelected(null); setProfile({ ...profile, blockedByMe: true }); }}
+              />
+            </View>
+          )}
         </View>
+
+        {!blocked && (
+          <View style={styles.userRow}>
+            <View style={styles.avatar}>
+              {profile?.profileImageUrl ? (
+                <Image source={{ uri: profile.profileImageUrl }} style={styles.avatarImg} />
+              ) : (
+                <Text style={styles.avatarLetter}>{avatarLetter}</Text>
+              )}
+            </View>
+            <View style={styles.headerInfo}>
+              <Text style={styles.username} numberOfLines={1}>{displayName}</Text>
+              <Text style={styles.stats}>
+                {listState === 'ready' ? `${totalKm.toFixed(1)} km · ${runs.length}${hasMore ? '+' : ''}회` : ' '}
+              </Text>
+            </View>
+            <View accessibilityRole="tablist" accessibilityLabel="기록 보기 방식" style={styles.segment}>
+              {(['map', 'list'] as const).map((id) => {
+                const on = view === id;
+                const Icon = id === 'map' ? MapIcon : ListIcon;
+                return (
+                  <Pressable
+                    key={id}
+                    accessibilityRole="tab"
+                    accessibilityState={{ selected: on }}
+                    accessibilityLabel={id === 'map' ? '지도 보기' : '목록 보기'}
+                    onPress={() => { setView(id); setSelected(null); }}
+                    style={[styles.segmentBtn, on && { backgroundColor: c.accent }]}
+                  >
+                    <Icon color={on ? c.ink : c.text2} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
       </View>
 
       {/* 선택된 런 카드 */}
-      {selected && (
+      {showMap && selected && (
         <MapPopupCard
           run={selected}
           baseUrl={BASE_URL}
+          bottom={bottomBase}
           onClose={() => setSelected(null)}
+          onDetailPress={openRun}
         />
       )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = (c: Palette) => StyleSheet.create({
   container: { flex: 1 },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0A0A0A' },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg },
   header: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
-    backgroundColor: 'rgba(10,10,10,0.93)',
-    alignItems: 'center',
-    paddingHorizontal: 20, paddingBottom: 16,
-    borderBottomWidth: 1, borderBottomColor: '#1F1F1F',
+    backgroundColor: c.header,
+    paddingHorizontal: 16, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: c.border,
   },
-  userRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginTop: 12, alignSelf: 'stretch' },
-  avatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: '#B3E5FC', alignItems: 'center', justifyContent: 'center' },
-  avatarImg: { width: 52, height: 52, borderRadius: 26 },
-  avatarLetter: { color: '#01579B', fontSize: 22, fontWeight: 'bold' },
-  headerInfo: { flex: 1 },
-  username: { fontSize: 18, fontWeight: '700', color: '#F5F5F5' },
-  stats: { fontSize: 13, color: '#808080', marginTop: 2 },
-  myLocBtn: { position: 'absolute', bottom: 100, right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22, backgroundColor: '#141414', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#1F1F1F', shadowColor: '#000', shadowOpacity: 0.4, shadowRadius: 6, elevation: 4 },
-  myLocTxt: { fontSize: 20 },
+  headerBlocked: { backgroundColor: c.bg, borderBottomColor: 'transparent' },
+  rightMenu: { position: 'absolute', right: -10 },
+  blocked: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 12, backgroundColor: c.bg },
+  blockedIcon: {
+    width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+  },
+  blockedTitle: { marginTop: 8, fontFamily: FONT.semibold, fontSize: 20, lineHeight: 28, color: c.text },
+  blockedBody: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 22, color: c.text2, textAlign: 'center' },
+  blockedBtn: {
+    marginTop: 16, width: 200, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+  },
+  blockedBtnText: { fontFamily: FONT.semibold, fontSize: 16, color: c.text },
+  topRow: { height: 32, justifyContent: 'center' },
+  logo: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  iconBtn: { position: 'absolute', width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  leftBtn: { left: -10 },
+  rightBtn: { right: -10 },
+  userRow: { marginTop: 10, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  avatar: { width: 46, height: 46, borderRadius: 23, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  avatarImg: { width: 46, height: 46, borderRadius: 23 },
+  avatarLetter: { fontFamily: FONT.semibold, fontSize: 18, color: c.ink },
+  headerInfo: { flex: 1, minWidth: 0 },
+  username: { fontFamily: FONT.semibold, fontSize: 16, lineHeight: 22, color: c.text },
+  stats: { fontFamily: FONT.num, fontSize: 13, lineHeight: 18, color: c.text2 },
+  segment: { height: 50, padding: 3, borderRadius: 13, backgroundColor: c.surface2, flexDirection: 'row', gap: 2 },
+  segmentBtn: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  myLocBtn: {
+    position: 'absolute', right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22,
+    backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: c.border, shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
+  },
 });

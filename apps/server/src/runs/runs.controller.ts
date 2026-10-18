@@ -1,8 +1,8 @@
 import {
-  Controller, Get, Post, Patch, Param, Query, Req,
-  UseInterceptors, UploadedFile, UploadedFiles, Body,
+  Controller, Get, Post, Param, Query, Req,
+  UseInterceptors, UploadedFiles, Body,
 } from '@nestjs/common';
-import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
 import { RunsService } from './runs.service';
@@ -22,26 +22,16 @@ export class RunsController {
   constructor(private readonly runsService: RunsService) {}
 
   @Get()
-  findRuns(@Query() dto: FindRunsDto) {
+  findRuns(@Req() req: { user: { sub: string } }, @Query() dto: FindRunsDto) {
     if (dto.userId) {
-      return this.runsService.findByUser(dto.userId, dto.page, dto.limit);
+      return this.runsService.findByUser(req.user.sub, dto.userId, dto.page, dto.limit);
     }
-    return this.runsService.findNearby(dto.lat ?? 0, dto.lng ?? 0, dto.radius ?? 5000);
+    return this.runsService.findNearby(req.user.sub, dto.lat ?? 0, dto.lng ?? 0, dto.radius ?? 5000);
   }
 
   @Get(':id')
-  findById(@Param('id') id: string) {
-    return this.runsService.findById(id);
-  }
-
-  @Patch(':id/route-image')
-  @UseInterceptors(FileInterceptor('routeImage', { storage }))
-  updateRouteImage(
-    @Param('id') id: string,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    const routeImageUrl = file ? `/uploads/${file.filename}` : '';
-    return this.runsService.updateRouteImage(id, routeImageUrl);
+  findById(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
+    return this.runsService.findById(req.user.sub, id);
   }
 
   @Post()

@@ -2,8 +2,8 @@ import axios from 'axios';
 import * as SecureStorage from '@/utils/secureStorage';
 import Constants from 'expo-constants';
 
+// app.config.js가 EXPO_PUBLIC_API_URL → app.json extra.apiUrl 순으로 넣어 준다.
 export const BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ??
   (Constants.expoConfig?.extra?.apiUrl as string | undefined) ??
   'http://localhost:3000';
 

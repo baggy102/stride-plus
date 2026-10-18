@@ -1,0 +1,160 @@
+import Svg, { Circle, Path } from 'react-native-svg';
+
+// 확정 UI 캔버스의 선 아이콘(viewBox 24, 선 굵기 2)
+interface IconProps {
+  size?: number;
+  color: string;
+}
+
+export function LocateIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Circle cx={12} cy={12} r={6} />
+      <Circle cx={12} cy={12} r={1.8} fill={color} />
+      <Path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3" />
+    </Svg>
+  );
+}
+
+export function RouteIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={6} cy={18} r={2} />
+      <Circle cx={18} cy={6} r={2} />
+      <Path d="M8 18h7.5a3 3 0 0 0 0-6h-7a3 3 0 0 1 0-6H16" />
+    </Svg>
+  );
+}
+
+export function CloseIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M6 6l12 12M18 6 6 18" />
+    </Svg>
+  );
+}
+
+export function AlertIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Circle cx={12} cy={12} r={8.5} />
+      <Path d="M12 7.5v5.5M12 16.5v.01" />
+    </Svg>
+  );
+}
+
+export function PlayIcon({ size = 26, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M7 4.8v14.4c0 .8.9 1.3 1.6.9l11.2-7.2c.6-.4.6-1.4 0-1.8L8.6 3.9C7.9 3.5 7 4 7 4.8Z" />
+    </Svg>
+  );
+}
+
+export function WarnIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 3.5 2.5 20h19L12 3.5Z" />
+      <Path d="M12 10v4.5M12 17.5v.01" />
+    </Svg>
+  );
+}
+
+export function PlusIcon({ size = 18, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}
+
+export function BackIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 5 8 12l7 7" />
+    </Svg>
+  );
+}
+
+export function PhotoIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 6.5h16v12H4z" />
+      <Circle cx={9} cy={10.5} r={1.5} />
+      <Path d="m20 15.5-4.5-4.5L7 18.5" />
+    </Svg>
+  );
+}
+
+export function EyeIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <Circle cx={12} cy={12} r={3} />
+    </Svg>
+  );
+}
+
+export function CheckIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 26 26" fill="none" stroke={color} strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M7 13.5l4 4L19.5 9" />
+    </Svg>
+  );
+}
+
+export function ChevronIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M9 5l7 7-7 7" />
+    </Svg>
+  );
+}
+
+export function MoreIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Circle cx={5} cy={12} r={1.8} />
+      <Circle cx={12} cy={12} r={1.8} />
+      <Circle cx={19} cy={12} r={1.8} />
+    </Svg>
+  );
+}
+
+export function GearIcon({ size = 21, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx={12} cy={12} r={3} />
+      <Path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" />
+    </Svg>
+  );
+}
+
+export function MapIcon({ size = 18, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round">
+      <Path d="M9 4 3 6.5V20l6-2.5 6 2.5 6-2.5V4l-6 2.5L9 4Z" />
+      <Path d="M9 4v13.5M15 6.5V20" />
+    </Svg>
+  );
+}
+
+export function ListIcon({ size = 18, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Path d="M9 6h11M9 12h11M9 18h11" />
+      <Circle cx={4.5} cy={6} r={1} fill={color} />
+      <Circle cx={4.5} cy={12} r={1} fill={color} />
+      <Circle cx={4.5} cy={18} r={1} fill={color} />
+    </Svg>
+  );
+}
+
+export function BlockedIcon({ size = 32, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
+      <Circle cx={12} cy={12} r={8.5} />
+      <Path d="M6 6l12 12" />
+    </Svg>
+  );
+}

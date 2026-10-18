@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,12 +7,19 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  StyleSheet,
 } from 'react-native';
 import { Link } from 'expo-router';
 import { useAuthStore } from '@/store/auth';
-import { AppLogo } from '@/components/AppLogo';
+import { Wordmark } from '@/components/Wordmark';
+import { useColors } from '@/theme/useColors';
+import { FONT } from '@/theme/fonts';
+import type { Palette } from '@/theme/colors';
 
+// 확정 UI S02 로그인
 export default function LoginScreen() {
+  const c = useColors();
+  const styles = useMemo(() => makeStyles(c), [c]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const { login, isLoading, error, clearError } = useAuthStore();
@@ -21,22 +28,20 @@ export default function LoginScreen() {
 
   return (
     <KeyboardAvoidingView
-      className="flex-1"
+      style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View className="flex-1 items-center justify-center bg-brand-dark px-6">
-
-        {/* 로고 */}
-        <View className="mb-3">
-          <AppLogo size="lg" />
+      <View style={styles.form}>
+        <View style={styles.brand}>
+          <Wordmark width={141} />
+          <Text style={styles.tagline}>러닝 기록을 공유하세요</Text>
         </View>
-        <Text className="text-brand-text-secondary mb-10">러닝 기록을 공유하세요</Text>
 
-        {/* 이메일 인풋 */}
         <TextInput
-          className="w-full bg-brand-surface text-brand-text-primary rounded-lg px-4 py-4 mb-3 text-base"
+          style={styles.input}
+          accessibilityLabel="이메일"
           placeholder="이메일"
-          placeholderTextColor="#808080"
+          placeholderTextColor={c.muted}
           keyboardType="email-address"
           autoCapitalize="none"
           autoCorrect={false}
@@ -44,42 +49,67 @@ export default function LoginScreen() {
           onChangeText={setEmail}
           editable={!isLoading}
         />
-
-        {/* 비밀번호 인풋 */}
         <TextInput
-          className="w-full bg-brand-surface text-brand-text-primary rounded-lg px-4 py-4 mb-2 text-base"
+          style={styles.input}
+          accessibilityLabel="비밀번호"
           placeholder="비밀번호"
-          placeholderTextColor="#808080"
+          placeholderTextColor={c.muted}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
           editable={!isLoading}
         />
 
-        {error ? (
-          <Text className="w-full text-red-400 text-sm mb-4">{error}</Text>
-        ) : (
-          <View className="mb-4" />
-        )}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {/* 로그인 버튼 */}
         <Pressable
-          style={{ backgroundColor: isLoading ? '#404040' : '#B3E5FC' }}
-          className="w-full rounded-lg py-4 items-center active:opacity-80"
+          accessibilityRole="button"
+          style={[styles.button, { opacity: isLoading ? 0.8 : 1 }]}
           onPress={() => login(email, password)}
           disabled={isLoading}
         >
           {isLoading ? (
-            <ActivityIndicator color="#0A0A0A" />
+            <ActivityIndicator color={c.ink} />
           ) : (
-            <Text style={{ color: '#01579B' }} className="font-bold text-base">로그인</Text>
+            <Text style={styles.buttonText}>로그인</Text>
           )}
         </Pressable>
 
-        <Link href="/(auth)/register" className="mt-5 text-sm" style={{ color: '#B3E5FC' }}>
-          계정이 없으신가요? 회원가입
-        </Link>
+        <Text style={styles.footer}>
+          계정이 없으신가요?{' '}
+          <Link href="/(auth)/register" style={styles.link}>회원가입</Link>
+        </Text>
       </View>
     </KeyboardAvoidingView>
   );
 }
+
+const makeStyles = (c: Palette) => StyleSheet.create({
+  root: { flex: 1, backgroundColor: c.bg, justifyContent: 'center' },
+  form: { paddingHorizontal: 32, gap: 12 },
+  brand: { alignItems: 'center', gap: 10, marginBottom: 40 },
+  tagline: { fontFamily: FONT.regular, fontSize: 14, lineHeight: 20, color: c.text2 },
+  input: {
+    height: 54,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.input,
+    color: c.text,
+    fontFamily: FONT.regular,
+    fontSize: 15,
+  },
+  error: { fontFamily: FONT.regular, fontSize: 13, color: c.danger },
+  button: {
+    marginTop: 12,
+    height: 54,
+    borderRadius: 10,
+    backgroundColor: c.accent,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: { fontFamily: FONT.semibold, fontSize: 16, color: c.ink },
+  footer: { marginTop: 14, textAlign: 'center', fontFamily: FONT.regular, fontSize: 13, lineHeight: 20, color: c.text2 },
+  link: { fontFamily: FONT.semibold, color: c.value },
+});
