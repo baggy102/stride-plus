@@ -281,6 +281,7 @@ export function MapFeed() {
             setSelected(null);
             router.push(`/user/${userId}`);
           }}
+          onDetailPress={(runId) => router.push(`/run/${runId}`)}
         />
       )}
     </View>

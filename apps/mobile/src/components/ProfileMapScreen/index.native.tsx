@@ -3,7 +3,7 @@ import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable } from 'rea
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { AppLogo } from '@/components/AppLogo';
@@ -112,6 +112,7 @@ export function ProfileMapScreen({ userId }: Props) {
   const c = useColors();
   const dark = useScheme() === 'dark';
   const styles = useMemo(() => makeStyles(c), [c]);
+  const router = useRouter();
   // 내 프로필 탭(userId 없음)은 플로팅 탭바 위로 올린다. user/[id]는 탭바가 없다
   const tabClearance = useTabBarClearance();
   const bottomBase = userId ? 24 : tabClearance + 12;
@@ -219,6 +220,7 @@ export function ProfileMapScreen({ userId }: Props) {
           baseUrl={BASE_URL}
           bottom={bottomBase}
           onClose={() => setSelected(null)}
+          onDetailPress={(runId) => router.push(`/run/${runId}`)}
         />
       )}
     </View>
