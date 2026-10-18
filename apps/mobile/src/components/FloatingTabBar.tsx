@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Tabs } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { useColors } from '@/theme/useColors';
+import { useRunStore } from '@/store/run';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
@@ -50,6 +51,9 @@ export function useTabBarClearance(): number {
 export function FloatingTabBar({ state, navigation }: TabBarProps) {
   const c = useColors();
   const insets = useSafeAreaInsets();
+  // 기록 중에는 숨긴다(확정 UI S06 기록 중 보드에 탭바 없음, 실수로 다른 탭으로 나가지 않게)
+  const isTracking = useRunStore((s) => s.isTracking);
+  if (isTracking) return null;
 
   return (
     <View

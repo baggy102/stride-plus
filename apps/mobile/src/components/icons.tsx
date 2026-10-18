@@ -42,3 +42,20 @@ export function AlertIcon({ size = 20, color }: IconProps) {
     </Svg>
   );
 }
+
+export function PlayIcon({ size = 26, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+      <Path d="M7 4.8v14.4c0 .8.9 1.3 1.6.9l11.2-7.2c.6-.4.6-1.4 0-1.8L8.6 3.9C7.9 3.5 7 4 7 4.8Z" />
+    </Svg>
+  );
+}
+
+export function WarnIcon({ size = 20, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 3.5 2.5 20h19L12 3.5Z" />
+      <Path d="M12 10v4.5M12 17.5v.01" />
+    </Svg>
+  );
+}

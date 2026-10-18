@@ -17,6 +17,11 @@ export interface Palette {
   logo: string;
   danger: string;
   shadow: string;
+  scrim: string; // 시트·다이얼로그 뒤 어둡게
+  ok: string; // GPS 양호 점
+  warn: string; // 경고 아이콘·글자
+  warnLine: string; // 경고 배너 테두리
+  stop: { ring: string; track: string; edge: string }; // 기록 종료 버튼(길게 누르기 진행 링)
   map: {
     bg: string;
     dot: string;
@@ -47,6 +52,11 @@ export const palettes: Record<Scheme, Palette> = {
     logo: '#4B83B5',
     danger: '#E5484D',
     shadow: '#000000',
+    scrim: 'rgba(0,0,0,0.55)',
+    ok: '#4CC38A',
+    warn: '#FFC66B',
+    warnLine: '#6B5A3A',
+    stop: { ring: '#9DBFE0', track: '#2C3846', edge: 'rgba(157,191,224,0.35)' },
     map: {
       bg: '#45484E',
       dot: '#9DBFE0',
@@ -75,6 +85,11 @@ export const palettes: Record<Scheme, Palette> = {
     logo: '#4B83B5',
     danger: '#E5484D',
     shadow: '#111316',
+    scrim: 'rgba(17,19,22,0.4)',
+    ok: '#2E9E6B',
+    warn: '#B45309',
+    warnLine: '#E7B66F',
+    stop: { ring: '#4B83B5', track: '#D3DCE6', edge: 'transparent' },
     map: {
       bg: '#F6F7F8',
       dot: '#24476B',
