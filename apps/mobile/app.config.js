@@ -4,6 +4,7 @@ module.exports = ({ config }) => ({
   extra: {
     ...config.extra,
     apiUrl: process.env.EXPO_PUBLIC_API_URL ?? config.extra.apiUrl,
-    cartoKey: process.env.EXPO_PUBLIC_CARTO_KEY,
+    // 지도 벡터 타일 URL 템플릿(D3) — .env.local 전용, 운영은 F6 PMTiles URL
+    mapTileUrl: process.env.EXPO_PUBLIC_MAP_TILE_URL,
   },
 });

@@ -17,17 +17,24 @@ const assets = {
   LEAFLET_JS: read(dist('leaflet', 'leaflet.js')),
   MARKERCLUSTER_CSS: read(dist('leaflet.markercluster', 'MarkerCluster.css')) + read(dist('leaflet.markercluster', 'MarkerCluster.Default.css')),
   MARKERCLUSTER_JS: read(dist('leaflet.markercluster', 'leaflet.markercluster.js')),
+  PROTOMAPS_JS: read(dist('protomaps-leaflet', 'protomaps-leaflet.js')),
 };
+
+// 지도 색 기본값(D3). map/flavor.ts가 캔버스 지도 팔레트로 덮어쓴다
+const { namedFlavor } = require('@protomaps/basemaps');
+const flavors = { dark: namedFlavor('black'), light: namedFlavor('white') };
 
 const header = [
   '// 자동 생성 파일 — 직접 고치지 말 것. scripts/gen-map-assets.js',
-  `// leaflet ${version('leaflet')} · leaflet.markercluster ${version('leaflet.markercluster')}`,
+  `// leaflet ${version('leaflet')} · leaflet.markercluster ${version('leaflet.markercluster')}` +
+    ` · protomaps-leaflet ${version('protomaps-leaflet')} · @protomaps/basemaps ${version('@protomaps/basemaps')}`,
   '',
 ].join('\n');
 
 const body = Object.entries(assets)
   .map(([name, text]) => `export const ${name} = ${JSON.stringify(text)};`)
-  .join('\n');
+  .join('\n') +
+  `\nexport const BASE_FLAVORS: Record<'dark' | 'light', Record<string, string>> = ${JSON.stringify(flavors)};`;
 
 const out = path.join(__dirname, '..', 'src', 'components', 'map', 'webAssets.generated.ts');
 fs.mkdirSync(path.dirname(out), { recursive: true });

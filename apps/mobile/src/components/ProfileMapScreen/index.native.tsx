@@ -11,11 +11,10 @@ import { MapPopupCard } from '@/components/MapPopupCard';
 import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
-import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
-import { leafletHead, markerIconsScript, MARKER_PULSE_CSS } from '@/components/map/mapHtml';
+import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme } from '@/components/map/mapHtml';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
 
 interface UserProfile {
@@ -44,7 +43,6 @@ function buildHtml(p: Palette, dark: boolean) {
   <style>
     * { margin:0; padding:0; }
     #map { width:100vw; height:100vh; }
-    .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
     .leaflet-popup-content-wrapper {
       background: ${p.surface} !important;
       border: 1px solid ${p.border} !important;
@@ -60,17 +58,21 @@ ${MARKER_PULSE_CSS}
 <div id="map"></div>
 <script>
   var map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
-  L.tileLayer('${CARTO_TILE_URL}', {
-    attribution: '${CARTO_ATTRIBUTION}',
-    className: '${dark ? 'map-tiles-dark' : ''}'
-  }).addTo(map);
+${baseMapScript(p, dark)}
 ${markerIconsScript(p)}
   var group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   map.addLayer(group);
   var fitted = false;
 
   // 처음 받은 러닝에만 화면을 맞춘다(새로고침·다음 페이지로 다시 들어와도 보던 위치 유지)
+  var lastRuns = [];
+  window.__onTheme = function(c) {
+    makeIcons(c);
+    window.__setRuns(lastRuns);
+  };
+
   window.__setRuns = function(runs) {
+    lastRuns = runs;
     group.clearLayers();
     var all = [];
     runs.forEach(function(run) {
@@ -119,7 +121,9 @@ export function ProfileMapScreen({ userId }: Props) {
   const [headerHeight, setHeaderHeight] = useState(0);
   const webViewRef = useRef<WebView>(null);
   const mapLoaded = useRef(false);
-  const html = useMemo(() => buildHtml(c, dark), [c, dark]);
+  // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
+  const { initial: initialTheme, applyTheme } = useMapTheme(webViewRef, c, dark);
+  const html = useMemo(() => buildHtml(initialTheme.p, initialTheme.dark), [initialTheme]);
 
   // 지도에 러닝을 넣는다 — WebView를 다시 로드하지 않는다
   const pushRuns = useCallback(() => {
@@ -222,7 +226,7 @@ export function ProfileMapScreen({ userId }: Props) {
               style={StyleSheet.absoluteFillObject}
               originWhitelist={['*']}
               onLoadStart={() => { mapLoaded.current = false; }}
-              onLoadEnd={() => { mapLoaded.current = true; pushRuns(); }}
+              onLoadEnd={() => { mapLoaded.current = true; applyTheme(); pushRuns(); }}
               onMessage={(e) => {
                 try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
               }}

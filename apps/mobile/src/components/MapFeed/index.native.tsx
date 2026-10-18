@@ -10,10 +10,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { MapPopupCard } from '@/components/MapPopupCard';
 import client, { BASE_URL } from '@/api/client';
-import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
 import type { Palette } from '@/theme/colors';
-import { leafletHead, markerIconsScript, MARKER_PULSE_CSS } from '@/components/map/mapHtml';
+import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme } from '@/components/map/mapHtml';
 import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
@@ -36,7 +35,6 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOf
     * { margin:0; padding:0; }
     body { background: ${m.bg}; }
     #map { width:100vw; height:100vh; }
-    .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
     .leaflet-bottom { bottom: ${bottomOffset}px !important; }
 ${MARKER_PULSE_CSS}
   </style>
@@ -45,15 +43,24 @@ ${MARKER_PULSE_CSS}
 <div id="map"></div>
 <script>
   var map = L.map('map',{zoomControl:false}).setView([${lat},${lng}],13);
-  L.tileLayer('${CARTO_TILE_URL}',{attribution:'${CARTO_ATTRIBUTION}',className:'${dark ? 'map-tiles-dark' : ''}'}).addTo(map);
-  L.circleMarker([${lat},${lng}],{radius:9,color:'${m.meRing}',fillColor:'${m.meFill}',fillOpacity:1,weight:3}).addTo(map);
+${baseMapScript(p, dark)}
+  var me=L.circleMarker([${lat},${lng}],{radius:9,color:'${m.meRing}',fillColor:'${m.meFill}',fillOpacity:1,weight:3}).addTo(map);
 
 ${markerIconsScript(p)}
 
   var group=L.markerClusterGroup({iconCreateFunction:clusterIcon,showCoverageOnHover:false,maxClusterRadius:60});
   map.addLayer(group);
 
+  var lastRuns=[];
+  // 테마 전환: 마커 아이콘과 내 위치 색을 바꾸고 지금 러닝을 다시 그린다
+  window.__onTheme=function(c){
+    makeIcons(c);
+    me.setStyle({color:c.meRing,fillColor:c.meFill});
+    window.__setRuns(lastRuns);
+  };
+
   window.__setRuns=function(runs){
+    lastRuns=runs;
     group.clearLayers();
     runs.forEach(function(run){
       if(!run.startPoint)return;
@@ -103,16 +110,17 @@ export function MapFeed() {
   const dark = useScheme() === 'dark';
   const styles = useMemo(() => makeStyles(c), [c]);
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
-  // 테마가 바뀌면 지도를 다시 그린다(재로드 없는 전환은 D2 __setTheme)
+  const webViewRef = useRef<WebView>(null);
+  // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3, 재로드 없음)
+  const { initial: initialTheme, applyTheme } = useMapTheme(webViewRef, c, dark);
   const html = useMemo(
-    () => (center ? buildHtml(center.lat, center.lng, c, dark, tabClearance + 8) : ''),
-    [center, c, dark, tabClearance],
+    () => (center ? buildHtml(center.lat, center.lng, initialTheme.p, initialTheme.dark, tabClearance + 8) : ''),
+    [center, initialTheme, tabClearance],
   );
   const [selected, setSelected] = useState<RunMarker | null>(null);
   const [feedState, setFeedState] = useState<FeedState>('normal');
   const [chipIndex, setChipIndex] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
-  const webViewRef = useRef<WebView>(null);
   const skipFirstFocus = useRef(true);
   const lastViewport = useRef<ViewportMessage | null>(null);
   const lastRuns = useRef<RunMarker[] | null>(null);
@@ -192,6 +200,8 @@ export function MapFeed() {
         originWhitelist={['*']}
         javaScriptEnabled
         startInLoadingState
+        // 로드 중에 테마가 바뀌었을 수 있다
+        onLoadEnd={applyTheme}
         onMessage={(e) => {
           try {
             const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage;

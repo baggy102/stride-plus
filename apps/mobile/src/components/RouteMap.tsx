@@ -1,10 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
 import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { CARTO_TILE_URL, CARTO_ATTRIBUTION } from '@/config/mapTiles';
 import { useColors, useScheme } from '@/theme/useColors';
 import type { Palette } from '@/theme/colors';
-import { leafletHead } from '@/components/map/mapHtml';
+import { baseMapScript, leafletHead, useMapTheme } from '@/components/map/mapHtml';
 
 // 경로를 보여 주는 정적 지도(손으로 움직이지 않음). 기록 중(S06)·요약(S07)·상세(S10)에서 쓴다.
 // 좌표는 GeoJSON [lng, lat]. HTML은 테마가 바뀔 때만 다시 만들고, 경로는 __setRoute로만 갱신한다.
@@ -33,7 +32,6 @@ function buildHtml(p: Palette, dark: boolean) {
   <style>
     * { margin:0; padding:0; }
     html, body, #map { width:100%; height:100%; background:${m.bg}; }
-    .map-tiles-dark { filter: invert(1) hue-rotate(180deg) brightness(1.6) contrast(0.8) saturate(0.5) !important; }
     .leaflet-control-attribution { font-size: 9px !important; background: transparent !important; color: ${p.text2} !important; }
     .leaflet-control-attribution a { color: ${p.text2} !important; }
   </style>
@@ -42,12 +40,18 @@ function buildHtml(p: Palette, dark: boolean) {
 <div id="map"></div>
 <script>
   var map = L.map('map', { zoomControl:false, dragging:false, touchZoom:false, doubleClickZoom:false, scrollWheelZoom:false, boxZoom:false, keyboard:false, tap:false });
-  L.tileLayer('${CARTO_TILE_URL}', { attribution:'${CARTO_ATTRIBUTION}', className:'${dark ? 'map-tiles-dark' : ''}' }).addTo(map);
+${baseMapScript(p, dark)}
   var line = L.polyline([], { color:'${m.dot}', weight:4.5, lineCap:'round', lineJoin:'round' }).addTo(map);
   var start = L.circleMarker([0,0], { radius:5, color:'${m.dot}', weight:2.4, fillColor:'${m.bg}', fillOpacity:1 });
   var me = L.circleMarker([0,0], { radius:7, color:'${m.meRing}', weight:3, fillColor:'${m.meFill}', fillOpacity:1 });
   var end = L.circleMarker([0,0], { radius:5, color:'${m.dot}', weight:2.4, fillColor:'${m.dot}', fillOpacity:1 });
   var mode = 'follow';
+  window.__onTheme = function(c){
+    line.setStyle({ color:c.dot });
+    start.setStyle({ color:c.dot, fillColor:c.bg });
+    me.setStyle({ color:c.meRing, fillColor:c.meFill });
+    end.setStyle({ color:c.dot, fillColor:c.dot });
+  };
   function toLatLng(c){ return [c[1], c[0]]; }
   window.__setRoute = function(coords, fallback, showCurrent, fit){
     mode = fit;
@@ -78,8 +82,10 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
 ) {
   const c = useColors();
   const dark = useScheme() === 'dark';
-  const html = useMemo(() => buildHtml(c, dark), [c, dark]);
   const webViewRef = useRef<WebView>(null);
+  // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
+  const { initial, applyTheme } = useMapTheme(webViewRef, c, dark);
+  const html = useMemo(() => buildHtml(initial.p, initial.dark), [initial]);
   const loaded = useRef(false);
 
   const push = () => {
@@ -104,7 +110,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
         scrollEnabled={false}
         style={StyleSheet.absoluteFillObject}
         onLoadStart={() => { loaded.current = false; }}
-        onLoadEnd={() => { loaded.current = true; push(); }}
+        onLoadEnd={() => { loaded.current = true; applyTheme(); push(); }}
       />
     </View>
   );
