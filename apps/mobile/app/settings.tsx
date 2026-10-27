@@ -186,7 +186,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   rowLabel: { fontFamily: FONT.regular, fontSize: 16, color: c.text },
   rowValue: { flexShrink: 1, fontFamily: FONT.regular, fontSize: 16, color: c.text2 },
   deleteLabel: { fontFamily: FONT.semibold, fontSize: 16, color: c.danger },
-  scrim: { ...StyleSheet.absoluteFillObject, backgroundColor: c.scrim },
+  scrim: { ...StyleSheet.absoluteFill, backgroundColor: c.scrim },
   dialogWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
   dialog: {
     paddingTop: 24, paddingHorizontal: 20, paddingBottom: 20, borderRadius: 22, backgroundColor: c.surface, gap: 14,

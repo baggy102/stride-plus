@@ -14,7 +14,6 @@ config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, 'node_modules'),
   path.resolve(monorepoRoot, 'node_modules'),
 ];
-config.resolver.unstable_enablePackageExports = false;
 
 // NativeWind 캐시 디렉터리 보장
 const nativewindCacheDir = path.join(projectRoot, 'node_modules', '.cache', 'nativewind');

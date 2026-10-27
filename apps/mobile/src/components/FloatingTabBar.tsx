@@ -53,7 +53,7 @@ export function useTabBarClearance(): number {
   return barBottom(insets.bottom) + BAR_HEIGHT;
 }
 
-export function FloatingTabBar({ state, navigation }: TabBarProps) {
+export function FloatingTabBar({ state, emitter, navigateToTab }: TabBarProps) {
   const c = useColors();
   const insets = useSafeAreaInsets();
   // 기록 중에는 숨긴다(확정 UI S06 기록 중 보드에 탭바 없음, 실수로 다른 탭으로 나가지 않게)
@@ -78,8 +78,8 @@ export function FloatingTabBar({ state, navigation }: TabBarProps) {
               accessibilityLabel={icon.label}
               accessibilityState={{ selected: focused }}
               onPress={() => {
-                const event = navigation.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
-                if (!focused && !event.defaultPrevented) navigation.navigate(route.name);
+                const event = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
+                if (!focused && !event.defaultPrevented) navigateToTab(route.key);
               }}
               style={styles.item}
             >

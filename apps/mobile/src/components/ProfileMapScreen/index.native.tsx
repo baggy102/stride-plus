@@ -16,7 +16,7 @@ import { FONT, monoLabel } from '@/theme/fonts';
 import { Glass } from '@/components/Glass';
 import { fetchRunStats, type RunStats } from '@/api/stats';
 import { withAlpha, type Palette } from '@/theme/colors';
-import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme } from '@/components/map/mapHtml';
+import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
 
 interface UserProfile {
@@ -124,7 +124,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const [view, setView] = useState<ProfileView>('map');
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<WebViewHandle>(null);
   const mapLoaded = useRef(false);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
   const { initial: initialTheme, applyTheme } = useMapTheme(webViewRef, c, dark);
@@ -248,7 +248,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
             <WebView
               ref={webViewRef}
               source={{ html }}
-              style={StyleSheet.absoluteFillObject}
+              style={StyleSheet.absoluteFill}
               originWhitelist={['*']}
               onLoadStart={() => { mapLoaded.current = false; }}
               onLoadEnd={() => { mapLoaded.current = true; applyTheme(); pushRuns(); }}
@@ -274,7 +274,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
               <ActivityIndicator color={c.value} size="large" />
             </View>
           ) : (
-            <View style={[StyleSheet.absoluteFillObject, { backgroundColor: c.bg }]}>
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: c.bg }]}>
               <RunList
                 runs={runs}
                 state={listState}

@@ -41,7 +41,7 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
           style={styles.avatar}
         >
           {avatar ? (
-            <Image source={{ uri: avatar.startsWith('/') ? `${baseUrl}${avatar}` : avatar }} style={StyleSheet.absoluteFillObject} />
+            <Image source={{ uri: avatar.startsWith('/') ? `${baseUrl}${avatar}` : avatar }} style={StyleSheet.absoluteFill} />
           ) : (
             <Text style={styles.avatarLetter}>{(username[0] ?? '?').toUpperCase()}</Text>
           )}

@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useRef, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, type ComponentRef, type RefObject } from 'react';
 import type { WebView } from 'react-native-webview';
 import { withAlpha, type Palette } from '@/theme/colors';
 import { MAP_TILE_URL } from '@/config/mapTiles';
 import { mapFlavor } from './flavor';
 import { LEAFLET_CSS, LEAFLET_JS, MARKERCLUSTER_CSS, MARKERCLUSTER_JS, PROTOMAPS_JS } from './webAssets.generated';
+
+// WebView ref 타입(react-native-webview 14부터 함수 컴포넌트라 클래스 이름을 타입으로 쓸 수 없다)
+export type WebViewHandle = ComponentRef<typeof WebView>;
 
 // 지도 WebView <head>에 넣을 라이브러리. CDN을 부르지 않고 앱 번들의 문자열을 인라인한다(D2)
 export function leafletHead({ cluster }: { cluster: boolean }): string {
@@ -78,7 +81,7 @@ export const MARKER_PULSE_CSS = `
  * 지도 HTML은 처음 테마로 한 번만 만들고, 이후 테마가 바뀌면 __setTheme만 주입한다(D3).
  * initial: HTML을 만들 때 쓸 처음 테마. applyTheme: WebView onLoadEnd에서도 불러 로드 중 바뀐 테마를 맞춘다
  */
-export function useMapTheme(webViewRef: RefObject<WebView | null>, p: Palette, dark: boolean) {
+export function useMapTheme(webViewRef: RefObject<WebViewHandle | null>, p: Palette, dark: boolean) {
   const initial = useRef({ p, dark }).current;
   const applyTheme = useCallback(() => {
     const args = `${JSON.stringify(mapFlavor(dark))},${JSON.stringify(mapColors(p))}`;

@@ -93,7 +93,7 @@ export function SafetyMenu({ targetType, targetId, author, onBlocked, label }: P
         <Pressable
           accessibilityLabel="닫기"
           onPress={close}
-          style={[StyleSheet.absoluteFillObject, sheet !== 'menu' && { backgroundColor: c.scrim }]}
+          style={[StyleSheet.absoluteFill, sheet !== 'menu' && { backgroundColor: c.scrim }]}
         />
 
         {sheet === 'menu' && (

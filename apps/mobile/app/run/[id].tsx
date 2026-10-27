@@ -145,7 +145,7 @@ export default function RunDetailScreen() {
       {state === 'ready' && run && (
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
           <View style={styles.mapCard}>
-            <RouteMap coordinates={run.route.coordinates} fit="route" kmTicks style={StyleSheet.absoluteFillObject} />
+            <RouteMap coordinates={run.route.coordinates} fit="route" kmTicks style={StyleSheet.absoluteFill} />
           </View>
 
           <Text accessibilityRole="header" style={styles.title}>{placeName ?? '러닝 기록'}</Text>
