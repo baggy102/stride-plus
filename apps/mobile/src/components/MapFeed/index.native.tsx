@@ -1,9 +1,11 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { View, StyleSheet, ActivityIndicator, Pressable, Text } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Glass } from '@/components/Glass';
 import { Wordmark } from '@/components/Wordmark';
 import { LocateIcon, RouteIcon, AlertIcon } from '@/components/icons';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
-import { FONT } from '@/theme/fonts';
+import { FONT, monoLabel } from '@/theme/fonts';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,6 +24,7 @@ const MAX_RADIUS_M = 300000;
 
 type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number };
 type RunMessage = { type: 'run'; run: RunMarker };
+type RunDetailResponse = { route?: { coordinates?: [number, number][] } };
 
 // bottomOffset: 탭바에 가리지 않게 Leaflet 출처 표기를 올리는 높이
 function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOffset: number) {
@@ -36,6 +39,10 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOf
     body { background: ${m.bg}; }
     #map { width:100vw; height:100vh; }
     .leaflet-bottom { bottom: ${bottomOffset}px !important; }
+    /* Frost 축척: 모노 라벨 + ㄴ자 눈금 */
+    .leaflet-control-scale { margin-left: 18px !important; }
+    .leaflet-control-scale-line { background: transparent !important; border: 1.5px solid ${p.text} !important; border-top: 0 !important;
+      color: ${p.text}; font: 500 10px/12px ui-monospace, Menlo, monospace; letter-spacing: 0.08em; padding: 0 4px; text-transform: uppercase; }
 ${MARKER_PULSE_CSS}
   </style>
 </head>
@@ -44,7 +51,10 @@ ${MARKER_PULSE_CSS}
 <script>
   var map = L.map('map',{zoomControl:false}).setView([${lat},${lng}],13);
 ${baseMapScript(p, dark)}
-  var me=L.circleMarker([${lat},${lng}],{radius:9,color:'${m.meRing}',fillColor:'${m.meFill}',fillOpacity:1,weight:3}).addTo(map);
+  // 내 위치: 옅은 원(44) + 점(16, 테두리 3)
+  var meHalo=L.circleMarker([${lat},${lng}],{radius:22,stroke:false,fillColor:'${m.meHalo}',fillOpacity:1,interactive:false}).addTo(map);
+  var me=L.circleMarker([${lat},${lng}],{radius:6.5,color:'${m.meRing}',fillColor:'${m.meFill}',fillOpacity:1,weight:3,interactive:false}).addTo(map);
+  L.control.scale({imperial:false,position:'bottomleft',maxWidth:64}).addTo(map);
 
 ${markerIconsScript(p)}
 
@@ -52,10 +62,34 @@ ${markerIconsScript(p)}
   map.addLayer(group);
 
   var lastRuns=[];
-  // 테마 전환: 마커 아이콘과 내 위치 색을 바꾸고 지금 러닝을 다시 그린다
+  // 선택한 기록(S05)의 경로만 그린다: 다크는 옅은 번짐 + 바탕색 테두리(8) + 경로(4) + 시작점
+  var selGlow=L.polyline([],{weight:12,opacity:0,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
+  var selEdge=L.polyline([],{weight:8,opacity:0.9,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
+  var selLine=L.polyline([],{weight:4,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
+  var selStart=L.circleMarker([0,0],{radius:5,weight:2.5,fillOpacity:1,interactive:false});
+  function styleSelected(c){
+    selGlow.setStyle({color:c.dot,opacity:c.dark?0.25:0});
+    selEdge.setStyle({color:c.ring});
+    selLine.setStyle({color:c.dot});
+    selStart.setStyle({color:c.dot,fillColor:c.ring});
+  }
+  styleSelected(iconColors);
+  // coords: [lng,lat][] (없으면 지운다). pad: 헤더·카드에 가리지 않게 둘 여백 [위, 아래]
+  window.__setSelected=function(coords,pad){
+    var pts=(coords||[]).map(function(c){return [c[1],c[0]];});
+    selGlow.setLatLngs(pts);selEdge.setLatLngs(pts);selLine.setLatLngs(pts);
+    if(pts.length>0){
+      selStart.setLatLng(pts[0]).addTo(map);
+      if(pts.length>1)map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[32,pad[0]],paddingBottomRight:[32,pad[1]],maxZoom:16});
+    }else{map.removeLayer(selStart);}
+  };
+
+  // 테마 전환: 마커 아이콘과 내 위치·선택 경로 색을 바꾸고 지금 러닝을 다시 그린다
   window.__onTheme=function(c){
     makeIcons(c);
     me.setStyle({color:c.meRing,fillColor:c.meFill});
+    meHalo.setStyle({fillColor:c.meHalo});
+    styleSelected(c);
     window.__setRuns(lastRuns);
   };
 
@@ -64,7 +98,7 @@ ${markerIconsScript(p)}
     group.clearLayers();
     runs.forEach(function(run){
       if(!run.startPoint)return;
-      var m=L.marker([run.startPoint[1],run.startPoint[0]],{icon:dotIcon});
+      var m=L.marker([run.startPoint[1],run.startPoint[0]],{icon:ringIcon});
       m.on('click',function(){
         window.ReactNativeWebView.postMessage(JSON.stringify({type:'run',run:run}));
       });
@@ -90,13 +124,22 @@ ${markerIconsScript(p)}
 
 type FeedState = 'normal' | 'empty' | 'error';
 
-// 피드 필터 칩: 러닝 거리 구간(겹치지 않음) — 5km 이하 / 5~10km / 10km 초과 (2026-10-18 결정)
+// 피드 필터 칩: 러닝 거리 구간(겹치지 않음) — 5km 이하 / 5~10km / 10km 초과 (2026-10-18 결정).
+// Frost: 거리 칩 라벨은 모노(5K·10K·10K+)
 const CHIPS = [
-  { label: '전체', overKm: -1, upToKm: Infinity },
-  { label: '5km', overKm: -1, upToKm: 5 },
-  { label: '10km', overKm: 5, upToKm: 10 },
-  { label: '10km+', overKm: 10, upToKm: Infinity },
+  { label: '전체', a11y: '전체', overKm: -1, upToKm: Infinity },
+  { label: '5K', a11y: '5킬로미터 이하', overKm: -1, upToKm: 5 },
+  { label: '10K', a11y: '5에서 10킬로미터', overKm: 5, upToKm: 10 },
+  { label: '10K+', a11y: '10킬로미터 초과', overKm: 10, upToKm: Infinity },
 ] as const;
+
+// 「NEARBY 2 KM」: 지금 보이는 지도 반경(1 km 단위, 최소 1)
+function nearbyLabel(radiusM: number | null) {
+  if (!radiusM) return null;
+  return `NEARBY ${Math.max(1, Math.round(radiusM / 1000))} KM`;
+}
+
+const CARD_HEIGHT = 152;
 
 function inChip(distanceKm: number, chip: (typeof CHIPS)[number]) {
   return distanceKm > chip.overKm && distanceKm <= chip.upToKm;
@@ -121,6 +164,7 @@ export function MapFeed() {
   const [feedState, setFeedState] = useState<FeedState>('normal');
   const [chipIndex, setChipIndex] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
+  const [radius, setRadius] = useState<number | null>(null);
   const skipFirstFocus = useRef(true);
   const lastViewport = useRef<ViewportMessage | null>(null);
   const lastRuns = useRef<RunMarker[] | null>(null);
@@ -179,6 +223,23 @@ export function MapFeed() {
     } catch {}
   }, []);
 
+  // 마커를 고르면 그 기록의 경로를 받아 지도에 그린다(목록 응답에는 경로가 없다)
+  const cardBottom = tabClearance + 12;
+  useEffect(() => {
+    const clear = () => webViewRef.current?.injectJavaScript('window.__setSelected&&window.__setSelected(null,[0,0]);true;');
+    if (!selected) { clear(); return; }
+    let cancelled = false;
+    client.get<RunDetailResponse>(`/runs/${selected._id}`)
+      .then((res) => {
+        if (cancelled) return;
+        const coords = res.data.route?.coordinates ?? [];
+        const pad = [headerHeight + 16, cardBottom + CARD_HEIGHT + 24];
+        webViewRef.current?.injectJavaScript(`window.__setSelected(${JSON.stringify(coords)},${JSON.stringify(pad)});true;`);
+      })
+      .catch(() => { if (!cancelled) clear(); });
+    return () => { cancelled = true; };
+  }, [selected, headerHeight, cardBottom]);
+
   const retry = useCallback(() => {
     if (lastViewport.current) fetchRuns(lastViewport.current);
   }, [fetchRuns]);
@@ -207,6 +268,7 @@ export function MapFeed() {
             const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage;
             if (message.type === 'viewport') {
               lastViewport.current = message;
+              setRadius(message.radius);
               fetchRuns(message);
             } else {
               setSelected(message.run);
@@ -215,26 +277,32 @@ export function MapFeed() {
         }}
       />
 
-      {/* 헤더: 워드마크 + 거리 필터 칩 */}
+      {/* 헤더: 세로 페이드 위 워드마크(+ NEARBY 반경) + 거리 필터 칩 */}
       <View
         style={[styles.header, { paddingTop: insets.top + 8 }]}
         onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+        pointerEvents="box-none"
       >
+        <LinearGradient colors={c.headerFade} locations={[0, 0.62, 1]} style={StyleSheet.absoluteFill} pointerEvents="none" />
         <View style={styles.logoRow}>
           <Wordmark width={71} />
+          {nearbyLabel(radius) && <Text style={styles.nearby}>{nearbyLabel(radius)}</Text>}
         </View>
         <View style={styles.chips}>
           {CHIPS.map((chip, index) => {
             const on = index === chipIndex;
+            const label = (
+              <Text style={[styles.chipText, index > 0 && styles.chipMono, on && styles.chipTextOn]}>{chip.label}</Text>
+            );
             return (
               <Pressable
                 key={chip.label}
                 accessibilityRole="button"
+                accessibilityLabel={chip.a11y}
                 accessibilityState={{ selected: on }}
                 onPress={() => setChipIndex(index)}
-                style={[styles.chip, on && styles.chipOn]}
               >
-                <Text style={[styles.chipText, on && styles.chipTextOn]}>{chip.label}</Text>
+                {on ? <View style={[styles.chip, styles.chipOn]}>{label}</View> : <Glass style={styles.chip}>{label}</Glass>}
               </Pressable>
             );
           })}
@@ -245,8 +313,9 @@ export function MapFeed() {
       {feedState !== 'normal' && headerHeight > 0 && (
         <View
           accessibilityRole={feedState === 'error' ? 'alert' : 'summary'}
-          style={[styles.notice, { top: headerHeight + 12 }]}
+          style={[styles.noticeShadow, { top: headerHeight + 12 }]}
         >
+          <Glass style={styles.notice}>
           <View style={styles.noticeIcon}>
             {feedState === 'error' ? <AlertIcon color={c.text2} /> : <RouteIcon color={c.text2} />}
           </View>
@@ -261,23 +330,26 @@ export function MapFeed() {
               <Text style={styles.retryText}>다시 시도</Text>
             </Pressable>
           )}
+          </Glass>
         </View>
       )}
 
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="내 위치로 이동"
-        style={[styles.myLocBtn, { bottom: tabClearance + 16 }]}
+        style={[styles.myLocShadow, { bottom: (selected ? cardBottom + CARD_HEIGHT : tabClearance) + 12 }]}
         onPress={handleMyLocation}
       >
-        <LocateIcon color={c.value} />
+        <Glass style={styles.myLocBtn}>
+          <LocateIcon color={c.text} />
+        </Glass>
       </Pressable>
 
       {selected && (
         <MapPopupCard
           run={selected}
           baseUrl={BASE_URL}
-          bottom={tabClearance + 12}
+          bottom={cardBottom}
           onClose={() => setSelected(null)}
           onUserPress={(userId) => {
             setSelected(null);
@@ -296,24 +368,22 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   header: {
     position: 'absolute', top: 0, left: 0, right: 0,
     paddingHorizontal: 16, paddingBottom: 12,
-    backgroundColor: c.header,
-    borderBottomWidth: 1, borderBottomColor: c.border,
   },
-  logoRow: { alignItems: 'center', marginVertical: 6 },
-  chips: { flexDirection: 'row', gap: 6, marginTop: 10 },
-  chip: {
-    height: 34, paddingHorizontal: 14, borderRadius: 17, justifyContent: 'center',
-    borderWidth: 1, borderColor: c.border, backgroundColor: c.surface,
+  logoRow: { alignItems: 'center', justifyContent: 'center', marginVertical: 6, minHeight: 20 },
+  nearby: { position: 'absolute', right: 4, top: 4, ...monoLabel(10), color: c.navOff },
+  chips: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  chip: { height: 36, paddingHorizontal: 15, borderRadius: 18, justifyContent: 'center' },
+  chipOn: { backgroundColor: c.chipOnBg, borderWidth: 1, borderColor: c.chipOnBg },
+  chipText: { fontFamily: FONT.semibold, fontSize: 13, color: c.text },
+  chipMono: { ...monoLabel(13, 0.08) },
+  chipTextOn: { color: c.chipOnFg },
+  noticeShadow: {
+    position: 'absolute', left: 16, right: 16, borderRadius: 16,
+    shadowColor: c.shadow, shadowOpacity: c.dark ? 0.45 : 0.1, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 4,
   },
-  chipOn: { borderColor: c.accent, backgroundColor: c.accent },
-  chipText: { fontFamily: FONT.semibold, fontSize: 13, color: c.text2 },
-  chipTextOn: { fontFamily: FONT.bold, color: c.ink },
   notice: {
-    position: 'absolute', left: 16, right: 16,
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingVertical: 12, paddingLeft: 14, paddingRight: 12, borderRadius: 16,
-    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
-    shadowColor: c.shadow, shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 6 }, elevation: 4,
   },
   noticeIcon: {
     width: 36, height: 36, borderRadius: 18, backgroundColor: c.surface2,
@@ -324,14 +394,12 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   noticeSub: { fontFamily: FONT.regular, fontSize: 13, lineHeight: 18, color: c.text2 },
   retryBtn: {
     height: 44, paddingHorizontal: 16, borderRadius: 22, justifyContent: 'center',
-    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+    borderWidth: 1, borderColor: c.glassBorder,
   },
   retryText: { fontFamily: FONT.semibold, fontSize: 14, color: c.text },
-  myLocBtn: {
-    position: 'absolute', right: 16,
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: c.border,
-    shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
+  myLocShadow: {
+    position: 'absolute', right: 16, width: 44, height: 44, borderRadius: 22,
+    shadowColor: c.shadow, shadowOpacity: c.dark ? 0.45 : 0.1, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 4,
   },
+  myLocBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });

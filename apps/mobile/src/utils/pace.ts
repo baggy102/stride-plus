@@ -10,3 +10,13 @@ export function formatPace(secPerKm: number): string {
   const total = Math.round(secPerKm);
   return `${Math.floor(total / 60)}'${String(total % 60).padStart(2, '0')}"`;
 }
+
+// 기록 시간 「52:10」·「1:05:20」. 서버는 시간을 따로 저장하지 않아 거리 × 페이스로 구한다
+export function formatDuration(totalSec: number): string {
+  const sec = Math.max(0, Math.round(totalSec));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  const mm = String(m).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${String(s).padStart(2, '0')}` : `${mm}:${String(s).padStart(2, '0')}`;
+}

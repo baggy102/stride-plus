@@ -59,7 +59,7 @@ ${MARKER_PULSE_CSS}
 <script>
   var map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
 ${baseMapScript(p, dark)}
-${markerIconsScript(p)}
+${markerIconsScript(p, 'profile')}
   var group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   map.addLayer(group);
   var fitted = false;

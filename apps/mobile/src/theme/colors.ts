@@ -3,6 +3,7 @@
 export type Scheme = 'dark' | 'light';
 
 export interface Palette {
+  dark: boolean;
   bg: string;
   header: string;
   surface: string;
@@ -42,11 +43,14 @@ export interface Palette {
     clGlow: string;
     meFill: string;
     meRing: string;
+    meHalo: string; // 내 위치 점 둘레
+    clEdge: string; // 유리 클러스터 테두리
   };
 }
 
 export const palettes: Record<Scheme, Palette> = {
   dark: {
+    dark: true,
     bg: '#0B1016',
     header: 'rgba(11,16,22,0.92)',
     surface: '#121922',
@@ -84,11 +88,14 @@ export const palettes: Record<Scheme, Palette> = {
       clBg: '#0B1016',
       clRing: '#9DBFE0',
       clGlow: 'rgba(157,191,224,0.45)',
-      meFill: '#DCE6EE',
-      meRing: '#9DBFE0',
+      meFill: '#4B83B5',
+      meRing: '#DCE6EE',
+      meHalo: 'rgba(75,131,181,0.22)',
+      clEdge: 'rgba(157,191,224,0.70)',
     },
   },
   light: {
+    dark: false,
     bg: '#F2F5F8',
     header: 'rgba(242,245,248,0.94)',
     surface: '#FFFFFF',
@@ -126,8 +133,10 @@ export const palettes: Record<Scheme, Palette> = {
       clBg: '#FFFFFF',
       clRing: '#24476B',
       clGlow: 'rgba(36,71,107,0.45)',
-      meFill: '#24476B',
+      meFill: '#4B83B5',
       meRing: '#FFFFFF',
+      meHalo: 'rgba(75,131,181,0.18)',
+      clEdge: 'rgba(36,71,107,0.55)',
     },
   },
 };
