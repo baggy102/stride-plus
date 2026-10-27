@@ -72,6 +72,7 @@ export default function RunSummaryScreen() {
     try {
       const form = new FormData();
       form.append('coordinates', JSON.stringify(summary.coordinates));
+      form.append('routeTimes', JSON.stringify(summary.routeTimes));
       form.append('distanceKm', String(summary.distanceKm));
       form.append('paceSecPerKm', String(summary.paceSecPerKm));
       form.append('description', description);

@@ -126,6 +126,7 @@ export class RunsService {
     const run = new this.runModel({
       userId: new Types.ObjectId(userId),
       route: { type: 'LineString', coordinates: dto.coordinates },
+      routeTimes: normalizeRouteTimes(dto.routeTimes, dto.coordinates.length),
       distanceKm: dto.distanceKm,
       paceSecPerKm: dto.paceSecPerKm,
       routeImageUrl,
@@ -134,4 +135,15 @@ export class RunsService {
     });
     return run.save();
   }
+}
+
+// 점마다의 시간은 좌표와 길이가 같고, 0 이상이며 줄어들지 않을 때만 저장한다. 아니면 빈 배열(스플릿 없음)
+export function normalizeRouteTimes(times: number[] | undefined, coordinateCount: number): number[] {
+  if (!Array.isArray(times) || times.length !== coordinateCount) return [];
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i];
+    if (typeof t !== 'number' || !Number.isFinite(t) || t < 0) return [];
+    if (i > 0 && t < times[i - 1]) return [];
+  }
+  return times;
 }

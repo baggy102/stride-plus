@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
-import { RunsService } from './runs.service';
+import { RunsService, normalizeRouteTimes } from './runs.service';
 import { Run } from './runs.schema';
 import { User } from '../users/users.schema';
 import { Types } from 'mongoose';
@@ -264,5 +264,22 @@ describe('RunsService', () => {
         new NotFoundException('run_not_found'),
       );
     });
+  });
+});
+
+describe('normalizeRouteTimes', () => {
+  it('좌표와 길이가 같고 줄어들지 않으면 그대로 저장', () => {
+    expect(normalizeRouteTimes([0, 3, 6.5], 3)).toEqual([0, 3, 6.5]);
+  });
+
+  it('보내지 않으면(이전 앱) 빈 배열', () => {
+    expect(normalizeRouteTimes(undefined, 3)).toEqual([]);
+  });
+
+  it('길이가 다르거나 줄어들거나 음수면 빈 배열', () => {
+    expect(normalizeRouteTimes([0, 3], 3)).toEqual([]);
+    expect(normalizeRouteTimes([0, 5, 4], 3)).toEqual([]);
+    expect(normalizeRouteTimes([-1, 2, 4], 3)).toEqual([]);
+    expect(normalizeRouteTimes([0, Number.NaN, 4], 3)).toEqual([]);
   });
 });
