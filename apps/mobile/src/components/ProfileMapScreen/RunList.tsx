@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  View, Text, Pressable, Image, FlatList, RefreshControl, ActivityIndicator, StyleSheet,
+  View, Text, Pressable, Image, FlatList, RefreshControl, ActivityIndicator, StyleSheet, Animated,
 } from 'react-native';
 import Svg, { Circle, Path, Polyline } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,6 +12,7 @@ import type { RunMarker } from '../RunCard';
 import { formatDuration, formatPace } from '@/utils/pace';
 import { formatDay } from '@/utils/date';
 import { fitToBox } from '@/utils/route';
+import { MOTION, easeOutCubic, useReducedMotion } from '@/utils/motion';
 
 export interface RunWithRoute extends RunMarker {
   route: [number, number][];
@@ -26,6 +27,8 @@ interface Props {
   mine: boolean;
   /** 전체 러닝 수(서버 누적). 「27 RUNS · LATEST」 */
   totalRuns: number | null;
+  /** 방금 저장한 러닝 — 그 기록이 히어로면 File 전환으로 들어온다 */
+  filedRunId?: string;
   refreshing: boolean;
   loadingMore: boolean;
   topInset: number;
@@ -71,6 +74,26 @@ function RouteOnGrid({ route, size, cell, stroke, grid, inset }: {
 }
 
 // 최신 기록 히어로: 사진(없으면 격자 위 경로) + 아래 어둡게 + 코스·날짜 / 거리 64 / 시간·페이스, 오른쪽 위 유리 상자에 경로
+// File(520ms): 요약 화면에서 접혀 들어오듯 위에서 살짝 크게 시작해 제자리로
+function FileIn({ active, children }: { active: boolean; children: ReactNode }) {
+  const reduced = useReducedMotion();
+  const p = useRef(new Animated.Value(active ? 0 : 1)).current;
+  useEffect(() => {
+    if (!active) return;
+    Animated.timing(p, { toValue: 1, duration: reduced ? MOTION.reduced : MOTION.file, easing: easeOutCubic, useNativeDriver: true }).start();
+  }, [active, reduced, p]);
+  const style = reduced
+    ? { opacity: p }
+    : {
+      opacity: p.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1] }),
+      transform: [
+        { translateY: p.interpolate({ inputRange: [0, 1], outputRange: [-40, 0] }) },
+        { scale: p.interpolate({ inputRange: [0, 1], outputRange: [1.08, 1] }) },
+      ],
+    };
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
 function Hero({ run, baseUrl, c, styles, onPress }: {
   run: RunWithRoute; baseUrl: string; c: Palette; styles: ReturnType<typeof makeStyles>; onPress: () => void;
 }) {
@@ -230,7 +253,9 @@ export function RunList(props: Props) {
       keyExtractor={(run) => run._id}
       ListHeaderComponent={
         <View>
-          <Hero run={runs[0]} baseUrl={props.baseUrl} c={c} styles={styles} onPress={() => props.onRunPress(runs[0]._id)} />
+          <FileIn key={runs[0]._id} active={!!props.filedRunId && props.filedRunId === runs[0]._id}>
+            <Hero run={runs[0]} baseUrl={props.baseUrl} c={c} styles={styles} onPress={() => props.onRunPress(runs[0]._id)} />
+          </FileIn>
           <View style={styles.albumHead}>
             <Text accessibilityRole="header" style={styles.albumTitle}>러닝 앨범</Text>
             <Text style={styles.albumCount}>{`${count} RUNS · LATEST`}</Text>

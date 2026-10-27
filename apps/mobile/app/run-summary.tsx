@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, Pressable, TextInput, Modal,
+  View, Text, Pressable, TextInput, Modal, Animated,
   ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Dimensions,
 } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
@@ -19,6 +19,7 @@ import { withAlpha, type Palette } from '@/theme/colors';
 import { formatDuration, formatPace } from '@/utils/pace';
 import { formatClock, formatDay } from '@/utils/date';
 import { kmSplits } from '@/utils/route';
+import { MOTION, easeOutCubic, useReducedMotion } from '@/utils/motion';
 
 // 시작점의 동네 이름(「여의도 한강공원」처럼). 못 찾으면 null
 async function placeName([lng, lat]: [number, number]): Promise<string | null> {
@@ -57,6 +58,19 @@ export default function RunSummaryScreen() {
   useEffect(() => {
     if (start) placeName(start).then(setPlace);
   }, [start?.[0], start?.[1]]);
+
+  // Settle(640ms): 도면 선이 그려지는 동안 아래 수치가 살짝 올라오며 나타난다
+  const reduced = useReducedMotion();
+  const settle = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(settle, {
+      toValue: 1, duration: reduced ? MOTION.reduced : MOTION.settle, easing: easeOutCubic, useNativeDriver: true,
+    }).start();
+  }, [settle, reduced]);
+  const settleStyle = {
+    opacity: settle,
+    transform: [{ translateY: reduced ? 0 : settle.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+  };
 
   const splits = useMemo(
     () => (pendingSummary ? kmSplits(pendingSummary.coordinates, pendingSummary.routeTimes) : []),
@@ -102,7 +116,8 @@ export default function RunSummaryScreen() {
 
       clearPendingSummary();
       resetRun();
-      router.replace('/(tabs)/feed');
+      // File(520ms): 요약이 앨범(내 기록 목록)의 맨 위 히어로로 접혀 들어간다
+      router.replace({ pathname: '/(tabs)/profile', params: { filed: run._id } });
     } catch (e) {
       Alert.alert('저장 실패', e instanceof Error ? e.message : '다시 시도해주세요.');
     } finally {
@@ -123,14 +138,14 @@ export default function RunSummaryScreen() {
 
           {/* 경로 도면 */}
           <View style={styles.blueprint}>
-            <RouteBlueprint coords={summary.coordinates} width={boxWidth} height={192} />
+            <RouteBlueprint coords={summary.coordinates} width={boxWidth} height={192} settle />
           </View>
           <View style={styles.coords}>
             <CoordLine at={start} />
           </View>
 
           {/* 러닝 결과 */}
-          <View accessibilityLabel="러닝 결과" style={styles.result}>
+          <Animated.View accessibilityLabel="러닝 결과" style={[styles.result, settleStyle]}>
             <View accessible accessibilityLabel={`거리 ${summary.distanceKm.toFixed(2)} km`} style={styles.distanceRow}>
               <Text style={styles.distance}>{summary.distanceKm.toFixed(2)}</Text>
               <Text style={styles.distanceUnit}>KM</Text>
@@ -149,7 +164,7 @@ export default function RunSummaryScreen() {
               </View>
             </View>
             {splits.length > 0 && <SplitBars splits={splits} c={c} styles={styles} />}
-          </View>
+          </Animated.View>
 
           <View style={styles.form}>
             <PhotoPicker photos={photos} onChange={setPhotos} />

@@ -29,6 +29,8 @@ interface UserProfile {
 
 interface Props {
   userId?: string;
+  /** 방금 저장한 러닝 — 목록 보기로 열고 히어로가 File 전환으로 들어온다 */
+  filedRunId?: string;
 }
 
 type ProfileView = 'map' | 'list';
@@ -98,7 +100,7 @@ ${markerIconsScript(p, 'profile')}
 }
 
 // 확정 UI S08 내 프로필 / S09 다른 사용자 프로필 — 지도·목록 전환
-export function ProfileMapScreen({ userId }: Props) {
+export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const c = useColors();
   const dark = useScheme() === 'dark';
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -186,6 +188,18 @@ export function ProfileMapScreen({ userId }: Props) {
     load('initial');
   }, [load]);
 
+  // 저장 직후(요약 → 앨범): 목록 보기로 바꾸고 새 기록을 불러온다. 파라미터는 지우고, 히어로가
+  // 새 기록으로 바뀔 때 File 전환을 하도록 대상 ID만 남겨 둔다(보기를 바꾸면 지운다)
+  const [fileTarget, setFileTarget] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (!filedRunId) return;
+    setFileTarget(filedRunId);
+    setView('list');
+    setSelected(null);
+    load('refresh');
+    router.setParams({ filed: undefined });
+  }, [filedRunId]);
+
   // 탭 재진입 시 화면을 유지한 채 다시 불러온다
   const skipFirstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
@@ -267,6 +281,7 @@ export function ProfileMapScreen({ userId }: Props) {
                 baseUrl={BASE_URL}
                 mine={mine}
                 totalRuns={stats?.runCount ?? null}
+                filedRunId={fileTarget}
                 refreshing={refreshing}
                 loadingMore={loadingMore}
                 topInset={headerHeight}
@@ -353,7 +368,7 @@ export function ProfileMapScreen({ userId }: Props) {
                     accessibilityRole="tab"
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={id === 'map' ? '지도 보기' : '목록 보기'}
-                    onPress={() => { setView(id); setSelected(null); }}
+                    onPress={() => { setView(id); setSelected(null); setFileTarget(undefined); }}
                     style={[styles.segmentBtn, on && styles.segmentOn]}
                   >
                     <Icon color={on ? c.ink : c.text2} />
