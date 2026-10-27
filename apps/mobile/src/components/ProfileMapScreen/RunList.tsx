@@ -249,6 +249,7 @@ export function RunList(props: Props) {
   return (
     <FlatList
       accessibilityLabel="러닝 기록"
+      showsVerticalScrollIndicator={false}
       data={runs}
       keyExtractor={(run) => run._id}
       ListHeaderComponent={
