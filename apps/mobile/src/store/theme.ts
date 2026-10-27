@@ -11,7 +11,7 @@ interface ThemeStore {
   setMode: (mode: ThemeMode) => Promise<void>;
 }
 
-// 수동 전환 UI는 출시 후. 지금은 저장된 값이 없으면 시스템 설정을 따른다.
+// 설정 화면(S11)에서 고른다. 저장된 값이 없으면 시스템 설정을 따른다.
 export const useThemeStore = create<ThemeStore>((set) => ({
   mode: 'system',
   hydrate: async () => {
