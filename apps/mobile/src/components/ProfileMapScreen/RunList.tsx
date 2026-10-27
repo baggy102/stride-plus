@@ -73,7 +73,9 @@ function RouteOnGrid({ route, size, cell, stroke, grid, inset }: {
   );
 }
 
-// 최신 기록 히어로: 사진(없으면 격자 위 경로) + 아래 어둡게 + 코스·날짜 / 거리 64 / 시간·페이스, 오른쪽 위 유리 상자에 경로
+// 최신 기록 히어로: 코스·날짜 / 거리 64 / 시간·페이스.
+// 사진이 있으면 사진 + 아래 어두운 스크림 + 흰 글자, 오른쪽 위 유리 상자에 경로.
+// 사진이 없으면 테마 카드(surface) 위 격자 + 경로, 스크림 없이 테마 글자색
 // File(520ms): 요약 화면에서 접혀 들어오듯 위에서 살짝 크게 시작해 제자리로
 function FileIn({ active, children }: { active: boolean; children: ReactNode }) {
   const reduced = useReducedMotion();
@@ -101,6 +103,7 @@ function Hero({ run, baseUrl, c, styles, onPress }: {
   const pace = formatPace(run.paceSecPerKm);
   const time = timeOf(run);
   const [width, setWidth] = useState(350);
+  const icon = photo ? WHITE : c.text2;
   return (
     <Pressable
       onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
@@ -112,16 +115,18 @@ function Hero({ run, baseUrl, c, styles, onPress }: {
       {photo ? (
         <Image source={{ uri: `${baseUrl}${photo}` }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       ) : (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: c.dark ? c.surface : '#16202B' }]}>
-          <RouteOnGrid route={run.route} size={[width, HERO_HEIGHT]} cell={24} stroke="#9DBFE0" grid="rgba(157,191,224,0.10)" inset={48} />
+        <View style={[StyleSheet.absoluteFill, styles.heroPlain]}>
+          <RouteOnGrid route={run.route} size={[width, HERO_HEIGHT]} cell={24} stroke={c.value} grid={c.grid} inset={48} />
         </View>
       )}
-      <LinearGradient
-        colors={['rgba(11,16,22,0)', 'rgba(11,16,22,0.65)', 'rgba(11,16,22,0.88)']}
-        locations={[0, 0.25, 1]}
-        style={styles.heroShade}
-        pointerEvents="none"
-      />
+      {photo && (
+        <LinearGradient
+          colors={['rgba(11,16,22,0)', 'rgba(11,16,22,0.65)', 'rgba(11,16,22,0.88)']}
+          locations={[0, 0.25, 1]}
+          style={styles.heroShade}
+          pointerEvents="none"
+        />
+      )}
       {photo && (
         <View style={styles.heroBadge} pointerEvents="none">
           <RouteOnGrid route={run.route} size={[58, 58]} cell={58} stroke={WHITE} grid="transparent" inset={10} />
@@ -129,29 +134,29 @@ function Hero({ run, baseUrl, c, styles, onPress }: {
       )}
       <View style={styles.heroText} pointerEvents="none">
         <View style={styles.heroTitleRow}>
-          <Text style={styles.heroTitle} numberOfLines={1}>{titleOf(run)}</Text>
-          <Text style={styles.heroDate}>{formatDay(run.createdAt)}</Text>
+          <Text style={[styles.heroTitle, !photo && styles.heroTitlePlain]} numberOfLines={1}>{titleOf(run)}</Text>
+          <Text style={[styles.heroDate, !photo && styles.heroDatePlain]}>{formatDay(run.createdAt)}</Text>
         </View>
         <View style={styles.heroDistRow}>
-          <Text style={styles.heroDist}>{run.distanceKm.toFixed(2)}</Text>
-          <Text style={styles.heroKm}>km</Text>
+          <Text style={[styles.heroDist, !photo && styles.heroDistPlain]}>{run.distanceKm.toFixed(2)}</Text>
+          <Text style={[styles.heroKm, !photo && styles.heroKmPlain]}>km</Text>
         </View>
         <View style={styles.heroMinor}>
           <View style={styles.heroMinorItem}>
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2} strokeLinecap="round">
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={icon} strokeWidth={2} strokeLinecap="round">
               <Circle cx={12} cy={13.5} r={7.5} />
               <Path d="M12 13.5V10M9.5 2.5h5" />
             </Svg>
-            <Text style={styles.heroMinorText}>{time}</Text>
+            <Text style={[styles.heroMinorText, !photo && styles.heroMinorTextPlain]}>{time}</Text>
           </View>
           <View style={styles.heroMinorItem}>
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={WHITE} strokeWidth={2} strokeLinecap="round">
+            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={icon} strokeWidth={2} strokeLinecap="round">
               <Path d="M4 17a8 8 0 0 1 16 0" />
               <Path d="m12 17 4-5" />
             </Svg>
-            <Text style={styles.heroMinorText}>
+            <Text style={[styles.heroMinorText, !photo && styles.heroMinorTextPlain]}>
               {pace}
-              <Text style={styles.heroMinorUnit}>/km</Text>
+              <Text style={[styles.heroMinorUnit, !photo && styles.heroMinorUnitPlain]}>/km</Text>
             </Text>
           </View>
         </View>
@@ -309,6 +314,15 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   heroMinorItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heroMinorText: { fontFamily: FONT.num, fontSize: 16, lineHeight: 22, color: WHITE },
   heroMinorUnit: { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
+  // 사진 없는 히어로: 테마 카드 위 테마 글자색(스크림 없음)
+  heroPlain: { backgroundColor: c.surface, borderRadius: 20, borderWidth: 1, borderColor: c.border },
+  heroTitlePlain: { color: c.text },
+  heroDatePlain: { color: c.text2 },
+  heroDistPlain: { color: c.text },
+  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
+  heroKmPlain: { color: c.value },
+  heroMinorTextPlain: { color: c.text },
+  heroMinorUnitPlain: { color: c.text2 },
   albumHead: { height: 24, marginBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   albumTitle: { fontFamily: FONT.bold, fontSize: 18, lineHeight: 24, color: c.text },
   albumCount: { ...monoLabel(10.5, 0.14), lineHeight: 24, color: c.navOff },
@@ -316,12 +330,12 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     height: 72, paddingLeft: 12, paddingRight: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
   },
-  rowLatest: { backgroundColor: c.dark ? '#16212D' : '#E8EFF6', borderWidth: 1.5, borderColor: c.dark ? '#9DBFE0' : '#24476B' },
+  rowLatest: { backgroundColor: c.surface2, borderWidth: 1.5, borderColor: c.value },
   thumb: { width: THUMB, height: THUMB, borderRadius: 12, overflow: 'hidden', backgroundColor: c.surface2 },
   rowBody: { flex: 1, minWidth: 0, gap: 1 },
   title: { fontFamily: FONT.semibold, fontSize: 16, lineHeight: 22, color: c.text },
   date: { ...monoLabel(12, 0.04), lineHeight: 18, color: c.navOff },
-  dateLatest: { color: c.dark ? '#AEBBC7' : '#4A5562' },
+  dateLatest: { color: c.text2 },
   // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
   distance: { fontFamily: FONT.num, fontSize: 22, lineHeight: 26, color: c.value },
   distanceUnit: { fontFamily: FONT.num, fontSize: 13, color: c.navOff },
