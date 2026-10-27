@@ -21,22 +21,23 @@ export function mapColors(p: Palette) {
     clBg: m.clBg, clRing: m.clRing, clGlow: m.clGlow, clRingSoft: withAlpha(m.clRing, 0.25),
     meFill: m.meFill, meRing: m.meRing, meHalo: m.meHalo,
     // Frost: 유리 클러스터·링 마커·선택 경로
-    glass: p.glass, clEdge: m.clEdge, text: p.text, hair: p.hair, ring: p.bg,
+    glass: p.glass, glassBorder: p.glassBorder, clEdge: m.clEdge, text: p.text, hair: p.hair, ring: p.bg,
     dark: p.dark,
   };
 }
 
 // 피드·프로필 지도가 같이 쓰는 마커와 클러스터(+N) 아이콘. 전역 dotIcon·ringIcon·clusterIcon과 makeIcons(c)를 만든다.
-// dotIcon: 프로필 지도의 펄스 점. ringIcon: 피드 지도의 링 마커(Frost, 44px 터치 영역).
+// dotIcon: 펄스 점(이전 디자인). glassDotIcon: 프로필 지도의 유리 원 + 링 점(Frost). ringIcon: 피드 지도의 링 마커(Frost). 모두 44px 터치 영역.
 // 클러스터는 서리 유리 원(Frost): 피드 44px·clEdge 테두리, 프로필 48px·hair 테두리
 export function markerIconsScript(p: Palette, cluster: 'feed' | 'profile' = 'feed'): string {
   const size = cluster === 'feed' ? 44 : 48;
   const font = cluster === 'feed' ? 12 : 14;
   return `
-  var dotIcon, ringIcon, iconColors;
+  var dotIcon, ringIcon, glassDotIcon, iconColors;
   function makeIcons(c){
     iconColors=c;
     dotIcon=L.divIcon({html:'<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:'+c.pulse+'"></div><div style="width:11px;height:11px;border-radius:50%;background:'+c.dot+';border:2px solid '+c.dotBorder+';box-shadow:0 0 8px '+c.dotGlow+'"></div></div>',className:'',iconSize:[22,22],iconAnchor:[11,11]});
+    glassDotIcon=L.divIcon({html:'<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;position:relative"><div style="position:absolute;left:9px;top:9px;width:26px;height:26px;box-sizing:border-box;border-radius:50%;background:'+c.glass+';border:1px solid '+c.glassBorder+';-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)"></div><div style="position:relative;width:12px;height:12px;box-sizing:border-box;border-radius:50%;border:2.5px solid '+c.dot+';box-shadow:0 0 8px '+c.dotGlow+'"></div></div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});
     ringIcon=L.divIcon({html:'<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center"><div style="width:28px;height:28px;box-sizing:border-box;border-radius:50%;border:1px solid '+c.hair+';display:flex;align-items:center;justify-content:center"><div style="width:16px;height:16px;box-sizing:border-box;border-radius:50%;border:3px solid '+c.dot+';background:'+c.ring+'"></div></div></div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});
   }
   function clusterIcon(cl){var c=iconColors,n=cl.getChildCount();return L.divIcon({html:'<div style="width:${size}px;height:${size}px;box-sizing:border-box;border-radius:50%;background:'+c.glass+';-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:'+c.text+';border:${cluster === 'feed' ? 1.5 : 1}px solid '+${cluster === 'feed' ? 'c.clEdge' : 'c.hair'}+';box-shadow:0 10px 30px rgba(0,0,0,'+(c.dark?0.45:0.10)+');display:flex;align-items:center;justify-content:center;font-size:${font}px;font-weight:500;letter-spacing:0.04em;font-family:ui-monospace,Menlo,monospace">+'+n+'</div>',className:'',iconSize:[${size},${size}],iconAnchor:[${size / 2},${size / 2}]});}

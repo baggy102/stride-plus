@@ -12,7 +12,9 @@ import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { useColors, useScheme } from '@/theme/useColors';
-import { FONT } from '@/theme/fonts';
+import { FONT, monoLabel } from '@/theme/fonts';
+import { Glass } from '@/components/Glass';
+import { fetchRunStats, type RunStats } from '@/api/stats';
 import { withAlpha, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme } from '@/components/map/mapHtml';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
@@ -79,7 +81,7 @@ ${markerIconsScript(p, 'profile')}
       if (!run.startPoint) return;
       var latLng = [run.startPoint[1], run.startPoint[0]];
       all.push(latLng);
-      var marker = L.marker(latLng, { icon: dotIcon });
+      var marker = L.marker(latLng, { icon: glassDotIcon });
       marker.on('click', function() {
         window.ReactNativeWebView.postMessage(JSON.stringify(run));
       });
@@ -110,6 +112,7 @@ export function ProfileMapScreen({ userId }: Props) {
   const bottomBase = userId ? insets.bottom + 24 : tabClearance + 12;
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [stats, setStats] = useState<RunStats | null>(null);
   const [runs, setRuns] = useState<RunWithRoute[]>([]);
   const [listState, setListState] = useState<ListState>('loading');
   const [page, setPage] = useState(1);
@@ -144,8 +147,14 @@ export function ProfileMapScreen({ userId }: Props) {
     if (mode === 'initial') setListState('loading');
     else setRefreshing(true);
     try {
-      const [profileRes, runsRes] = await Promise.all([client.get<UserProfile>(`/users/${targetId}`), fetchPage(1)]);
+      const [profileRes, runsRes, statsRes] = await Promise.all([
+        client.get<UserProfile>(`/users/${targetId}`),
+        fetchPage(1),
+        // 누적이 실패해도 목록은 보여 준다
+        fetchRunStats(targetId).catch(() => null),
+      ]);
       setProfile(profileRes.data);
+      setStats(statsRes);
       setRuns(runsRes.data);
       setPage(1);
       setHasMore(runsRes.data.length === PAGE_SIZE);
@@ -195,7 +204,9 @@ export function ProfileMapScreen({ userId }: Props) {
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/feed'));
   const openRun = (runId: string) => router.push(`/run/${runId}`);
 
-  const totalKm = runs.reduce((sum, run) => sum + run.distanceKm, 0);
+  // 누적은 서버 합계(D3). 실패하면 불러온 목록 합으로 대신하고 개수에 + 를 붙인다
+  const totalKm = stats?.totalKm ?? runs.reduce((sum, run) => sum + run.distanceKm, 0);
+  const runCount = stats ? String(stats.runCount) : `${runs.length}${hasMore ? '+' : ''}`;
   const displayName = profile?.username ?? (mine ? user?.username ?? '' : '');
   const avatarLetter = (displayName || '?')[0].toUpperCase();
   const blocked = !mine && !!profile?.blockedByMe;
@@ -239,7 +250,9 @@ export function ProfileMapScreen({ userId }: Props) {
               style={[styles.myLocBtn, { bottom: bottomBase }]}
               onPress={handleMyLocation}
             >
-              <LocateIcon color={c.value} />
+              <Glass style={styles.myLocGlass}>
+                <LocateIcon color={c.navOn} />
+              </Glass>
             </Pressable>
           )}
           {showMap ? null : view === 'map' && listState === 'loading' ? (
@@ -253,6 +266,7 @@ export function ProfileMapScreen({ userId }: Props) {
                 state={listState}
                 baseUrl={BASE_URL}
                 mine={mine}
+                totalRuns={stats?.runCount ?? null}
                 refreshing={refreshing}
                 loadingMore={loadingMore}
                 topInset={headerHeight}
@@ -271,7 +285,7 @@ export function ProfileMapScreen({ userId }: Props) {
       {/* 프로필 헤더 */}
       <View
         onLayout={(e: LayoutChangeEvent) => setHeaderHeight(e.nativeEvent.layout.height)}
-        style={[styles.header, { paddingTop: insets.top + 4 }, blocked && styles.headerBlocked]}
+        style={[styles.header, { paddingTop: insets.top + 4 }, (blocked || !showMap) && styles.headerBlocked]}
       >
         <View style={styles.topRow}>
           <View style={styles.logo} pointerEvents="none">
@@ -316,11 +330,20 @@ export function ProfileMapScreen({ userId }: Props) {
             </View>
             <View style={styles.headerInfo}>
               <Text style={styles.username} numberOfLines={1}>{displayName}</Text>
-              <Text style={styles.stats}>
-                {listState === 'ready' ? `${totalKm.toFixed(1)} km · ${runs.length}${hasMore ? '+' : ''}회` : ' '}
-              </Text>
+              {listState === 'ready' ? (
+                <Text style={styles.stats} accessibilityLabel={`누적 ${totalKm.toFixed(1)} km, ${runCount}회`}>
+                  {'TOTAL '}
+                  <Text style={styles.statsValue}>{totalKm.toFixed(1)}</Text>
+                  {' km  ·  '}
+                  <Text style={styles.statsValue}>{runCount}</Text>
+                  {' RUNS'}
+                </Text>
+              ) : (
+                <Text style={styles.stats}> </Text>
+              )}
             </View>
             <View accessibilityRole="tablist" accessibilityLabel="기록 보기 방식" style={styles.segment}>
+              {/* Frost 아이콘 토글(D): 44px 버튼 두 개, 고른 쪽만 accent */}
               {(['map', 'list'] as const).map((id) => {
                 const on = view === id;
                 const Icon = id === 'map' ? MapIcon : ListIcon;
@@ -331,7 +354,7 @@ export function ProfileMapScreen({ userId }: Props) {
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={id === 'map' ? '지도 보기' : '목록 보기'}
                     onPress={() => { setView(id); setSelected(null); }}
-                    style={[styles.segmentBtn, on && { backgroundColor: c.accent }]}
+                    style={[styles.segmentBtn, on && styles.segmentOn]}
                   >
                     <Icon color={on ? c.ink : c.text2} />
                   </Pressable>
@@ -390,12 +413,17 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   avatarLetter: { fontFamily: FONT.semibold, fontSize: 18, color: c.ink },
   headerInfo: { flex: 1, minWidth: 0 },
   username: { fontFamily: FONT.semibold, fontSize: 16, lineHeight: 22, color: c.text },
-  stats: { fontFamily: FONT.num, fontSize: 13, lineHeight: 18, color: c.text2 },
-  segment: { height: 50, padding: 3, borderRadius: 13, backgroundColor: c.surface2, flexDirection: 'row', gap: 2 },
-  segmentBtn: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  stats: { ...monoLabel(12, 0.06), fontFamily: FONT.mono, lineHeight: 18, color: c.navOff },
+  statsValue: { ...monoLabel(14, 0.02), color: c.text },
+  segment: { height: 44, flexDirection: 'row', gap: 6 },
+  segmentBtn: {
+    width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
+  },
+  segmentOn: { backgroundColor: c.accent, borderColor: c.accent },
   myLocBtn: {
     position: 'absolute', right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22,
-    backgroundColor: c.surface, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: c.border, shadowColor: c.shadow, shadowOpacity: 0.4, shadowRadius: 6, elevation: 4,
+    shadowColor: c.shadow, shadowOpacity: c.dark ? 0.45 : 0.1, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 4,
   },
+  myLocGlass: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });
