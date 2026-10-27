@@ -8,7 +8,7 @@ import { BackIcon, CheckIcon, ChevronIcon } from '@/components/icons';
 import { LEGAL_DOCS, SUPPORT_EMAIL } from '@/config/legal';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
-import type { Palette } from '@/theme/colors';
+import { elevationStyle, type Palette } from '@/theme/colors';
 
 // 계정 삭제 시 함께 지워지는 항목(서버 UsersService.deleteAccount와 맞춘다)
 const DELETED_ITEMS = ['계정 정보', '러닝 기록', '게시글', '사진'];
@@ -190,7 +190,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   dialogWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
   dialog: {
     paddingTop: 24, paddingHorizontal: 20, paddingBottom: 20, borderRadius: 22, backgroundColor: c.surface, gap: 14,
-    shadowColor: c.shadow, shadowOpacity: 0.45, shadowRadius: 15, shadowOffset: { width: 0, height: 10 }, elevation: 8,
+    ...elevationStyle(c),
   },
   dialogTitle: { fontFamily: FONT.semibold, fontSize: 18, lineHeight: 26, color: c.text },
   dialogText: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 22, color: c.text },

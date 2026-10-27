@@ -7,7 +7,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "css:build": "tailwindcss -i ./global.css -o ./tailwind.output.css --content './app/**/*.{js,jsx,ts,tsx}' --content './src/**/*.{js,jsx,ts,tsx}'",
-    "gen:map-assets": "node scripts/gen-map-assets.js"
+    "gen:map-assets": "node scripts/gen-map-assets.js",
+    "test": "node --test --experimental-strip-types src/theme/colors.test.mjs"
   },
   "dependencies": {
     "@bacons/apple-targets": "~5.0.0",

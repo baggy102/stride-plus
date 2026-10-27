@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { AlertIcon, RouteIcon } from '@/components/icons';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
-import type { Palette } from '@/theme/colors';
+import { elevationStyle, type Palette } from '@/theme/colors';
 import type { RunMarker } from '../RunCard';
 import { formatDuration, formatPace } from '@/utils/pace';
 import { formatDay } from '@/utils/date';
@@ -291,7 +291,7 @@ export function RunList(props: Props) {
 const makeStyles = (c: Palette) => StyleSheet.create({
   hero: {
     height: HERO_HEIGHT, marginBottom: 12, borderRadius: 20, overflow: 'hidden',
-    shadowColor: c.shadow, shadowOpacity: c.dark ? 0.4 : 0.14, shadowRadius: 13, shadowOffset: { width: 0, height: 10 }, elevation: 6,
+    ...elevationStyle(c),
   },
   heroShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 170 },
   heroBadge: {
