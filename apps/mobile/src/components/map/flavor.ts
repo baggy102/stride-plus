@@ -1,18 +1,19 @@
 import { BASE_FLAVORS } from './webAssets.generated';
 
-// 확정 UI 캔버스 지도 팔레트(D3, iOS 출시 플랜 §5). protomaps flavor 키에 대응시킨다
+// Frost 지도 팔레트(2026-10-27, 캔버스 「B 오버레이」: 무채색 + 블루로 식힌 톤, 거리명은 남긴다).
+// 캔버스는 바탕(land)만 정했고, 나머지는 그 색에서 명도 단계를 이어 만든 값이다. protomaps flavor 키에 대응시킨다
 const CANVAS_MAP = {
   dark: {
-    land: '#45484E', residential: '#474A50', forest: '#4F535A', grass: '#4B4E54', water: '#2E333A',
-    building: '#53575D', minor: '#595D64', link: '#676C73', major: '#787D85', highway: '#878C94',
-    path: '#62666D', rail: '#5E6269',
-    roadLabel: '#C4C9D0', neighborhood: '#A9AFB7', district: '#DDE1E6', river: '#929CA6',
+    land: '#16202B', residential: '#18232F', forest: '#1A2734', grass: '#182530', water: '#0E1620',
+    building: '#1E2A37', minor: '#243242', link: '#2B3B4D', major: '#34475B', highway: '#3E5369',
+    path: '#213040', rail: '#263546',
+    roadLabel: '#9AAAB9', neighborhood: '#7F90A1', district: '#C3D0DC', river: '#6E8AA6',
   },
   light: {
-    land: '#F6F7F8', residential: '#F3F4F5', forest: '#E6EAED', grass: '#ECEFF1', water: '#D5E6F3',
-    building: '#E6E8EB', minor: '#E0E3E6', link: '#D3D7DB', major: '#C4C9CE', highway: '#B4BAC0',
-    path: '#D5D8DC', rail: '#C7CBD0',
-    roadLabel: '#6B7079', neighborhood: '#8A9097', district: '#3C4148', river: '#5D7F9A',
+    land: '#E9EEF3', residential: '#E5EBF1', forest: '#DCE5EC', grass: '#E0E8EE', water: '#CADCEB',
+    building: '#DCE3EA', minor: '#D6DEE6', link: '#C9D3DD', major: '#B9C5D1', highway: '#A7B5C3',
+    path: '#D2DAE2', rail: '#C2CCD6',
+    roadLabel: '#5D6976', neighborhood: '#7A8693', district: '#2E3A47', river: '#4F7393',
   },
 } as const;
 
