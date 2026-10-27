@@ -70,7 +70,7 @@ export const palettes: Record<Scheme, Palette> = {
     ok: '#4CC38A',
     warn: '#FFC66B',
     warnLine: '#6B5A3A',
-    stop: { ring: '#9DBFE0', track: '#1A2430', edge: 'rgba(157,191,224,0.35)' },
+    stop: { ring: '#9DBFE0', track: '#2C3846', edge: 'rgba(157,191,224,0.35)' },
     glass: 'rgba(18,25,34,0.72)',
     glassBorder: 'rgba(220,230,238,0.16)',
     hair: 'rgba(157,191,224,0.30)',
