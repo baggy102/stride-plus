@@ -6,6 +6,8 @@ export interface RunSummary {
   coordinates: [number, number][];
   /** 점마다 시작 후 흐른 시간(초, 일시정지 제외) — km 스플릿용 */
   routeTimes: number[];
+  /** 거리에 넣지 않은 구간(재개 직후)의 끝 점 인덱스 — 스플릿도 같은 구간을 뺀다 */
+  segmentBreaks: number[];
   distanceKm: number;
   elapsedSeconds: number;
   paceSecPerKm: number;
@@ -38,6 +40,7 @@ interface RunStore {
   coordinates: [number, number][];
   /** coordinates와 같은 길이. 점마다 시작 후 흐른 시간(초, 일시정지 제외) */
   routeTimes: number[];
+  segmentBreaks: number[];
   /** 마지막 점의 GPS 정확도(m) — 기록 중 상단 줄 */
   lastAccuracyM: number | null;
   /** 받은 점마다 누적한 거리(필터를 통과한 구간만) */
@@ -99,6 +102,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   startedAt: null,
   coordinates: [],
   routeTimes: [],
+  segmentBreaks: [],
   lastAccuracyM: null,
   distanceKm: 0,
   lastSampleAt: null,
@@ -115,7 +119,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (get().isPaused) return;
     if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
     const now = timestamp ?? Date.now();
-    const { coordinates, routeTimes, distanceKm, lastSampleAt, skipNextSegment, startedAt, pausedMs } = get();
+    const { coordinates, routeTimes, segmentBreaks, distanceKm, lastSampleAt, skipNextSegment, startedAt, pausedMs } = get();
     const prev = coordinates[coordinates.length - 1];
     let addKm = 0;
     if (prev && lastSampleAt !== null && !skipNextSegment) {
@@ -128,6 +132,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const time = Math.max(atSec, routeTimes[routeTimes.length - 1] ?? 0);
     set({
       coordinates: [...coordinates, [lng, lat]], routeTimes: [...routeTimes, time], lastAccuracyM: accuracy ?? null,
+      segmentBreaks: prev && skipNextSegment ? [...segmentBreaks, coordinates.length] : segmentBreaks,
       distanceKm: distanceKm + addKm, lastSampleAt: now, skipNextSegment: false,
     });
   },
@@ -139,7 +144,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     // 권한 순서: 사용 중 허용(위) → 항상 허용(여기). 항상 허용을 거부해도 포그라운드로 계속한다
     set({
       isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, runNo,
-      startedAt: Date.now(), coordinates: [], routeTimes: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
+      startedAt: Date.now(), coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
     });
 
     if (await startBackgroundUpdates()) {
@@ -154,7 +159,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   stopTracking: () => {
-    const { coordinates, routeTimes, startedAt, distanceKm, pausedAt, pausedMs } = get();
+    const { coordinates, routeTimes, segmentBreaks, startedAt, distanceKm, pausedAt, pausedMs } = get();
     const elapsedSeconds = startedAt !== null
       ? elapsedSecondsSince(startedAt, pausedAt ?? Date.now(), pausedMs)
       : get().elapsedSeconds;
@@ -169,7 +174,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     const paceSecPerKm = distanceKm > 0 ? elapsedSeconds / distanceKm : 0;
 
-    const summary = { coordinates, routeTimes, distanceKm, elapsedSeconds, paceSecPerKm };
+    const summary = { coordinates, routeTimes, segmentBreaks, distanceKm, elapsedSeconds, paceSecPerKm };
     set({ pendingSummary: summary });
     return summary;
   },
@@ -186,7 +191,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   resetRun: () => set({
-    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], routeTimes: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null,
+    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null,
     elapsedSeconds: 0, pendingSummary: null,
   }),
 

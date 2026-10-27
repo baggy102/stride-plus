@@ -49,9 +49,10 @@ export default function RunSummaryScreen() {
   const [finishedAt] = useState(() => new Date());
   const [place, setPlace] = useState<string | null>(null);
 
-  // 요약 데이터 없이 직접 진입한 경우(새로고침 등) 기록 탭으로 되돌림
+  // 요약 데이터 없이 직접 진입한 경우(새로고침 등) 기록 탭으로 되돌림. 저장·삭제로 떠나는 중에는 하지 않는다
+  const leaving = useRef(false);
   useEffect(() => {
-    if (!pendingSummary) router.replace('/(tabs)/record');
+    if (!pendingSummary && !leaving.current) router.replace('/(tabs)/record');
   }, [pendingSummary, router]);
 
   const start = pendingSummary?.coordinates[0];
@@ -73,7 +74,7 @@ export default function RunSummaryScreen() {
   };
 
   const splits = useMemo(
-    () => (pendingSummary ? kmSplits(pendingSummary.coordinates, pendingSummary.routeTimes) : []),
+    () => (pendingSummary ? kmSplits(pendingSummary.coordinates, pendingSummary.routeTimes, pendingSummary.segmentBreaks) : []),
     [pendingSummary],
   );
 
@@ -83,6 +84,7 @@ export default function RunSummaryScreen() {
 
   const handleDiscard = () => {
     setConfirmDelete(false);
+    leaving.current = true;
     resetRun();
     router.replace('/(tabs)/record');
   };
@@ -114,6 +116,7 @@ export default function RunSummaryScreen() {
 
       await client.post('/posts', { runId: run._id });
 
+      leaving.current = true;
       clearPendingSummary();
       resetRun();
       // File(520ms): 요약이 앨범(내 기록 목록)의 맨 위 히어로로 접혀 들어간다

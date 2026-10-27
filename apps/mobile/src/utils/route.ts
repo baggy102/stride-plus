@@ -45,17 +45,19 @@ export function kmMarks(coords: LngLat[]): KmMark[] {
 
 /**
  * km별 걸린 시간(초). times는 점마다 시작 후 흐른 시간(일시정지 제외). 다 채운 km만 돌려준다.
- * 시간이 없거나 길이가 다르면 빈 배열(이전 기록). 순간 튐·일시정지 중 이동한 구간은 거리에서 뺀다
+ * 시간이 없거나 길이가 다르면 빈 배열(이전 기록). 순간 튐·일시정지 중 이동한 구간은 거리에서 뺀다.
+ * breaks: 기록 거리에서도 뺀 구간(재개 직후)의 끝 점 인덱스
  */
-export function kmSplits(coords: LngLat[], times: number[] | undefined): number[] {
+export function kmSplits(coords: LngLat[], times: number[] | undefined, breaks: number[] = []): number[] {
   if (!times || times.length !== coords.length || coords.length < 2) return [];
+  const skip = new Set(breaks);
   const splits: number[] = [];
   let total = 0;
   let lastKmTime = times[0];
   for (let i = 1; i < coords.length; i++) {
     const seg = haversineKm(coords[i - 1], coords[i]);
     const dt = times[i] - times[i - 1];
-    if (seg <= 0) continue;
+    if (seg <= 0 || skip.has(i)) continue;
     if (dt <= 0 || (seg * 1000) / dt > MAX_SPEED_MPS) continue;
     while (total + seg >= splits.length + 1) {
       const f = (splits.length + 1 - total) / seg;

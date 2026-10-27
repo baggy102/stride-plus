@@ -10,6 +10,8 @@ Pod::Spec.new do |s|
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
+  # ActivityKit은 iOS 16.1부터 있다. 앱 최소 버전(15.1)에서 실행이 막히지 않게 약하게 링크한다
+  s.weak_frameworks = 'ActivityKit'
 
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
