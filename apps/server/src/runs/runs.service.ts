@@ -101,6 +101,21 @@ export class RunsService {
     });
   }
 
+  // 프로필 누적(TOTAL)과 「내 n번째 러닝」. 차단 관계면 목록처럼 비어 있는 값(D3)
+  async statsByUser(viewerId: string, userId: string): Promise<{ totalKm: number; runCount: number }> {
+    if (!isValidObjectId(userId)) throw new NotFoundException('user_not_found');
+    const oid = new Types.ObjectId(userId);
+    const hidden = await this.hiddenUserIds(viewerId);
+    if (hidden.some((id) => id.equals(oid))) return { totalKm: 0, runCount: 0 };
+    const [row] = await this.runModel
+      .aggregate<{ totalKm: number; runCount: number }>([
+        { $match: { userId: oid } },
+        { $group: { _id: null, totalKm: { $sum: '$distanceKm' }, runCount: { $sum: 1 } } },
+      ])
+      .exec();
+    return { totalKm: row?.totalKm ?? 0, runCount: row?.runCount ?? 0 };
+  }
+
   // 형식이 틀린 ID도 404로 — 앱은 「없는 러닝」 한 가지로 처리한다.
   async findById(viewerId: string, id: string) {
     if (!isValidObjectId(id)) throw new NotFoundException('run_not_found');
