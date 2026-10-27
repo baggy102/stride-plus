@@ -5,7 +5,7 @@ import client from '@/api/client';
 import { CheckIcon, MoreIcon } from '@/components/icons';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
-import type { Palette } from '@/theme/colors';
+import { elevationStyle, type Palette } from '@/theme/colors';
 
 // 서버 Report.reason enum(C1)과 같은 값
 const REPORT_REASONS = [
@@ -184,7 +184,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   menu: {
     position: 'absolute', right: 16, width: 200, padding: 6, borderRadius: 16,
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
-    shadowColor: c.shadow, shadowOpacity: 0.35, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 8,
+    ...elevationStyle(c),
   },
   menuItem: { height: 44, paddingHorizontal: 12, borderRadius: 10, justifyContent: 'center' },
   menuText: { fontFamily: FONT.regular, fontSize: 16, color: c.text },
@@ -212,7 +212,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   dialogWrap: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
   dialog: {
     paddingTop: 24, paddingHorizontal: 20, paddingBottom: 20, borderRadius: 22, backgroundColor: c.surface, gap: 10,
-    shadowColor: c.shadow, shadowOpacity: 0.45, shadowRadius: 15, shadowOffset: { width: 0, height: 10 }, elevation: 8,
+    ...elevationStyle(c),
   },
   dialogButtons: { marginTop: 12, flexDirection: 'row', gap: 10 },
   pill: { flex: 1, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },

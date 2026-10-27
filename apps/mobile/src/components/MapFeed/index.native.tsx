@@ -13,7 +13,7 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { MapPopupCard } from '@/components/MapPopupCard';
 import client, { BASE_URL } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
-import type { Palette } from '@/theme/colors';
+import { elevationStyle, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import { RunMarker } from '../RunCard';
 
@@ -379,7 +379,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   chipTextOn: { color: c.chipOnFg },
   noticeShadow: {
     position: 'absolute', left: 16, right: 16, borderRadius: 16,
-    shadowColor: c.shadow, shadowOpacity: c.dark ? 0.45 : 0.1, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 4,
+    ...elevationStyle(c),
   },
   notice: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
@@ -399,7 +399,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   retryText: { fontFamily: FONT.semibold, fontSize: 14, color: c.text },
   myLocShadow: {
     position: 'absolute', right: 16, width: 44, height: 44, borderRadius: 22,
-    shadowColor: c.shadow, shadowOpacity: c.dark ? 0.45 : 0.1, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 4,
+    ...elevationStyle(c),
   },
   myLocBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });
