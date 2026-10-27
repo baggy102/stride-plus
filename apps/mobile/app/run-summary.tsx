@@ -132,7 +132,7 @@ export default function RunSummaryScreen() {
     <View style={styles.root} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: 24 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           {/* 머리: 「러닝 종료 · 10.16 목 · 07:05」 + 장소 */}
           <View style={styles.head}>
             <Text style={styles.kicker}>{`러닝 종료 · ${formatDay(finishedAt)} · ${formatClock(finishedAt)}`}</Text>
