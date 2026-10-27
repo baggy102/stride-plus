@@ -1,7 +1,7 @@
 import { NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
-import { RunsService } from './runs.service';
+import { RunsService, normalizeRouteTimes } from './runs.service';
 import { Run } from './runs.schema';
 import { User } from '../users/users.schema';
 import { Types } from 'mongoose';
@@ -11,6 +11,7 @@ const mockFind = jest.fn();
 const mockRunModel = {
   find: mockFind,
   findById: jest.fn(),
+  aggregate: jest.fn(),
 };
 
 const VIEWER = '64b7f0c2a1b2c3d4e5f60700';
@@ -229,6 +230,31 @@ describe('RunsService', () => {
     });
   });
 
+  describe('statsByUser', () => {
+    const USER = '64b7f0c2a1b2c3d4e5f60703';
+
+    it('사용자의 총 거리와 러닝 수를 집계한다', async () => {
+      mockRunModel.aggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([{ _id: null, totalKm: 128.4, runCount: 27 }]) });
+      await expect(service.statsByUser(VIEWER, USER)).resolves.toEqual({ totalKm: 128.4, runCount: 27 });
+      const [pipeline] = mockRunModel.aggregate.mock.calls[0];
+      expect(pipeline[0].$match.userId.equals(new Types.ObjectId(USER))).toBe(true);
+    });
+
+    it('기록이 없으면 0', async () => {
+      mockRunModel.aggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([]) });
+      await expect(service.statsByUser(VIEWER, USER)).resolves.toEqual({ totalKm: 0, runCount: 0 });
+    });
+
+    it('차단 관계면 조회 없이 0', async () => {
+      await expect(service.statsByUser(VIEWER, BLOCKED.toString())).resolves.toEqual({ totalKm: 0, runCount: 0 });
+      expect(mockRunModel.aggregate).not.toHaveBeenCalled();
+    });
+
+    it('형식이 틀린 ID면 NotFoundException', async () => {
+      await expect(service.statsByUser(VIEWER, 'nope')).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('차단 필터(양방향)', () => {
     it('findNearby — 내가 차단한 사용자와 나를 차단한 사용자를 $nin으로 뺀다', async () => {
       mockFind.mockReturnValue({
@@ -264,5 +290,22 @@ describe('RunsService', () => {
         new NotFoundException('run_not_found'),
       );
     });
+  });
+});
+
+describe('normalizeRouteTimes', () => {
+  it('좌표와 길이가 같고 줄어들지 않으면 그대로 저장', () => {
+    expect(normalizeRouteTimes([0, 3, 6.5], 3)).toEqual([0, 3, 6.5]);
+  });
+
+  it('보내지 않으면(이전 앱) 빈 배열', () => {
+    expect(normalizeRouteTimes(undefined, 3)).toEqual([]);
+  });
+
+  it('길이가 다르거나 줄어들거나 음수면 빈 배열', () => {
+    expect(normalizeRouteTimes([0, 3], 3)).toEqual([]);
+    expect(normalizeRouteTimes([0, 5, 4], 3)).toEqual([]);
+    expect(normalizeRouteTimes([-1, 2, 4], 3)).toEqual([]);
+    expect(normalizeRouteTimes([0, Number.NaN, 4], 3)).toEqual([]);
   });
 });

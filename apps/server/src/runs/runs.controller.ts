@@ -29,6 +29,12 @@ export class RunsController {
     return this.runsService.findNearby(req.user.sub, dto.lat ?? 0, dto.lng ?? 0, dto.radius ?? 5000);
   }
 
+  // ':id'보다 먼저 선언해야 'stats'가 러닝 ID로 잡히지 않는다
+  @Get('stats/:userId')
+  stats(@Req() req: { user: { sub: string } }, @Param('userId') userId: string) {
+    return this.runsService.statsByUser(req.user.sub, userId);
+  }
+
   @Get(':id')
   findById(@Req() req: { user: { sub: string } }, @Param('id') id: string) {
     return this.runsService.findById(req.user.sub, id);

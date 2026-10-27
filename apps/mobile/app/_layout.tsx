@@ -1,5 +1,6 @@
 import '../styles';
 import '@/tasks/locationTask'; // 백그라운드 위치 태스크 등록(모듈 최상위)
+import '@/native/liveActivity'; // 기록 중 러닝 → 잠금화면 Live Activity(iOS)
 import { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import { LoadingView } from '@/components/LoadingView';
@@ -14,6 +15,7 @@ import { useThemeStore } from '@/store/theme';
 import { registerUnauthenticatedHandler } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
 import { toRgbChannels } from '@/theme/colors';
+import { MOTION } from '@/utils/motion';
 
 export default function RootLayout() {
   const { isAuthenticated, isHydrating, hydrate, logout } = useAuthStore();
@@ -65,7 +67,10 @@ export default function RootLayout() {
       <View style={[{ flex: 1, backgroundColor: c.bg }, themeVars]}>
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         {/* 스택: 상세·설정·사용자 프로필에서 뒤로 가면 원래 화면(탭 상태 유지)으로 돌아간다 */}
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} />
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
+          {/* Settle(기록 중 → 요약): 화면은 페이드로 바뀌고, 요약 안에서 도면 선이 그려진다 */}
+          <Stack.Screen name="run-summary" options={{ animation: 'fade', animationDuration: MOTION.settle, gestureEnabled: false }} />
+        </Stack>
         {isHydrating && (
           <View style={{ position: 'absolute', inset: 0 }}>
             <LoadingView />

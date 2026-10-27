@@ -101,6 +101,21 @@ export class RunsService {
     });
   }
 
+  // 프로필 누적(TOTAL)과 「내 n번째 러닝」. 차단 관계면 목록처럼 비어 있는 값(D3)
+  async statsByUser(viewerId: string, userId: string): Promise<{ totalKm: number; runCount: number }> {
+    if (!isValidObjectId(userId)) throw new NotFoundException('user_not_found');
+    const oid = new Types.ObjectId(userId);
+    const hidden = await this.hiddenUserIds(viewerId);
+    if (hidden.some((id) => id.equals(oid))) return { totalKm: 0, runCount: 0 };
+    const [row] = await this.runModel
+      .aggregate<{ totalKm: number; runCount: number }>([
+        { $match: { userId: oid } },
+        { $group: { _id: null, totalKm: { $sum: '$distanceKm' }, runCount: { $sum: 1 } } },
+      ])
+      .exec();
+    return { totalKm: row?.totalKm ?? 0, runCount: row?.runCount ?? 0 };
+  }
+
   // 형식이 틀린 ID도 404로 — 앱은 「없는 러닝」 한 가지로 처리한다.
   async findById(viewerId: string, id: string) {
     if (!isValidObjectId(id)) throw new NotFoundException('run_not_found');
@@ -126,6 +141,7 @@ export class RunsService {
     const run = new this.runModel({
       userId: new Types.ObjectId(userId),
       route: { type: 'LineString', coordinates: dto.coordinates },
+      routeTimes: normalizeRouteTimes(dto.routeTimes, dto.coordinates.length),
       distanceKm: dto.distanceKm,
       paceSecPerKm: dto.paceSecPerKm,
       routeImageUrl,
@@ -134,4 +150,15 @@ export class RunsService {
     });
     return run.save();
   }
+}
+
+// 점마다의 시간은 좌표와 길이가 같고, 0 이상이며 줄어들지 않을 때만 저장한다. 아니면 빈 배열(스플릿 없음)
+export function normalizeRouteTimes(times: number[] | undefined, coordinateCount: number): number[] {
+  if (!Array.isArray(times) || times.length !== coordinateCount) return [];
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i];
+    if (typeof t !== 'number' || !Number.isFinite(t) || t < 0) return [];
+    if (i > 0 && t < times[i - 1]) return [];
+  }
+  return times;
 }

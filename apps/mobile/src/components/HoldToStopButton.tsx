@@ -4,9 +4,10 @@ import Svg, { Circle } from 'react-native-svg';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import { PlayIcon } from '@/components/icons';
+import { Glass } from '@/components/Glass';
 
-// 확정 UI S06 「종료 A · 강조색」: 원형 버튼을 길게 누르면 진행 링이 차고, 다 차면 종료.
-// 손을 떼면 취소된다(실수로 한 번 눌러서는 끝나지 않게). 짧게 탭하면 일시정지/재개(B7).
+// Frost S06 「종료 A」: 서리 유리 원형 버튼(달리는 중 ‖, 일시정지 중 ▶). 길게 누르면 진행 링이 차고, 다 차면 종료.
+// 손을 떼면 취소된다(실수로 한 번 눌러서는 끝나지 않게). 짧게 탭하면 일시정지/재개(B7). 링만 강조색.
 const HOLD_MS = 1500;
 const TAP_MS = 300;
 const SIZE = 104;
@@ -79,11 +80,20 @@ export function HoldToStopButton({ onComplete, onTap, paused }: Props) {
           onPressIn={begin}
           onPressOut={cancel}
           style={[
-            styles.button,
-            { backgroundColor: c.accent, borderColor: c.stop.edge, transform: [{ scale: holding ? 0.94 : 1 }] },
+            styles.shadow,
+            { shadowOpacity: c.dark ? 0 : 0.1, shadowColor: c.shadow, transform: [{ scale: holding ? 0.94 : 1 }] },
           ]}
         >
-          {paused ? <PlayIcon color={c.ink} /> : <View style={[styles.square, { backgroundColor: c.ink }]} />}
+          <Glass style={[styles.button, { borderColor: c.dark ? 'rgba(220,230,238,0.22)' : 'rgba(11,16,22,0.10)' }]}>
+            {paused ? (
+              <PlayIcon color={c.text} />
+            ) : (
+              <View style={styles.bars}>
+                <View style={[styles.bar, { backgroundColor: c.text }]} />
+                <View style={[styles.bar, { backgroundColor: c.text }]} />
+              </View>
+            )}
+          </Glass>
         </Pressable>
       </View>
       <Text style={[styles.hint, { color: holding ? c.text : c.text2 }]}>
@@ -94,13 +104,12 @@ export function HoldToStopButton({ onComplete, onTap, paused }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', gap: 10 },
+  wrap: { alignItems: 'center', gap: 6 },
   ringBox: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
   ring: { position: 'absolute', transform: [{ rotate: '-90deg' }] },
-  button: {
-    width: 84, height: 84, borderRadius: 42, borderWidth: 1,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  square: { width: 22, height: 22, borderRadius: 4 },
+  shadow: { width: 84, height: 84, borderRadius: 42, shadowRadius: 12, shadowOffset: { width: 0, height: 8 } },
+  button: { width: 84, height: 84, borderRadius: 42, alignItems: 'center', justifyContent: 'center' },
+  bars: { flexDirection: 'row', gap: 8 },
+  bar: { width: 7, height: 24, borderRadius: 1 },
   hint: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18 },
 });

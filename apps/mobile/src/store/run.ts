@@ -1,8 +1,13 @@
 import { create } from 'zustand';
 import * as Location from 'expo-location';
+import { haversineKm } from '@/utils/route';
 
 export interface RunSummary {
   coordinates: [number, number][];
+  /** 점마다 시작 후 흐른 시간(초, 일시정지 제외) — km 스플릿용 */
+  routeTimes: number[];
+  /** 거리에 넣지 않은 구간(재개 직후)의 끝 점 인덱스 — 스플릿도 같은 구간을 뺀다 */
+  segmentBreaks: number[];
   distanceKm: number;
   elapsedSeconds: number;
   paceSecPerKm: number;
@@ -33,12 +38,19 @@ interface RunStore {
   trackingMode: TrackingMode | null;
   startedAt: number | null;
   coordinates: [number, number][];
+  /** coordinates와 같은 길이. 점마다 시작 후 흐른 시간(초, 일시정지 제외) */
+  routeTimes: number[];
+  segmentBreaks: number[];
+  /** 마지막 점의 GPS 정확도(m) — 기록 중 상단 줄 */
+  lastAccuracyM: number | null;
   /** 받은 점마다 누적한 거리(필터를 통과한 구간만) */
   distanceKm: number;
   lastSampleAt: number | null;
   elapsedSeconds: number;
   pendingSummary: RunSummary | null;
-  startTracking: () => Promise<void>;
+  /** 이번이 내 몇 번째 러닝인지(「RUN/0427」, 잠금화면 위젯). 모르면 null */
+  runNo: number | null;
+  startTracking: (runNo?: number | null) => Promise<void>;
   stopTracking: () => RunSummary;
   pauseTracking: () => void;
   resumeTracking: () => void;
@@ -89,10 +101,14 @@ export const useRunStore = create<RunStore>((set, get) => ({
   trackingMode: null,
   startedAt: null,
   coordinates: [],
+  routeTimes: [],
+  segmentBreaks: [],
+  lastAccuracyM: null,
   distanceKm: 0,
   lastSampleAt: null,
   elapsedSeconds: 0,
   pendingSummary: null,
+  runNo: null,
 
   _tick: () => {
     const { startedAt, pausedAt, pausedMs } = get();
@@ -103,7 +119,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     if (get().isPaused) return;
     if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
     const now = timestamp ?? Date.now();
-    const { coordinates, distanceKm, lastSampleAt, skipNextSegment } = get();
+    const { coordinates, routeTimes, segmentBreaks, distanceKm, lastSampleAt, skipNextSegment, startedAt, pausedMs } = get();
     const prev = coordinates[coordinates.length - 1];
     let addKm = 0;
     if (prev && lastSampleAt !== null && !skipNextSegment) {
@@ -111,17 +127,24 @@ export const useRunStore = create<RunStore>((set, get) => ({
       const seconds = (now - lastSampleAt) / 1000;
       if (seconds > 0 && (addKm * 1000) / seconds > MAX_SPEED_MPS) return;
     }
-    set({ coordinates: [...coordinates, [lng, lat]], distanceKm: distanceKm + addKm, lastSampleAt: now, skipNextSegment: false });
+    const atSec = startedAt !== null ? Math.max(0, Math.round((now - startedAt - pausedMs) / 100) / 10) : 0;
+    // 점 시간은 줄어들지 않게(서버도 줄어들면 버린다)
+    const time = Math.max(atSec, routeTimes[routeTimes.length - 1] ?? 0);
+    set({
+      coordinates: [...coordinates, [lng, lat]], routeTimes: [...routeTimes, time], lastAccuracyM: accuracy ?? null,
+      segmentBreaks: prev && skipNextSegment ? [...segmentBreaks, coordinates.length] : segmentBreaks,
+      distanceKm: distanceKm + addKm, lastSampleAt: now, skipNextSegment: false,
+    });
   },
 
-  startTracking: async () => {
+  startTracking: async (runNo = null) => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('location_permission_denied');
 
     // 권한 순서: 사용 중 허용(위) → 항상 허용(여기). 항상 허용을 거부해도 포그라운드로 계속한다
     set({
-      isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false,
-      startedAt: Date.now(), coordinates: [], distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
+      isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, runNo,
+      startedAt: Date.now(), coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
     });
 
     if (await startBackgroundUpdates()) {
@@ -136,7 +159,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   stopTracking: () => {
-    const { coordinates, startedAt, distanceKm, pausedAt, pausedMs } = get();
+    const { coordinates, routeTimes, segmentBreaks, startedAt, distanceKm, pausedAt, pausedMs } = get();
     const elapsedSeconds = startedAt !== null
       ? elapsedSecondsSince(startedAt, pausedAt ?? Date.now(), pausedMs)
       : get().elapsedSeconds;
@@ -151,7 +174,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
     const paceSecPerKm = distanceKm > 0 ? elapsedSeconds / distanceKm : 0;
 
-    const summary = { coordinates, distanceKm, elapsedSeconds, paceSecPerKm };
+    const summary = { coordinates, routeTimes, segmentBreaks, distanceKm, elapsedSeconds, paceSecPerKm };
     set({ pendingSummary: summary });
     return summary;
   },
@@ -168,26 +191,9 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   resetRun: () => set({
-    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], distanceKm: 0, lastSampleAt: null,
+    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null,
     elapsedSeconds: 0, pendingSummary: null,
   }),
 
   clearPendingSummary: () => set({ pendingSummary: null }),
 }));
-
-function toRad(deg: number) {
-  return (deg * Math.PI) / 180;
-}
-
-function haversineKm(a: [number, number], b: [number, number]) {
-  const R = 6371;
-  const dLat = toRad(b[1] - a[1]);
-  const dLng = toRad(b[0] - a[0]);
-  const sinDLat = Math.sin(dLat / 2);
-  const sinDLng = Math.sin(dLng / 2);
-  const c =
-    sinDLat * sinDLat +
-    Math.cos(toRad(a[1])) * Math.cos(toRad(b[1])) * sinDLng * sinDLng;
-  return R * 2 * Math.atan2(Math.sqrt(c), Math.sqrt(1 - c));
-}
-

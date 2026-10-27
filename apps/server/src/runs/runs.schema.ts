@@ -16,6 +16,10 @@ export class Run {
   )
   route: { type: string; coordinates: [number, number][] };
 
+  // 경로 점마다 시작 후 흐른 시간(초, 일시정지 제외). route.coordinates와 길이가 같다. km 스플릿용(D2)
+  @Prop({ type: [Number], default: [] })
+  routeTimes: number[];
+
   @Prop({ required: true })
   distanceKm: number;
 

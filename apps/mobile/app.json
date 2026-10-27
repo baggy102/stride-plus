@@ -15,7 +15,8 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "러닝 경로를 기록하기 위해 위치 정보가 필요합니다.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "백그라운드에서도 러닝 경로를 정확히 기록합니다.",
-        "UIBackgroundModes": ["location"]
+        "UIBackgroundModes": ["location"],
+        "NSSupportsLiveActivities": true
       }
     },
     "android": {
@@ -49,7 +50,8 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "experiments": {
       "typedRoutes": true
