@@ -110,9 +110,9 @@ function Hero({ run, baseUrl, c, styles, onPress }: {
       style={styles.hero}
     >
       {photo ? (
-        <Image source={{ uri: `${baseUrl}${photo}` }} style={StyleSheet.absoluteFillObject} resizeMode="cover" />
+        <Image source={{ uri: `${baseUrl}${photo}` }} style={StyleSheet.absoluteFill} resizeMode="cover" />
       ) : (
-        <View style={[StyleSheet.absoluteFillObject, { backgroundColor: c.dark ? c.surface : '#16202B' }]}>
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: c.dark ? c.surface : '#16202B' }]}>
           <RouteOnGrid route={run.route} size={[width, HERO_HEIGHT]} cell={24} stroke="#9DBFE0" grid="rgba(157,191,224,0.10)" inset={48} />
         </View>
       )}
@@ -175,7 +175,7 @@ function RunItem({ run, baseUrl, c, styles, latest, onPress }: {
     >
       <View style={styles.thumb}>
         {photo ? (
-          <Image source={{ uri: `${baseUrl}${photo}` }} style={StyleSheet.absoluteFillObject} />
+          <Image source={{ uri: `${baseUrl}${photo}` }} style={StyleSheet.absoluteFill} />
         ) : (
           <RouteOnGrid route={run.route} size={[THUMB, THUMB]} cell={9} stroke={c.map.dot} grid={c.dark ? 'rgba(157,191,224,0.08)' : 'rgba(36,71,107,0.08)'} inset={9} />
         )}
@@ -282,7 +282,7 @@ export function RunList(props: Props) {
           <View accessibilityLabel="다음 기록 불러오는 중" style={styles.footer}>
             <ActivityIndicator color={c.value} />
           </View>
-        ) : null
+        ) : undefined
       }
     />
   );

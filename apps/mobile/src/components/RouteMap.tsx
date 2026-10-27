@@ -3,7 +3,7 @@ import { StyleSheet, View, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useColors, useScheme } from '@/theme/useColors';
 import type { Palette } from '@/theme/colors';
-import { baseMapScript, leafletHead, useMapTheme } from '@/components/map/mapHtml';
+import { baseMapScript, leafletHead, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import { kmMarks } from '@/utils/route';
 
 // 경로를 보여 주는 정적 지도(손으로 움직이지 않음). 러닝 상세(S10)에서 쓴다(Frost에서 기록 중·요약은 격자 도면).
@@ -117,7 +117,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
 ) {
   const c = useColors();
   const dark = useScheme() === 'dark';
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<WebViewHandle>(null);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
   const { initial, applyTheme } = useMapTheme(webViewRef, c, dark);
   const html = useMemo(() => buildHtml(initial.p, initial.dark), [initial]);
@@ -145,7 +145,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
         originWhitelist={['*']}
         javaScriptEnabled
         scrollEnabled={false}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         onLoadStart={() => { loaded.current = false; }}
         onLoadEnd={() => { loaded.current = true; applyTheme(); push(); }}
       />

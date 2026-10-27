@@ -14,7 +14,7 @@ import { MapPopupCard } from '@/components/MapPopupCard';
 import client, { BASE_URL } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
 import type { Palette } from '@/theme/colors';
-import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme } from '@/components/map/mapHtml';
+import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import { RunMarker } from '../RunCard';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
@@ -153,7 +153,7 @@ export function MapFeed() {
   const dark = useScheme() === 'dark';
   const styles = useMemo(() => makeStyles(c), [c]);
   const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<WebViewHandle>(null);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3, 재로드 없음)
   const { initial: initialTheme, applyTheme } = useMapTheme(webViewRef, c, dark);
   const html = useMemo(
@@ -257,7 +257,7 @@ export function MapFeed() {
       <WebView
         ref={webViewRef}
         source={{ html }}
-        style={StyleSheet.absoluteFillObject}
+        style={StyleSheet.absoluteFill}
         originWhitelist={['*']}
         javaScriptEnabled
         startInLoadingState
