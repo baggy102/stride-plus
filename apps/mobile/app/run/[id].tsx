@@ -11,9 +11,11 @@ import { SafetyMenu } from '@/components/SafetyMenu';
 import { useAuthStore } from '@/store/auth';
 import { BackIcon, RouteIcon } from '@/components/icons';
 import { useColors } from '@/theme/useColors';
-import { FONT } from '@/theme/fonts';
+import { FONT, monoLabel } from '@/theme/fonts';
+import { Glass } from '@/components/Glass';
 import type { Palette } from '@/theme/colors';
-import { formatPace } from '@/utils/pace';
+import { formatDuration, formatPace } from '@/utils/pace';
+import { formatClock, formatDay } from '@/utils/date';
 
 interface RunDetail {
   _id: string;
@@ -28,25 +30,7 @@ interface RunDetail {
 
 type LoadState = 'loading' | 'ready' | 'notfound' | 'error';
 
-// 서버에 러닝 시간 필드가 없어 페이스 × 거리로 계산한다(PRD Q12)
-function formatDuration(paceSecPerKm: number, distanceKm: number) {
-  const total = Math.round(paceSecPerKm * distanceKm);
-  if (!total) return '--:--';
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function formatWhen(iso: string) {
-  const d = new Date(iso);
-  const weekday = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
-  const h = d.getHours();
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${weekday}요일 · ${h < 12 ? '오전' : '오후'} ${h12}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-// 확정 UI S10 러닝 상세(추가 화면 ②) + 404·실패 상태
+// Frost S10 러닝 상세 — 유리 상단 바, 지도(+1 km 눈금), 거리 64px · Pace·Time·날짜, 사진, 코스 소개 + 404·실패 상태
 export default function RunDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -90,36 +74,43 @@ export default function RunDetailScreen() {
     <View style={styles.root}>
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* 위쪽: 뒤로 · 작성자 · 신고·차단 메뉴(남의 러닝만, S13) */}
-      <View style={[styles.topBar, { paddingTop: insets.top }]}>
-        <View style={styles.logo} pointerEvents="none">
-          <Wordmark width={71} />
-        </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="뒤로" onPress={goBack} style={styles.iconBtn}>
-          <BackIcon color={c.text} />
-        </Pressable>
-        {state === 'ready' && run && (
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push(`/user/${run.userId._id}`)}
-            style={styles.author}
-          >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarLetter}>{(username[0] ?? '?').toUpperCase()}</Text>
-            </View>
-            <Text style={styles.authorName}>{username}</Text>
+      {/* 위쪽: 유리 바(뒤로 · 작성자 · 신고·차단 메뉴(남의 러닝만, S13)), 가운데 워드마크 */}
+      <View style={[styles.topWrap, { paddingTop: insets.top + 4 }]}>
+        <Glass style={styles.topBar}>
+          <Pressable accessibilityRole="button" accessibilityLabel="뒤로" onPress={goBack} style={styles.iconBtn}>
+            <BackIcon size={24} color={c.text} />
           </Pressable>
-        )}
-        {state === 'ready' && run && run.userId._id !== me && (
-          <SafetyMenu
-            label="러닝 메뉴"
-            targetType="run"
-            targetId={run._id}
-            author={{ id: run.userId._id, username }}
-            // 차단한 사용자의 러닝은 더 볼 수 없다 — 피드로(피드는 포커스 시 다시 불러온다)
-            onBlocked={() => router.replace('/(tabs)/feed')}
-          />
-        )}
+          {state === 'ready' && run ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push(`/user/${run.userId._id}`)}
+              style={styles.author}
+            >
+              <View style={styles.avatar}>
+                <Text style={styles.avatarLetter}>{(username[0] ?? '?').toUpperCase()}</Text>
+              </View>
+              <Text style={styles.authorName} numberOfLines={1}>{username}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.author} />
+          )}
+          {state === 'ready' && run && run.userId._id !== me && (
+            <SafetyMenu
+              label="러닝 메뉴"
+              targetType="run"
+              targetId={run._id}
+              author={{ id: run.userId._id, username }}
+              // 차단한 사용자의 러닝은 더 볼 수 없다 — 피드로(피드는 포커스 시 다시 불러온다)
+              onBlocked={() => router.replace('/(tabs)/feed')}
+            />
+          )}
+          {/* 작성자 이름과 겹치지 않게 워드마크는 작성자가 없을 때(로딩·404·실패)만 */}
+          {!(state === 'ready' && run) && (
+            <View style={styles.logo} pointerEvents="none">
+              <Wordmark width={71} />
+            </View>
+          )}
+        </Glass>
       </View>
 
       {state === 'loading' && (
@@ -154,36 +145,35 @@ export default function RunDetailScreen() {
       {state === 'ready' && run && (
         <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
           <View style={styles.mapCard}>
-            <RouteMap coordinates={run.route.coordinates} fit="route" style={StyleSheet.absoluteFillObject} />
+            <RouteMap coordinates={run.route.coordinates} fit="route" kmTicks style={StyleSheet.absoluteFillObject} />
           </View>
 
-          <View style={styles.titleBlock}>
-            <Text style={styles.when}>{formatWhen(run.createdAt)}</Text>
-            <Text style={styles.title}>{placeName ?? '러닝 기록'}</Text>
-          </View>
+          <Text accessibilityRole="header" style={styles.title}>{placeName ?? '러닝 기록'}</Text>
 
-          <View style={styles.stats}>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>Distance</Text>
-              <Text style={styles.statValue}>
-                {run.distanceKm.toFixed(2)}
-                <Text style={styles.statUnit}> KM</Text>
-              </Text>
+          <View accessibilityLabel="러닝 기록" style={styles.record}>
+            <View accessible accessibilityLabel={`거리 ${run.distanceKm.toFixed(2)} km`} style={styles.distanceRow}>
+              <Text style={styles.distance}>{run.distanceKm.toFixed(2)}</Text>
+              <Text style={styles.distanceUnit}>KM</Text>
             </View>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>Avg Pace</Text>
-              <Text style={styles.statValue}>
-                {formatPace(run.paceSecPerKm)}
-                <Text style={styles.statUnit}> /KM</Text>
-              </Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statLabel}>Time</Text>
-              <Text style={styles.statValue}>{formatDuration(run.paceSecPerKm, run.distanceKm)}</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statLabelPlain}>날짜</Text>
-              <Text style={[styles.statValue, { fontSize: 20 }]}>{new Date(run.createdAt).toLocaleDateString('ko-KR')}</Text>
+            <View style={styles.stats}>
+              <View style={styles.stat}>
+                <Text style={styles.statLabel}>PACE</Text>
+                <Text style={styles.statValue}>
+                  {formatPace(run.paceSecPerKm)}
+                  <Text style={styles.statUnit}> /KM</Text>
+                </Text>
+              </View>
+              <View style={[styles.stat, styles.statDivider]}>
+                <Text style={styles.statLabel}>TIME</Text>
+                <Text style={styles.statValue}>{run.paceSecPerKm && run.distanceKm ? formatDuration(run.paceSecPerKm * run.distanceKm) : '--:--'}</Text>
+              </View>
+              <View style={[styles.stat, styles.statWide, styles.statDivider]}>
+                <Text style={styles.statLabelPlain}>날짜</Text>
+                <Text style={styles.dateValue} numberOfLines={1}>
+                  {formatDay(run.createdAt)}
+                  <Text style={styles.dateClock}>{`  ${formatClock(run.createdAt)}`}</Text>
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -202,7 +192,7 @@ export default function RunDetailScreen() {
 
           {!!run.description && (
             <View accessibilityLabel="코스 소개" style={styles.intro}>
-              <Text style={styles.statLabel}>코스 소개</Text>
+              <Text style={styles.introLabel}>코스 소개</Text>
               <Text style={styles.introText}>{run.description}</Text>
             </View>
           )}
@@ -214,13 +204,14 @@ export default function RunDetailScreen() {
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  topBar: { paddingHorizontal: 8, flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 56 },
-  logo: { position: 'absolute', left: 0, right: 0, bottom: 18, alignItems: 'center' },
+  topWrap: { paddingHorizontal: 12, paddingBottom: 8 },
+  topBar: { height: 48, paddingHorizontal: 2, borderRadius: 24, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  logo: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
   iconBtn: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  author: { flex: 1, height: 44, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  author: { flex: 1, minWidth: 0, height: 44, flexDirection: 'row', alignItems: 'center', gap: 10, zIndex: 1 },
   avatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: c.surface2, alignItems: 'center', justifyContent: 'center' },
   avatarLetter: { fontFamily: FONT.semibold, fontSize: 14, color: c.text },
-  authorName: { fontFamily: FONT.semibold, fontSize: 16, color: c.text },
+  authorName: { flexShrink: 1, fontFamily: FONT.semibold, fontSize: 16, color: c.text },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, gap: 12 },
   stateIcon: {
     width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center',
@@ -235,21 +226,26 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
   },
   stateBtnGhostText: { fontFamily: FONT.semibold, fontSize: 16, color: c.text },
-  mapCard: { marginTop: 8, marginHorizontal: 16, height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
-  titleBlock: { marginTop: 14, paddingHorizontal: 20, gap: 2 },
-  when: { fontFamily: FONT.regular, fontSize: 13, lineHeight: 18, color: c.text2 },
-  title: { fontFamily: FONT.semibold, fontSize: 20, lineHeight: 28, color: c.text },
-  stats: { marginTop: 14, paddingHorizontal: 16, flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  stat: {
-    width: '48.5%', paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16,
-    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
-  },
-  statLabel: { fontFamily: FONT.semibold, fontSize: 12, lineHeight: 16, color: c.text2 },
+  mapCard: { marginTop: 4, marginHorizontal: 16, height: 220, borderRadius: 20, overflow: 'hidden', borderWidth: 1, borderColor: c.border },
+  title: { marginTop: 12, paddingHorizontal: 20, fontFamily: FONT.semibold, fontSize: 20, lineHeight: 28, color: c.text },
+  record: { marginTop: 2, paddingHorizontal: 20 },
+  distanceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  distance: { fontFamily: FONT.num, fontSize: 64, lineHeight: 68, letterSpacing: -1.3, color: c.text, fontVariant: ['tabular-nums'] },
+  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
+  distanceUnit: { marginTop: 10, ...monoLabel(13), color: c.value },
+  stats: { marginTop: 6, flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.hair },
+  stat: { flex: 1, paddingVertical: 8 },
+  statWide: { flex: 1.25 },
+  statDivider: { paddingLeft: 14, borderLeftWidth: 1, borderLeftColor: c.hair },
+  statLabel: { ...monoLabel(11), lineHeight: 16, color: c.text2 },
   statLabelPlain: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: c.text2 },
-  statValue: { fontFamily: FONT.num, fontSize: 26, lineHeight: 32, color: c.text, fontVariant: ['tabular-nums'] },
-  statUnit: { fontFamily: FONT.num, fontSize: 14, color: c.text2 },
+  statValue: { fontFamily: FONT.num, fontSize: 22, lineHeight: 28, color: c.text, fontVariant: ['tabular-nums'] },
+  statUnit: { ...monoLabel(11, 0.08), color: c.text2 },
+  dateValue: { ...monoLabel(17, 0.02), lineHeight: 28, color: c.text },
+  dateClock: { ...monoLabel(12, 0.04), color: c.text2 },
   photos: { paddingHorizontal: 16, paddingTop: 16, gap: 10 },
   photo: { width: 160, height: 120, borderRadius: 14, backgroundColor: c.surface2 },
   intro: { marginTop: 18, paddingHorizontal: 20, gap: 4 },
+  introLabel: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
   introText: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 23, color: c.text },
 });
