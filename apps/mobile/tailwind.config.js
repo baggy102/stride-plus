@@ -1,5 +1,5 @@
 /** @type {import('tailwindcss').Config} */
-// brand-* 색은 app/_layout.tsx가 루트에서 주입하는 CSS 변수(팔레트 G, 다크·라이트)를 따른다.
+// brand-* 색은 app/_layout.tsx가 루트에서 주입하는 CSS 변수(Frost 팔레트, 다크·라이트)를 따른다.
 const themed = (name) => `rgb(var(--color-${name}) / <alpha-value>)`;
 
 module.exports = {
