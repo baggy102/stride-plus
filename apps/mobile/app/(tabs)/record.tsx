@@ -19,6 +19,8 @@ import type { Palette } from '@/theme/colors';
 import { formatDuration, formatPace, MIN_PACE_DISTANCE_KM } from '@/utils/pace';
 
 const EXPLAIN_SEEN_KEY = 'location_explain_seen';
+// 상단 텔레메트리 줄은 글자 크기 설정을 키워도 1.2배까지만(왼쪽 글자와 가운데 로고가 겹치지 않게)
+const TOP_MAX_SCALE = 1.2;
 
 // Frost S06 기록 — 24px 격자 위 경로 점 구름(지도 대신) + 상단 텔레메트리 줄 + 거리 주 수치 + PACE·TIME.
 // 시작 전에도 같은 배치를 쓰고 종료 버튼 자리에 시작 버튼을 둔다(2026-10-18 결정).
@@ -113,6 +115,8 @@ export default function RecordScreen() {
   const controlSpace = isTracking ? insets.bottom + 24 + 130 : tabClearance + 20 + 120;
   const gridHeight = Math.round(Math.max(120, Math.min(root.height * 0.42, root.height - gridTop - 22 - 210 - controlSpace - 12)));
   const lap = `LAP ${String(Math.floor(distanceKm) + 1).padStart(2, '0')}`;
+  // 상단 왼쪽 글자는 가운데 워드마크(71px) 왼쪽 끝을 넘지 않는다. 넘치면 끝(RUN 번호)부터 줄인다
+  const stateMaxWidth = Math.max(0, (root.width - 48) / 2 - 71 / 2 - 8);
 
   return (
     <View style={styles.root} onLayout={(e) => setRoot({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
@@ -133,14 +137,18 @@ export default function RecordScreen() {
 
       {/* 상단 텔레메트리 줄 */}
       <View style={[styles.topBar, { top: insets.top + 12 }]}>
-        <View accessibilityRole="text" accessibilityLabel={isTracking ? (isPaused ? '일시정지' : '기록 중') : '대기'} style={styles.state}>
+        <View accessibilityRole="text" accessibilityLabel={isTracking ? (isPaused ? '일시정지' : '기록 중') : '대기'} style={[styles.state, { maxWidth: stateMaxWidth }]}>
           {!denied && <View style={[styles.stateDot, { backgroundColor: stateColor }]} />}
-          {!denied && <Text style={[styles.topText, { color: stateColor }]}>{`${state}${runTag}`}</Text>}
+          {!denied && (
+            <Text style={[styles.topText, styles.stateText, { color: stateColor }]} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={TOP_MAX_SCALE}>
+              {`${state}${runTag}`}
+            </Text>
+          )}
         </View>
         <View style={styles.logo} pointerEvents="none">
           <Wordmark width={71} />
         </View>
-        <Text style={[styles.topText, { color: c.navOff }]}>{gpsText}</Text>
+        <Text style={[styles.topText, { color: c.navOff }]} numberOfLines={1} maxFontSizeMultiplier={TOP_MAX_SCALE}>{gpsText}</Text>
       </View>
 
       {/* 항상 허용을 거부해 포그라운드로 기록 중 */}
@@ -235,6 +243,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   state: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stateDot: { width: 6, height: 6, borderRadius: 3 },
   topText: { ...monoLabel(10.5, 0.08), lineHeight: 20 },
+  stateText: { flexShrink: 1 },
   logo: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   banner: {
     position: 'absolute', left: 16, right: 16, height: 60, paddingLeft: 16, paddingRight: 6, borderRadius: 16,
