@@ -73,12 +73,12 @@ export default function RecordScreen() {
 
   const begin = useCallback(async () => {
     try {
-      await startTracking();
+      await startTracking(runNo);
       setDenied(false);
     } catch {
       setDenied(true);
     }
-  }, [startTracking]);
+  }, [startTracking, runNo]);
 
   const handleStart = useCallback(async () => {
     const fg = await Location.getForegroundPermissionsAsync();

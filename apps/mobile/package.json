@@ -10,6 +10,7 @@
     "gen:map-assets": "node scripts/gen-map-assets.js"
   },
   "dependencies": {
+    "@bacons/apple-targets": "~4.0.7",
     "@expo/metro-runtime": "~6.1.2",
     "@gorhom/bottom-sheet": "^5.2.13",
     "@types/leaflet": "^1.9.21",

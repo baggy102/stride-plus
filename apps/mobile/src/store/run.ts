@@ -45,7 +45,9 @@ interface RunStore {
   lastSampleAt: number | null;
   elapsedSeconds: number;
   pendingSummary: RunSummary | null;
-  startTracking: () => Promise<void>;
+  /** 이번이 내 몇 번째 러닝인지(「RUN/0427」, 잠금화면 위젯). 모르면 null */
+  runNo: number | null;
+  startTracking: (runNo?: number | null) => Promise<void>;
   stopTracking: () => RunSummary;
   pauseTracking: () => void;
   resumeTracking: () => void;
@@ -102,6 +104,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   lastSampleAt: null,
   elapsedSeconds: 0,
   pendingSummary: null,
+  runNo: null,
 
   _tick: () => {
     const { startedAt, pausedAt, pausedMs } = get();
@@ -129,13 +132,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
     });
   },
 
-  startTracking: async () => {
+  startTracking: async (runNo = null) => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('location_permission_denied');
 
     // 권한 순서: 사용 중 허용(위) → 항상 허용(여기). 항상 허용을 거부해도 포그라운드로 계속한다
     set({
-      isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false,
+      isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, runNo,
       startedAt: Date.now(), coordinates: [], routeTimes: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
     });
 
