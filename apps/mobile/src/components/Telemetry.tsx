@@ -3,30 +3,13 @@ import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 import Svg, { Circle, Defs, Path, RadialGradient, Stop } from 'react-native-svg';
 import { useColors } from '@/theme/useColors';
 import { monoLabel } from '@/theme/fonts';
-import type { LngLat } from '@/utils/route';
+import { fitToBox, type LngLat } from '@/utils/route';
 
 // Frost 기록 화면(S06)의 텔레메트리 요소: 24px 격자 위 경로 점 구름 + 지금 위치 글로우, 좌표 줄
 const CELL = 24;
 const MAX_DOTS = 320;
 const INSET = 24;
 const ICE = '#9DBFE0';
-
-/** 경로를 상자 안에 비율을 지켜 맞춘다(위도 보정한 평면 근사). 점이 하나뿐이면 가운데 */
-function project(coords: LngLat[], width: number, height: number): [number, number][] {
-  if (coords.length === 0) return [];
-  const lat0 = coords[0][1] * (Math.PI / 180);
-  const xs = coords.map(([lng]) => lng * Math.cos(lat0));
-  const ys = coords.map(([, lat]) => lat);
-  const [minX, maxX, minY, maxY] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-  const spanX = maxX - minX;
-  const spanY = maxY - minY;
-  const boxW = width - INSET * 2;
-  const boxH = height - INSET * 2;
-  const scale = spanX === 0 && spanY === 0 ? 0 : Math.min(boxW / (spanX || Infinity), boxH / (spanY || Infinity));
-  const offX = INSET + (boxW - spanX * scale) / 2;
-  const offY = INSET + (boxH - spanY * scale) / 2;
-  return xs.map((x, i) => [offX + (x - minX) * scale, offY + (maxY - ys[i]) * scale]);
-}
 
 /** 오래된 점은 옅게. 점이 많으면 고르게 줄이고 마지막 점은 남긴다 */
 function sample<T>(items: T[]): T[] {
@@ -63,7 +46,7 @@ export function TelemetryGrid({ coords, width, height, pulse, showHead, accessib
     return d;
   }, [width, height]);
 
-  const dots = useMemo(() => sample(project(coords, width, height)), [coords, width, height]);
+  const dots = useMemo(() => sample(fitToBox(coords, width, height, INSET)), [coords, width, height]);
   const head = dots.length > 0 ? dots[dots.length - 1] : showHead ? [width / 2, height / 2] : null;
 
   const spread = useRef(new Animated.Value(0)).current;

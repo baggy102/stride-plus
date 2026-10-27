@@ -67,3 +67,21 @@ export function kmSplits(coords: LngLat[], times: number[] | undefined): number[
   }
   return splits;
 }
+
+/** 경로를 w×h 상자 안에 비율을 지켜 맞춘 화면 좌표(위도 보정한 평면 근사). 점이 한 곳뿐이면 가운데 */
+export function fitToBox(coords: LngLat[], width: number, height: number, inset: number): [number, number][] {
+  if (coords.length === 0) return [];
+  const k = Math.cos(coords[0][1] * (Math.PI / 180));
+  const xs = coords.map(([lng]) => lng * k);
+  const ys = coords.map(([, lat]) => lat);
+  const minX = Math.min(...xs);
+  const maxY = Math.max(...ys);
+  const spanX = Math.max(...xs) - minX;
+  const spanY = maxY - Math.min(...ys);
+  const boxW = width - inset * 2;
+  const boxH = height - inset * 2;
+  const scale = spanX === 0 && spanY === 0 ? 0 : Math.min(spanX ? boxW / spanX : Infinity, spanY ? boxH / spanY : Infinity);
+  const offX = inset + (boxW - spanX * scale) / 2;
+  const offY = inset + (boxH - spanY * scale) / 2;
+  return xs.map((x, i) => [offX + (x - minX) * scale, offY + (maxY - ys[i]) * scale]);
+}

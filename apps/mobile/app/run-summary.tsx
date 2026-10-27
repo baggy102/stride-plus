@@ -6,40 +6,35 @@ import {
 import { Stack, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Location from 'expo-location';
 import { useRunStore } from '@/store/run';
 import client from '@/api/client';
-import { Wordmark } from '@/components/Wordmark';
-import { RouteMap } from '@/components/RouteMap';
+import { RouteBlueprint } from '@/components/RouteBlueprint';
+import { CoordLine } from '@/components/Telemetry';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
 import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
 import { useColors } from '@/theme/useColors';
-import { FONT } from '@/theme/fonts';
+import { FONT, monoLabel } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
-import { formatPace } from '@/utils/pace';
+import { formatDuration, formatPace } from '@/utils/pace';
+import { formatClock, formatDay } from '@/utils/date';
+import { kmSplits } from '@/utils/route';
 
-function formatTime(sec: number) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+// 시작점의 동네 이름(「여의도 한강공원」처럼). 못 찾으면 null
+async function placeName([lng, lat]: [number, number]): Promise<string | null> {
+  try {
+    const [place] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+    return place?.name || place?.district || place?.street || place?.city || null;
+  } catch {
+    return null;
+  }
 }
 
-// 「10월 16일 목요일 · 오전 7:05」
-function formatFinishedAt(d: Date) {
-  const weekday = ['일', '월', '화', '수', '목', '금', '토'][d.getDay()];
-  const h = d.getHours();
-  const ampm = h < 12 ? '오전' : '오후';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${weekday}요일 · ${ampm} ${h12}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-// 확정 UI S07 러닝 요약 — 최종 보드 Summary (경로 지도·거리 크게·Time/Avg Pace·사진·코스 소개·저장, 삭제 확인)
+// Frost S07 러닝 요약 — 격자 도면(+1 km 눈금) · 좌표 · 거리 76px · TIME/PACE · km 스플릿 · 사진 · 코스 소개 · 저장, 삭제 확인
 export default function RunSummaryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  // 지도 높이는 화면 루트의 실제 높이 기준(창 크기 값이 다시 그릴 때 틀어져 지도가 접히던 문제, 2026-10-19 QR)
-  const [rootHeight, setRootHeight] = useState(() => Dimensions.get('screen').height);
+  const [width, setWidth] = useState(() => Dimensions.get('window').width);
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const pendingSummary = useRunStore((s) => s.pendingSummary);
@@ -51,15 +46,26 @@ export default function RunSummaryScreen() {
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [finishedAt] = useState(() => new Date());
+  const [place, setPlace] = useState<string | null>(null);
 
   // 요약 데이터 없이 직접 진입한 경우(새로고침 등) 기록 탭으로 되돌림
   useEffect(() => {
     if (!pendingSummary) router.replace('/(tabs)/record');
   }, [pendingSummary, router]);
 
+  const start = pendingSummary?.coordinates[0];
+  useEffect(() => {
+    if (start) placeName(start).then(setPlace);
+  }, [start?.[0], start?.[1]]);
+
+  const splits = useMemo(
+    () => (pendingSummary ? kmSplits(pendingSummary.coordinates, pendingSummary.routeTimes) : []),
+    [pendingSummary],
+  );
+
   if (!pendingSummary) return null;
   const summary = pendingSummary;
-  const mapHeight = Math.round(rootHeight * 0.39);
+  const boxWidth = width - 48;
 
   const handleDiscard = () => {
     setConfirmDelete(false);
@@ -105,57 +111,50 @@ export default function RunSummaryScreen() {
   };
 
   return (
-    <View style={styles.root} onLayout={(e) => setRootHeight(e.nativeEvent.layout.height)}>
+    <View style={styles.root} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
       <Stack.Screen options={{ headerShown: false, gestureEnabled: false }} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
-          {/* 경로 지도 */}
-          <View style={{ height: mapHeight }}>
-            <RouteMap coordinates={summary.coordinates} fit="route" style={StyleSheet.absoluteFillObject} />
-            <LinearGradient
-              pointerEvents="none"
-              colors={[withAlpha(c.bg, 0.9), withAlpha(c.bg, 0)]}
-              style={[styles.fadeTop, { height: insets.top + 64 }]}
-            />
-            <LinearGradient pointerEvents="none" colors={[withAlpha(c.bg, 0), c.bg]} style={styles.fadeBottom} />
-            <View accessibilityLabel="지도 범례" style={styles.legend}>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, styles.legendStart]} />
-                <Text style={styles.legendText}>출발</Text>
-              </View>
-              <View style={styles.legendItem}>
-                <View style={[styles.legendDot, styles.legendEnd]} />
-                <Text style={styles.legendText}>도착</Text>
-              </View>
-            </View>
+        <ScrollView contentContainerStyle={{ paddingTop: insets.top + 10, paddingBottom: 24 }} keyboardShouldPersistTaps="handled">
+          {/* 머리: 「러닝 종료 · 10.16 목 · 07:05」 + 장소 */}
+          <View style={styles.head}>
+            <Text style={styles.kicker}>{`러닝 종료 · ${formatDay(finishedAt)} · ${formatClock(finishedAt)}`}</Text>
+            <Text accessibilityRole="header" style={styles.title} numberOfLines={1}>{place ?? '이번 러닝'}</Text>
+          </View>
+
+          {/* 경로 도면 */}
+          <View style={styles.blueprint}>
+            <RouteBlueprint coords={summary.coordinates} width={boxWidth} height={192} />
+          </View>
+          <View style={styles.coords}>
+            <CoordLine at={start} />
           </View>
 
           {/* 러닝 결과 */}
           <View accessibilityLabel="러닝 결과" style={styles.result}>
-            <Text style={styles.date}>{formatFinishedAt(finishedAt)}</Text>
-            <View accessibilityLabel={`거리 ${summary.distanceKm.toFixed(2)} km`} style={styles.distanceRow}>
+            <View accessible accessibilityLabel={`거리 ${summary.distanceKm.toFixed(2)} km`} style={styles.distanceRow}>
               <Text style={styles.distance}>{summary.distanceKm.toFixed(2)}</Text>
               <Text style={styles.distanceUnit}>KM</Text>
             </View>
             <View style={styles.grid}>
               <View style={styles.cell}>
-                <Text style={styles.label}>Time</Text>
-                <Text style={styles.cellValue}>{formatTime(summary.elapsedSeconds)}</Text>
+                <Text style={styles.cellLabel}>TIME</Text>
+                <Text style={styles.cellValue}>{formatDuration(summary.elapsedSeconds)}</Text>
               </View>
               <View style={[styles.cell, styles.cellDivider]}>
-                <Text style={styles.label}>Avg Pace</Text>
-                <Text style={[styles.cellValue, styles.valueAccent]}>
+                <Text style={styles.cellLabel}>PACE</Text>
+                <Text style={styles.cellValue}>
                   {formatPace(summary.paceSecPerKm)}
                   <Text style={styles.cellUnit}> /KM</Text>
                 </Text>
               </View>
             </View>
+            {splits.length > 0 && <SplitBars splits={splits} c={c} styles={styles} />}
           </View>
 
           <View style={styles.form}>
             <PhotoPicker photos={photos} onChange={setPhotos} />
 
-            <View style={{ gap: 6 }}>
+            <View style={{ gap: 4 }}>
               <Text style={styles.label}>
                 코스 소개 <Text style={{ fontFamily: FONT.regular }}>(선택)</Text>
               </Text>
@@ -184,15 +183,9 @@ export default function RunSummaryScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      {/* 위쪽: 워드마크 + 삭제 */}
-      <View style={[styles.topBar, { top: insets.top + 4 }]} pointerEvents="box-none">
-        <View style={styles.logo} pointerEvents="none">
-          <Wordmark width={71} />
-        </View>
-        <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(true)} style={styles.deleteBtn}>
-          <Text style={styles.deleteText}>삭제</Text>
-        </Pressable>
-      </View>
+      <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(true)} style={[styles.deleteBtn, { top: insets.top - 2 }]}>
+        <Text style={styles.deleteText}>삭제</Text>
+      </Pressable>
 
       {/* 삭제 확인 */}
       <Modal visible={confirmDelete} transparent animationType="fade" onRequestClose={() => setConfirmDelete(false)}>
@@ -215,43 +208,60 @@ export default function RunSummaryScreen() {
   );
 }
 
+// km별 페이스 막대: 빠를수록 높다(12~30px). 다 채운 km만
+function SplitBars({ splits, c, styles }: { splits: number[]; c: Palette; styles: ReturnType<typeof makeStyles> }) {
+  const min = Math.min(...splits);
+  const max = Math.max(...splits);
+  const label = `km별 페이스: ${splits.map((s, i) => `${i + 1}km ${formatPace(s)}`).join(', ')}`;
+  return (
+    <View accessible accessibilityRole="image" accessibilityLabel={label} style={styles.splits}>
+      <View style={styles.splitBars}>
+        {splits.map((s, i) => (
+          <LinearGradient
+            key={i}
+            colors={[c.value, withAlpha(c.value, c.dark ? 0.25 : 0.18)]}
+            style={[styles.splitBar, { height: max === min ? 22 : Math.round(12 + (18 * (max - s)) / (max - min)) }]}
+          />
+        ))}
+      </View>
+      <View style={styles.splitLabels}>
+        {splits.map((_, i) => (
+          <Text key={i} style={styles.splitLabel}>{i + 1}</Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
-  fadeTop: { position: 'absolute', left: 0, right: 0, top: 0 },
-  fadeBottom: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 80 },
-  legend: {
-    position: 'absolute', left: 16, bottom: 66, height: 28, paddingHorizontal: 10, borderRadius: 14,
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    backgroundColor: withAlpha(c.surface, 0.92), borderWidth: 1, borderColor: c.border,
-  },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
-  legendStart: { borderWidth: 2, borderColor: c.value },
-  legendEnd: { backgroundColor: c.value },
-  valueAccent: { color: c.value },
-  legendDot: { width: 9, height: 9, borderRadius: 5 },
-  legendText: { fontFamily: FONT.semibold, fontSize: 12, color: c.text },
-  topBar: { position: 'absolute', left: 0, right: 0, height: 44, justifyContent: 'center' },
-  logo: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
+  head: { paddingHorizontal: 24, paddingRight: 86 },
+  kicker: { ...monoLabel(12, 0.08), lineHeight: 18, color: c.text2 },
+  title: { marginTop: 4, fontFamily: FONT.bold, fontSize: 20, lineHeight: 26, color: c.text },
+  blueprint: { marginTop: 14, paddingHorizontal: 24 },
+  coords: { marginTop: 4 },
   deleteBtn: { position: 'absolute', right: 8, height: 44, paddingHorizontal: 12, justifyContent: 'center' },
   deleteText: { fontFamily: FONT.semibold, fontSize: 15, color: c.text2 },
-  result: { marginTop: 10, paddingHorizontal: 24, alignItems: 'center' },
-  date: { fontFamily: FONT.regular, fontSize: 13, lineHeight: 18, color: c.text2 },
-  distanceRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-  distance: { fontFamily: FONT.num, fontSize: 80, lineHeight: 90, color: c.text, fontVariant: ['tabular-nums'] },
-  distanceUnit: { fontFamily: FONT.num, fontSize: 20, color: c.text2 },
-  grid: {
-    marginTop: 12, alignSelf: 'stretch', flexDirection: 'row',
-    borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.border,
-  },
-  cell: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  cellDivider: { borderLeftWidth: 1, borderLeftColor: c.border },
+  result: { marginTop: 8, paddingHorizontal: 24 },
+  distanceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+  distance: { fontFamily: FONT.num, fontSize: 76, lineHeight: 80, letterSpacing: -1.5, color: c.text, fontVariant: ['tabular-nums'] },
+  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
+  distanceUnit: { marginTop: 12, ...monoLabel(14), color: c.value },
+  grid: { marginTop: 8, flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.hair },
+  cell: { flex: 1, paddingVertical: 8 },
+  cellDivider: { paddingLeft: 16, borderLeftWidth: 1, borderLeftColor: c.hair },
+  cellLabel: { ...monoLabel(11), lineHeight: 16, color: c.text2 },
+  cellValue: { fontFamily: FONT.num, fontSize: 24, lineHeight: 30, color: c.text, fontVariant: ['tabular-nums'] },
+  cellUnit: { ...monoLabel(11, 0.08), color: c.text2 },
+  splits: { marginTop: 12 },
+  splitBars: { height: 30, flexDirection: 'row', alignItems: 'flex-end', gap: 6 },
+  splitBar: { flex: 1, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+  splitLabels: { marginTop: 3, flexDirection: 'row', gap: 6 },
+  splitLabel: { flex: 1, textAlign: 'center', ...monoLabel(10, 0), lineHeight: 12, color: c.text2 },
   label: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
-  cellValue: { fontFamily: FONT.num, fontSize: 26, lineHeight: 34, color: c.text, fontVariant: ['tabular-nums'] },
-  cellUnit: { fontFamily: FONT.num, fontSize: 13, color: c.text2 },
-  form: { marginTop: 24, paddingHorizontal: 24, gap: 24 },
+  form: { marginTop: 20, paddingHorizontal: 24, gap: 20 },
   input: {
-    height: 46, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: c.border,
+    height: 44, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: c.border,
     backgroundColor: c.input, color: c.text, fontFamily: FONT.regular, fontSize: 15,
   },
   help: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: c.text2 },
@@ -259,7 +269,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   saveBtn: { height: 54, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   saveText: { fontFamily: FONT.semibold, fontSize: 16, color: c.ink },
   scrim: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 35 },
-  dialog: { alignSelf: 'stretch', paddingTop: 24, paddingHorizontal: 20, paddingBottom: 20, borderRadius: 20, backgroundColor: c.surface, gap: 8 },
+  dialog: {
+    alignSelf: 'stretch', paddingTop: 24, paddingHorizontal: 20, paddingBottom: 20, borderRadius: 20, backgroundColor: c.surface, gap: 8,
+    borderTopWidth: 1, borderTopColor: c.hair,
+  },
   dialogTitle: { fontFamily: FONT.semibold, fontSize: 18, lineHeight: 26, color: c.text },
   dialogBody: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 22, color: c.text2 },
   dialogActions: { marginTop: 12, flexDirection: 'row', gap: 8 },
