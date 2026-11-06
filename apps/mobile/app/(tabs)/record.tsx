@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useMemo, useState } from 'react';
+import { useEffect, useRef, useCallback, useMemo, useState, type ComponentRef } from 'react';
 import { View, Text, Pressable, StyleSheet, Linking, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
 import { HoldToStopButton } from '@/components/HoldToStopButton';
 import { LocationPermissionSheet } from '@/components/LocationPermissionSheet';
-import { TelemetryGrid, CoordLine } from '@/components/Telemetry';
+import { TelemetryGrid, CoordLine, telemetryDots } from '@/components/Telemetry';
 import { LocateIcon, PlayIcon, WarnIcon } from '@/components/icons';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { fetchRunStats } from '@/api/stats';
@@ -95,9 +95,25 @@ export default function RecordScreen() {
     begin();
   }, [begin]);
 
+  // 종료: 지금 보이는 점 구름의 창 좌표를 넘겨 요약 화면의 가루 전환이 같은 자리에서 시작하게 한다
+  const gridRef = useRef<ComponentRef<typeof View>>(null);
   const handleStop = useCallback(() => {
-    stopTracking();
-    router.push('/run-summary');
+    const coords = useRunStore.getState().coordinates;
+    const go = () => {
+      stopTracking();
+      router.push('/run-summary');
+    };
+    const grid = gridRef.current;
+    if (!grid || coords.length === 0) {
+      useRunStore.getState().setSettleFrom(null);
+      go();
+      return;
+    }
+    grid.measureInWindow((x, y, w, h) => {
+      const dots = w > 0 && h > 0 ? telemetryDots(coords, w, h).map(([dx, dy]): [number, number] => [x + dx, y + dy]) : [];
+      useRunStore.getState().setSettleFrom(dots.length ? { dots } : null);
+      go();
+    });
   }, [stopTracking, router]);
 
   // 상단 줄: 상태(READY · REC · PAUSED) + 이번 러닝 번호, 오른쪽 GPS 정확도
@@ -117,7 +133,7 @@ export default function RecordScreen() {
   return (
     <View style={styles.root} onLayout={(e) => setRoot({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}>
       {/* 격자 + 지금까지 달린 경로(점 구름) */}
-      <View style={{ position: 'absolute', top: gridTop, left: 0 }}>
+      <View ref={gridRef} collapsable={false} style={{ position: 'absolute', top: gridTop, left: 0 }}>
         {!denied && (
           <TelemetryGrid
             coords={coordinates}

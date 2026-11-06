@@ -13,6 +13,11 @@ export interface RunSummary {
   paceSecPerKm: number;
 }
 
+/** 종료 직전 기록 중 화면의 점 구름(창 좌표) — 요약 화면의 가루 전환이 여기서 출발한다 */
+export interface SettleFrom {
+  dots: [number, number][];
+}
+
 // 백그라운드에서 JS 타이머가 멈춰도 틀어지지 않게 경과 시간은 시작 시각 기준으로 계산한다.
 // 일시정지한 시간(pausedMs)은 뺀다(B7)
 export function elapsedSecondsSince(startedAtMs: number, nowMs: number, pausedMs = 0): number {
@@ -48,6 +53,7 @@ interface RunStore {
   lastSampleAt: number | null;
   elapsedSeconds: number;
   pendingSummary: RunSummary | null;
+  settleFrom: SettleFrom | null;
   /** 이번이 내 몇 번째 러닝인지(「RUN/0427」, 잠금화면 위젯). 모르면 null */
   runNo: number | null;
   startTracking: (runNo?: number | null) => Promise<void>;
@@ -56,6 +62,7 @@ interface RunStore {
   resumeTracking: () => void;
   resetRun: () => void;
   clearPendingSummary: () => void;
+  setSettleFrom: (from: SettleFrom | null) => void;
   _tick: () => void;
   _addCoordinate: (lng: number, lat: number, accuracy?: number | null, timestamp?: number) => void;
 }
@@ -108,6 +115,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   lastSampleAt: null,
   elapsedSeconds: 0,
   pendingSummary: null,
+  settleFrom: null,
   runNo: null,
 
   _tick: () => {
@@ -192,8 +200,10 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
   resetRun: () => set({
     isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null,
-    elapsedSeconds: 0, pendingSummary: null,
+    elapsedSeconds: 0, pendingSummary: null, settleFrom: null,
   }),
 
-  clearPendingSummary: () => set({ pendingSummary: null }),
+  clearPendingSummary: () => set({ pendingSummary: null, settleFrom: null }),
+
+  setSettleFrom: (from) => set({ settleFrom: from }),
 }));

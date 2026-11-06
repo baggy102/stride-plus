@@ -7,19 +7,22 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "css:build": "tailwindcss -i ./global.css -o ./tailwind.output.css --content './app/**/*.{js,jsx,ts,tsx}' --content './src/**/*.{js,jsx,ts,tsx}'",
-    "gen:map-assets": "node scripts/gen-map-assets.js"
+    "gen:map-assets": "node scripts/gen-map-assets.js",
+    "test": "node --test --experimental-strip-types 'src/**/*.test.mjs'"
   },
   "dependencies": {
     "@bacons/apple-targets": "~5.0.0",
     "@expo/metro-runtime": "~58.0.15",
     "@expo/vector-icons": "^15.1.1",
     "@gorhom/bottom-sheet": "^5.2.13",
+    "@shopify/react-native-skia": "2.14.0",
     "@types/leaflet": "^1.9.21",
     "axios": "^1.7.7",
     "expo": "~58.0.19",
     "expo-blur": "~58.0.5",
     "expo-constants": "~58.0.13",
     "expo-font": "~58.0.10",
+    "expo-haptics": "~58.0.7",
     "expo-image-picker": "^58.0.10",
     "expo-linear-gradient": "~58.0.3",
     "expo-linking": "~58.0.14",
