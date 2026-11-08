@@ -1,3 +1,11 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+
+# 설치 스크립트 허용 목록(pnpm 10 이상은 여기서 읽는다). 나머지는 실행하지 않고 실패로도 보지 않는다
+onlyBuiltDependencies:
+  - '@nestjs/core'
+ignoredBuiltDependencies:
+  - '@scarf/scarf'
+  - bcrypt
+strictDepBuilds: false
