@@ -11,6 +11,12 @@ export function formatPace(secPerKm: number): string {
   return `${Math.floor(total / 60)}'${String(total % 60).padStart(2, '0')}"`;
 }
 
+// 기록의 페이스 표시. 50 m 미만 기록은 기록 화면과 같이 표시하지 않는다(0.02 km에 32'19" 같은 값 방지).
+// 저장된 페이스 값은 시간 계산(거리 × 페이스)에 그대로 쓰이므로 바꾸지 않고 표시만 거른다
+export function formatRunPace(secPerKm: number, distanceKm: number): string {
+  return distanceKm >= MIN_PACE_DISTANCE_KM ? formatPace(secPerKm) : formatPace(0);
+}
+
 // 기록 시간 「52:10」·「1:05:20」. 서버는 시간을 따로 저장하지 않아 거리 × 페이스로 구한다
 export function formatDuration(totalSec: number): string {
   const sec = Math.max(0, Math.round(totalSec));

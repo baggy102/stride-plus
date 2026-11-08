@@ -21,7 +21,7 @@ import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
-import { formatDuration, formatPace } from '@/utils/pace';
+import { formatDuration, formatPace, formatRunPace } from '@/utils/pace';
 import { formatClock, formatDay } from '@/utils/date';
 import { kmSplits } from '@/utils/route';
 import { MOTION, useReducedMotion } from '@/utils/motion';
@@ -289,7 +289,7 @@ export default function RunSummaryScreen() {
               <View style={[styles.cell, styles.cellDivider]}>
                 <Text style={styles.cellLabel}>PACE</Text>
                 <Text style={styles.cellValue}>
-                  {formatPace(summary.paceSecPerKm)}
+                  {formatRunPace(summary.paceSecPerKm, summary.distanceKm)}
                   <Text style={styles.cellUnit}> /KM</Text>
                 </Text>
               </View>

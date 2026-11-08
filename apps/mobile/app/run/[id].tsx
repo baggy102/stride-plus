@@ -14,7 +14,7 @@ import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import { Glass } from '@/components/Glass';
 import type { Palette } from '@/theme/colors';
-import { formatDuration, formatPace } from '@/utils/pace';
+import { formatDuration, formatRunPace } from '@/utils/pace';
 import { formatClock, formatDay } from '@/utils/date';
 
 interface RunDetail {
@@ -159,7 +159,7 @@ export default function RunDetailScreen() {
               <View style={styles.stat}>
                 <Text style={styles.statLabel}>PACE</Text>
                 <Text style={styles.statValue}>
-                  {formatPace(run.paceSecPerKm)}
+                  {formatRunPace(run.paceSecPerKm, run.distanceKm)}
                   <Text style={styles.statUnit}> /KM</Text>
                 </Text>
               </View>

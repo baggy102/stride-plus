@@ -9,7 +9,7 @@ import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import type { Palette } from '@/theme/colors';
 import type { RunMarker } from '../RunCard';
-import { formatDuration, formatPace } from '@/utils/pace';
+import { formatDuration, formatRunPace } from '@/utils/pace';
 import { formatDay } from '@/utils/date';
 import { fitToBox } from '@/utils/route';
 import { MOTION, easeOutCubic, useReducedMotion } from '@/utils/motion';
@@ -98,7 +98,7 @@ function Hero({ run, baseUrl, c, styles, onPress }: {
   run: RunWithRoute; baseUrl: string; c: Palette; styles: ReturnType<typeof makeStyles>; onPress: () => void;
 }) {
   const photo = run.photoUrls[0];
-  const pace = formatPace(run.paceSecPerKm);
+  const pace = formatRunPace(run.paceSecPerKm, run.distanceKm);
   const time = timeOf(run);
   const [width, setWidth] = useState(350);
   return (
@@ -168,7 +168,7 @@ function RunItem({ run, baseUrl, c, styles, latest, onPress }: {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${titleOf(run)}, ${date} 러닝 ${run.distanceKm.toFixed(2)} km, 페이스 ${formatPace(run.paceSecPerKm)}, 시간 ${timeOf(run)}${run.photoUrls.length ? `, 사진 ${run.photoUrls.length}장` : ''}`}
+      accessibilityLabel={`${titleOf(run)}, ${date} 러닝 ${run.distanceKm.toFixed(2)} km, 페이스 ${formatRunPace(run.paceSecPerKm, run.distanceKm)}, 시간 ${timeOf(run)}${run.photoUrls.length ? `, 사진 ${run.photoUrls.length}장` : ''}`}
       onPress={onPress}
       // 함수형 style은 NativeWind interop에서 적용되지 않아 정적 style을 쓴다
       style={[styles.row, latest && styles.rowLatest]}
