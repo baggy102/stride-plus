@@ -55,8 +55,11 @@ export function baseMapScript(p: Palette, dark: boolean): string {
   return `
   function themeRules(f){return {paintRules:protomapsL.paintRules(f),labelRules:protomapsL.labelRules(f,'ko'),backgroundColor:f.background};}
   var baseLayer=protomapsL.leafletLayer(Object.assign({url:${JSON.stringify(MAP_TILE_URL)},lang:'ko'},themeRules(${JSON.stringify(mapFlavor(dark))})));
-  // 출처 표기(Protomaps · OpenStreetMap)는 레이어가 직접 붙인다. 벡터 레이어는 maxZoom을 정하지 않아 클러스터용으로 지정
+  // 출처 표기(Protomaps · OpenStreetMap)는 레이어가 직접 붙인다. OSM 표기는 지워선 안 되므로 작게 왼쪽 아래(축척 위)로 옮기고
+  // Leaflet 접두어(깃발·Leaflet)는 뺀다 — 오른쪽 아래 현 위치 버튼과 겹치지 않게
   baseLayer.addTo(map);
+  if(map.attributionControl){map.attributionControl.setPrefix(false);map.attributionControl.setPosition('bottomleft');}
+  (function(){var s=document.createElement('style');s.textContent='.leaflet-control-attribution{font-size:9px!important;line-height:12px!important;padding:0 4px!important;background:transparent!important;opacity:.55;margin-left:14px!important}.leaflet-control-attribution a{color:inherit!important;text-decoration:none!important}';document.head.appendChild(s);})();
   map.setMaxZoom(18);
   window.__setTheme=function(f,c){
     var r=themeRules(f);
