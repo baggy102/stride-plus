@@ -29,10 +29,12 @@ interface Props {
   interactive?: boolean;
   /** 형광펜처럼 두껍고 반투명한 선(기록 중) */
   highlighter?: boolean;
+  /** GPS 점마다 얼음빛 점 구름을 형광펜 위에 찍고, 지도 타일은 한 톤 누른다 */
+  cloud?: boolean;
   style?: ViewStyle;
 }
 
-function buildHtml(p: Palette, dark: boolean, interactive: boolean, highlighter: boolean) {
+function buildHtml(p: Palette, dark: boolean, interactive: boolean, highlighter: boolean, cloud: boolean) {
   const m = p.map;
   return `<!DOCTYPE html>
 <html>
@@ -45,6 +47,9 @@ function buildHtml(p: Palette, dark: boolean, interactive: boolean, highlighter:
     .leaflet-control-attribution { font-size: 9px !important; background: transparent !important; color: ${p.text2} !important; }
     .leaflet-control-attribution a { color: ${p.text2} !important; }
     :root { --tick: ${p.text}; --halo: ${m.bg}; }
+    ${cloud ? '.leaflet-tile-pane { opacity: 0.72; }' : ''}
+    #cloud { position:absolute; left:0; top:0; pointer-events:none; z-index:450; }
+    .leaflet-zoom-anim #cloud { visibility:hidden; }
     .km-tick { font: 500 11px/14px ui-monospace, Menlo, monospace; letter-spacing: 0.04em; text-align: center; color: var(--tick);
       text-shadow: 0 0 2px var(--halo), 1px 1px 0 var(--halo), -1px -1px 0 var(--halo), 1px -1px 0 var(--halo), -1px 1px 0 var(--halo); }
   </style>
@@ -58,21 +63,54 @@ function buildHtml(p: Palette, dark: boolean, interactive: boolean, highlighter:
 ${baseMapScript(p, dark)}
   // 기록 중: 형광펜(굵고 반투명, 끝이 둥근 선). 요약·상세: 얇은 선 + 다크에서만 은은한 빛
   var HL = ${highlighter};
-  var glow = L.polyline([], { color:'${m.dot}', weight:HL ? 16 : 7.5, opacity:HL ? 0.22 : ${p.dark ? 0.35 : 0}, lineCap:'round', lineJoin:'round' }).addTo(map);
-  var line = L.polyline([], { color:'${m.dot}', weight:HL ? 9 : 3.5, opacity:HL ? 0.55 : 1, lineCap:'round', lineJoin:'round' }).addTo(map);
+  var CLOUD = ${cloud};
+  var glow = L.polyline([], { color:'${m.dot}', weight:HL ? (CLOUD && !${interactive} ? 14 : 16) : 7.5, opacity:HL ? 0.22 : ${p.dark ? 0.35 : 0}, lineCap:'round', lineJoin:'round' }).addTo(map);
+  var line = L.polyline([], { color:'${m.dot}', weight:HL ? (CLOUD && !${interactive} ? 8 : 9) : 3.5, opacity:HL ? 0.55 : 1, lineCap:'round', lineJoin:'round' }).addTo(map);
   // 손으로 지도를 끌면 따라가기를 멈춘다(현 위치 버튼으로 다시 켠다)
   var following = true;
   map.on('dragstart', function(){ following = false; });
   var ticks = L.layerGroup().addTo(map);
   var marks = [];
   var tickColor = '${p.text}';
-  var start = L.circleMarker([0,0], { radius:4.5, color:'${m.dot}', weight:2, fillColor:'${m.bg}', fillOpacity:1 });
-  var me = L.circleMarker([0,0], { radius:7, color:'${m.meRing}', weight:3, fillColor:'${m.meFill}', fillOpacity:1 });
-  var end = L.circleMarker([0,0], { radius:5.5, color:'${m.dotBorder}', weight:2, fillColor:'${m.dot}', fillOpacity:1 });
+  var markerPane = CLOUD ? map.createPane('above') : null;
+  if (markerPane) markerPane.style.zIndex = 460;
+  var start = L.circleMarker([0,0], { pane: CLOUD ? 'above' : 'overlayPane', radius:4.5, color:'${m.dot}', weight:2, fillColor:'${m.bg}', fillOpacity:1 });
+  var me = L.circleMarker([0,0], { pane: CLOUD ? 'above' : 'overlayPane', radius:7, color:'${m.meRing}', weight:3, fillColor:'${m.meFill}', fillOpacity:1 });
+  var end = L.circleMarker([0,0], { pane: CLOUD ? 'above' : 'overlayPane', radius:5.5, color:'${m.dotBorder}', weight:2, fillColor:'${m.dot}', fillOpacity:1 });
   var mode = 'follow';
+  // 점 구름: 지도 위 캔버스. 화면에서 5px보다 가까운 점은 건너뛰어 확대·축소해도 밀도가 같고, 오래된 점일수록 옅다
+  var cloudColor = '${m.dot}';
+  var cv = null, cx = null;
+  if (CLOUD) {
+    cv = document.createElement('canvas'); cv.id = 'cloud';
+    map.getContainer().appendChild(cv); cx = cv.getContext('2d');
+  }
+  function rgb(hex){ var h = hex.replace('#',''); if (h.length === 3) h = h.split('').map(function(x){ return x + x; }).join('');
+    var n = parseInt(h.slice(0,6), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(','); }
+  function jit(i, k){ var x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return (x - Math.floor(x) - 0.5) * 2.4; }
+  function drawCloud(){
+    if (!cx) return;
+    var size = map.getSize(), dpr = window.devicePixelRatio || 1;
+    if (cv.width !== size.x * dpr || cv.height !== size.y * dpr) {
+      cv.width = size.x * dpr; cv.height = size.y * dpr; cv.style.width = size.x + 'px'; cv.style.height = size.y + 'px';
+    }
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0); cx.clearRect(0, 0, size.x, size.y);
+    var pts = line.getLatLngs(), n = pts.length, last = null, c = rgb(cloudColor);
+    for (var i = 0; i < n; i++) {
+      var q = map.latLngToContainerPoint(pts[i]);
+      if (last && i !== n - 1 && Math.abs(q.x - last.x) + Math.abs(q.y - last.y) < 5) continue;
+      last = q;
+      if (q.x < -8 || q.y < -8 || q.x > size.x + 8 || q.y > size.y + 8) continue;
+      var a = 0.35 + 0.65 * (i / n), x = q.x + jit(i, 1), y = q.y + jit(i, 2);
+      cx.fillStyle = 'rgba(' + c + ',' + (0.18 * a) + ')'; cx.beginPath(); cx.arc(x, y, 3.6, 0, 7); cx.fill();
+      cx.fillStyle = 'rgba(' + c + ',' + (0.95 * a) + ')'; cx.beginPath(); cx.arc(x, y, 1.4, 0, 7); cx.fill();
+    }
+  }
+  if (CLOUD) map.on('move zoom zoomend viewreset resize', drawCloud);
   window.__onTheme = function(c){
     glow.setStyle({ color:c.dot, opacity:HL ? 0.22 : (c.dark ? 0.35 : 0) });
     line.setStyle({ color:c.dot });
+    cloudColor = c.dot; drawCloud();
     tickColor = c.text;
     document.documentElement.style.setProperty('--tick', c.text);
     document.documentElement.style.setProperty('--halo', c.bg);
@@ -115,6 +153,7 @@ ${baseMapScript(p, dark)}
     else if (cur && following) { map.panTo(cur, { animate:true, duration:0.5 }); }
     else if (!cur && !placed) { map.setView([37.5665,126.978], 13); }
     drawTicks();
+    drawCloud();
   };
   var placed = false;
   window.__recenter = function(){
@@ -135,7 +174,7 @@ ${baseMapScript(p, dark)}
 }
 
 export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
-  { coordinates, fallbackCenter, showCurrent = false, fit = 'follow', kmTicks = false, interactive = false, highlighter = false, style },
+  { coordinates, fallbackCenter, showCurrent = false, fit = 'follow', kmTicks = false, interactive = false, highlighter = false, cloud = false, style },
   ref,
 ) {
   const c = useColors();
@@ -143,7 +182,7 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
   const webViewRef = useRef<WebViewHandle>(null);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
   const { initial, applyTheme } = useMapTheme(webViewRef, c, dark);
-  const html = useMemo(() => buildHtml(initial.p, initial.dark, interactive, highlighter), [initial, interactive, highlighter]);
+  const html = useMemo(() => buildHtml(initial.p, initial.dark, interactive, highlighter, cloud), [initial, interactive, highlighter, cloud]);
   const projectWaiters = useRef<((pts: [number, number][]) => void)[]>([]);
   const loaded = useRef(false);
 

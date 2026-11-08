@@ -15,7 +15,7 @@ import * as Location from 'expo-location';
 import { useRunStore } from '@/store/run';
 import client from '@/api/client';
 import { RouteMap } from '@/components/RouteMap';
-import { CoordLine } from '@/components/Telemetry';
+import { Wordmark } from '@/components/Wordmark';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
 import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
 import { useColors } from '@/theme/useColors';
@@ -171,7 +171,6 @@ export default function RunSummaryScreen() {
   };
 
   const headStyle = useReveal(clock, reduced, TL.head);
-  const coordsStyle = useReveal(clock, reduced, TL.coords, 0);
   const blueprintStyle = useReveal(clock, reduced, TL.blueprint, 0);
   const distanceStyle = useReveal(clock, reduced, TL.distance);
   const cellsStyle = useReveal(clock, reduced, TL.cells);
@@ -249,22 +248,19 @@ export default function RunSummaryScreen() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView
           onLayout={onLayoutOf('scroll')}
-          contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + 10 }}
+          contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + 50 }}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
           {/* 머리: 「러닝 종료 · 10.16 목 · 07:05」 + 장소 */}
           <Animated.View style={[styles.head, headStyle]}>
-            <Text style={styles.kicker}>{`러닝 종료 · ${formatDay(finishedAt)} · ${formatClock(finishedAt)}`}</Text>
+            <Text style={styles.kicker}>{`${formatDay(finishedAt)} · ${formatClock(finishedAt)}`}</Text>
             <Text accessibilityRole="header" style={styles.title} numberOfLines={1}>{place ?? '이번 러닝'}</Text>
           </Animated.View>
 
           {/* 경로 도면: 가루가 빠져나간 자리에 그려진다 */}
           <Animated.View style={[styles.blueprint, blueprintStyle]}>
-            <RouteMap coordinates={summary.coordinates} fit="route" kmTicks style={{ width: boxWidth, height: 192, borderRadius: 12, overflow: 'hidden' }} />
-          </Animated.View>
-          <Animated.View style={[styles.coords, coordsStyle]}>
-            <CoordLine at={start} />
+            <RouteMap coordinates={summary.coordinates} fit="route" highlighter cloud style={{ width: boxWidth, height: 236, borderRadius: 16, overflow: 'hidden' }} />
           </Animated.View>
 
           {/* 결과 시트: 러닝 결과 + 사진·코스 소개 */}
@@ -305,20 +301,14 @@ export default function RunSummaryScreen() {
           <Animated.View style={[styles.form, formStyle]}>
             <PhotoPicker photos={photos} onChange={setPhotos} />
 
-            <View style={{ gap: 4 }}>
-              <Text style={styles.label}>
-                코스 소개 <Text style={{ fontFamily: FONT.regular }}>(선택)</Text>
-              </Text>
-              <TextInput
-                accessibilityLabel="코스 소개"
-                value={description}
-                onChangeText={setDescription}
-                placeholder="풍경, 경사, 추천 시간대 등"
-                placeholderTextColor={c.muted}
-                style={styles.input}
-              />
-              <Text style={styles.help}>다른 러너가 코스를 고를 때 보여요</Text>
-            </View>
+            <TextInput
+              accessibilityLabel="코스 소개"
+              value={description}
+              onChangeText={setDescription}
+              placeholder="코스 소개 (선택)"
+              placeholderTextColor={c.muted}
+              style={styles.input}
+            />
           </Animated.View>
           </Animated.View>
         </ScrollView>
@@ -339,6 +329,9 @@ export default function RunSummaryScreen() {
         <DustTransition dust={dust} clock={clock} head={head} width={width} height={rootH} c={c} />
       )}
 
+      <View pointerEvents="none" style={[styles.logo, { top: insets.top + 10 }]}>
+        <Wordmark width={71} />
+      </View>
       <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(true)} style={[styles.deleteBtn, { top: insets.top - 2 }]}>
         <Text style={styles.deleteText}>삭제</Text>
       </Pressable>
@@ -416,7 +409,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   kicker: { ...monoLabel(12, 0.08), lineHeight: 18, color: c.text2 },
   title: { marginTop: 4, fontFamily: FONT.bold, fontSize: 20, lineHeight: 26, color: c.text },
   blueprint: { marginTop: 14, paddingHorizontal: 24 },
-  coords: { marginTop: 4 },
+  logo: { position: 'absolute', left: 0, right: 0, height: 24, alignItems: 'center', justifyContent: 'center' },
   deleteBtn: { position: 'absolute', right: 8, height: 44, paddingHorizontal: 12, justifyContent: 'center' },
   deleteText: { fontFamily: FONT.semibold, fontSize: 15, color: c.text2 },
   // 결과 시트: 화면 아래에서 올라오는 면. 저장 버튼 줄(footer)과 같은 색으로 이어진다
@@ -442,12 +435,11 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   splitLabels: { marginTop: 3, flexDirection: 'row', gap: 6 },
   splitLabel: { flex: 1, textAlign: 'center', ...monoLabel(10, 0), lineHeight: 12, color: c.text2 },
   label: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
-  form: { marginTop: 20, paddingHorizontal: 24, gap: 20 },
+  form: { marginTop: 20, paddingHorizontal: 24, gap: 12 },
   input: {
     height: 44, paddingHorizontal: 14, borderRadius: 12, borderWidth: 1, borderColor: c.border,
     backgroundColor: c.input, color: c.text, fontFamily: FONT.regular, fontSize: 15,
   },
-  help: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: c.text2 },
   footer: { paddingHorizontal: 24, paddingTop: 8, backgroundColor: c.surface },
   saveBtn: { height: 54, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   saveText: { fontFamily: FONT.semibold, fontSize: 16, color: c.ink },
