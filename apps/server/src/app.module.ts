@@ -9,6 +9,7 @@ import { RunsModule } from './runs/runs.module';
 import { PostsModule } from './posts/posts.module';
 import { ReportsModule } from './reports/reports.module';
 import { JwtAuthGuard } from './common/jwt.guard';
+import { StorageModule } from './storage/storage.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { JwtAuthGuard } from './common/jwt.guard';
       }),
       inject: [ConfigService],
     }),
+    StorageModule,
     AuthModule,
     UsersModule,
     RunsModule,

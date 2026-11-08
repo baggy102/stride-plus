@@ -1,0 +1,43 @@
+# AWS CodeBuild(stride-api): 서버 이미지를 빌드해 ECR에 올리고 Lightsail 컨테이너(stride-api)에 배포한다.
+# 비밀값은 Parameter Store(/stride/*)에서 읽어 배포 환경 변수로만 넘긴다(저장소·로그에 남기지 않음).
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: ap-southeast-2
+    SERVICE_NAME: stride-api
+    REPO_NAME: stride-api
+  parameter-store:
+    MONGODB_URI: /stride/MONGODB_URI
+    JWT_SECRET: /stride/JWT_SECRET
+    S3_BUCKET: /stride/S3_BUCKET
+    S3_ACCESS_KEY_ID: /stride/S3_ACCESS_KEY_ID
+    S3_SECRET_ACCESS_KEY: /stride/S3_SECRET_ACCESS_KEY
+
+phases:
+  pre_build:
+    commands:
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - REGISTRY=$ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - IMAGE=$REGISTRY/$REPO_NAME:${CODEBUILD_RESOLVED_SOURCE_VERSION:0:12}
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $REGISTRY
+  build:
+    commands:
+      - docker build -f apps/server/Dockerfile -t $IMAGE .
+      - docker push $IMAGE
+  post_build:
+    commands:
+      - |
+        python3 - <<'PY'
+        import json, os
+        env = {k: os.environ[k] for k in ["MONGODB_URI", "JWT_SECRET", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]}
+        env.update({"NODE_ENV": "production", "PORT": "3000", "S3_REGION": os.environ["AWS_REGION"]})
+        containers = {"api": {"image": os.environ["IMAGE"], "environment": env, "ports": {"3000": "HTTP"}}}
+        endpoint = {"containerName": "api", "containerPort": 3000,
+                    "healthCheck": {"path": "/api", "intervalSeconds": 10, "timeoutSeconds": 5,
+                                    "healthyThreshold": 2, "unhealthyThreshold": 3, "successCodes": "200-399"}}
+        json.dump(containers, open("/tmp/containers.json", "w"))
+        json.dump(endpoint, open("/tmp/endpoint.json", "w"))
+        PY
+      - aws lightsail create-container-service-deployment --region $AWS_REGION --service-name $SERVICE_NAME --containers file:///tmp/containers.json --public-endpoint file:///tmp/endpoint.json --query 'containerService.state' --output text
+      - rm -f /tmp/containers.json /tmp/endpoint.json

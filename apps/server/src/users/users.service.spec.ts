@@ -9,6 +9,8 @@ import { User } from './users.schema';
 import { Run } from '../runs/runs.schema';
 import { Post } from '../posts/posts.schema';
 import { RefreshToken } from '../auth/auth.schema';
+import { ConfigService } from '@nestjs/config';
+import { StorageService } from '../storage/storage.service';
 
 const execOf = (value: unknown = {}) => ({ exec: jest.fn().mockResolvedValue(value) });
 
@@ -36,6 +38,9 @@ describe('UsersService', () => {
         { provide: getModelToken(Run.name), useValue: mockRunModel },
         { provide: getModelToken(Post.name), useValue: mockPostModel },
         { provide: getModelToken(RefreshToken.name), useValue: mockRefreshTokenModel },
+        // S3 설정이 없으면 로컬 uploads 폴더 모드
+        StorageService,
+        { provide: ConfigService, useValue: { get: () => undefined } },
       ],
     }).compile();
 
