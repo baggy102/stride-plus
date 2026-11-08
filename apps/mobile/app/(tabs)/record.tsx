@@ -8,7 +8,8 @@ import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
 import { HoldToStopButton } from '@/components/HoldToStopButton';
 import { LocationPermissionSheet } from '@/components/LocationPermissionSheet';
-import { TelemetryGrid, CoordLine, telemetryDots } from '@/components/Telemetry';
+import { CoordLine, telemetryDots } from '@/components/Telemetry';
+import { RouteMap, type RouteMapHandle } from '@/components/RouteMap';
 import { LocateIcon, PlayIcon, WarnIcon } from '@/components/icons';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { fetchRunStats } from '@/api/stats';
@@ -99,6 +100,7 @@ export default function RecordScreen() {
 
   // 종료: 지금 보이는 점 구름의 창 좌표를 넘겨 요약 화면의 가루 전환이 같은 자리에서 시작하게 한다
   const gridRef = useRef<ComponentRef<typeof View>>(null);
+  const mapRef = useRef<RouteMapHandle>(null);
   const handleStop = useCallback(() => {
     const coords = useRunStore.getState().coordinates;
     const go = () => {
@@ -111,10 +113,20 @@ export default function RecordScreen() {
       go();
       return;
     }
-    grid.measureInWindow((x, y, w, h) => {
-      const dots = w > 0 && h > 0 ? telemetryDots(coords, w, h).map(([dx, dy]): [number, number] => [x + dx, y + dy]) : [];
-      useRunStore.getState().setSettleFrom(dots.length ? { dots } : null);
-      go();
+    // 지도 위 경로의 화면 좌표(없으면 격자 배치)를 가루 출발점으로 쓴다
+    const projected = mapRef.current?.projectRoute() ?? Promise.resolve([] as [number, number][]);
+    projected.then((pts) => {
+      grid.measureInWindow((x, y, w, h) => {
+        let local: [number, number][] = pts.filter(([px, py]) => px >= 0 && py >= 0 && px <= w && py <= h);
+        if (local.length > 320) {
+          const step = local.length / 320;
+          local = Array.from({ length: 320 }, (_, i) => local[Math.floor(i * step)]);
+        }
+        if (local.length === 0 && w > 0 && h > 0) local = telemetryDots(coords, w, h);
+        const dots = local.map(([dx, dy]): [number, number] => [x + dx, y + dy]);
+        useRunStore.getState().setSettleFrom(dots.length ? { dots } : null);
+        go();
+      });
     });
   }, [stopTracking, router]);
 
@@ -139,14 +151,27 @@ export default function RecordScreen() {
       {/* 격자 + 지금까지 달린 경로(점 구름) */}
       <View ref={gridRef} collapsable={false} style={{ position: 'absolute', top: gridTop, left: 0 }}>
         {!denied && (
-          <TelemetryGrid
-            coords={coordinates}
-            width={root.width}
-            height={gridHeight}
-            pulse={!isPaused && (isTracking || !!here)}
-            showHead={!!here || isTracking}
-            accessibilityLabel={isTracking ? '지금까지 달린 경로' : '현재 위치'}
-          />
+          <View style={{ width: root.width, height: gridHeight }}>
+            <RouteMap
+              ref={mapRef}
+              coordinates={coordinates}
+              fallbackCenter={here?.at}
+              showCurrent
+              fit="follow"
+              interactive
+              highlighter
+              style={{ width: root.width, height: gridHeight }}
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="현재 위치로 이동"
+              onPress={() => mapRef.current?.recenter()}
+              hitSlop={8}
+              style={styles.locate}
+            >
+              <LocateIcon color={c.text} />
+            </Pressable>
+          </View>
         )}
         {!denied && <CoordLine at={current} />}
       </View>
@@ -255,6 +280,11 @@ export default function RecordScreen() {
 
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
+  locate: {
+    position: 'absolute', right: 16, bottom: 12, width: 40, height: 40, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: c.navOff,
+  },
   topBar: { position: 'absolute', left: 24, right: 24, height: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   state: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   stateDot: { width: 6, height: 6, borderRadius: 3 },

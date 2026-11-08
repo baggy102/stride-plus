@@ -6,10 +6,13 @@ import type { Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import { kmMarks } from '@/utils/route';
 
-// 경로를 보여 주는 정적 지도(손으로 움직이지 않음). 러닝 상세(S10)에서 쓴다(Frost에서 기록 중·요약은 격자 도면).
+// 경로를 실제 지도 위 좌표에 그린다. 기록 중(따라가기·손으로 이동)·요약·상세(경로 맞춤)에서 쓴다.
 // 좌표는 GeoJSON [lng, lat]. HTML은 테마가 바뀔 때만 다시 만들고, 경로는 __setRoute로만 갱신한다.
 export interface RouteMapHandle {
+  /** 따라가기를 다시 켜고 지금 위치(요약·상세는 경로 전체)로 */
   recenter: () => void;
+  /** 경로 점들의 지도 화면 좌표(지도 왼쪽 위 기준 px). 종료 가루 전환의 출발점 */
+  projectRoute: () => Promise<[number, number][]>;
 }
 
 interface Props {
@@ -22,10 +25,14 @@ interface Props {
   fit?: 'route' | 'follow';
   /** 1 km마다 경로 바깥쪽으로 눈금 + 「1K」 라벨(Frost S10) */
   kmTicks?: boolean;
+  /** 손으로 움직이고 확대할 수 있게(기록 중). 끌면 따라가기를 멈추고 recenter로 다시 켠다 */
+  interactive?: boolean;
+  /** 형광펜처럼 두껍고 반투명한 선(기록 중) */
+  highlighter?: boolean;
   style?: ViewStyle;
 }
 
-function buildHtml(p: Palette, dark: boolean) {
+function buildHtml(p: Palette, dark: boolean, interactive: boolean, highlighter: boolean) {
   const m = p.map;
   return `<!DOCTYPE html>
 <html>
@@ -45,10 +52,17 @@ function buildHtml(p: Palette, dark: boolean) {
 <body>
 <div id="map"></div>
 <script>
-  var map = L.map('map', { zoomControl:false, dragging:false, touchZoom:false, doubleClickZoom:false, scrollWheelZoom:false, boxZoom:false, keyboard:false, tap:false });
+  var map = L.map('map', ${interactive
+    ? "{ zoomControl:false }"
+    : "{ zoomControl:false, dragging:false, touchZoom:false, doubleClickZoom:false, scrollWheelZoom:false, boxZoom:false, keyboard:false, tap:false }"});
 ${baseMapScript(p, dark)}
-  var glow = L.polyline([], { color:'${m.dot}', weight:7.5, opacity:${p.dark ? 0.35 : 0}, lineCap:'round', lineJoin:'round' }).addTo(map);
-  var line = L.polyline([], { color:'${m.dot}', weight:3.5, lineCap:'round', lineJoin:'round' }).addTo(map);
+  // 기록 중: 형광펜(굵고 반투명, 끝이 둥근 선). 요약·상세: 얇은 선 + 다크에서만 은은한 빛
+  var HL = ${highlighter};
+  var glow = L.polyline([], { color:'${m.dot}', weight:HL ? 16 : 7.5, opacity:HL ? 0.22 : ${p.dark ? 0.35 : 0}, lineCap:'round', lineJoin:'round' }).addTo(map);
+  var line = L.polyline([], { color:'${m.dot}', weight:HL ? 9 : 3.5, opacity:HL ? 0.55 : 1, lineCap:'round', lineJoin:'round' }).addTo(map);
+  // 손으로 지도를 끌면 따라가기를 멈춘다(현 위치 버튼으로 다시 켠다)
+  var following = true;
+  map.on('dragstart', function(){ following = false; });
   var ticks = L.layerGroup().addTo(map);
   var marks = [];
   var tickColor = '${p.text}';
@@ -57,7 +71,7 @@ ${baseMapScript(p, dark)}
   var end = L.circleMarker([0,0], { radius:5.5, color:'${m.dotBorder}', weight:2, fillColor:'${m.dot}', fillOpacity:1 });
   var mode = 'follow';
   window.__onTheme = function(c){
-    glow.setStyle({ color:c.dot, opacity:c.dark ? 0.35 : 0 });
+    glow.setStyle({ color:c.dot, opacity:HL ? 0.22 : (c.dark ? 0.35 : 0) });
     line.setStyle({ color:c.dot });
     tickColor = c.text;
     document.documentElement.style.setProperty('--tick', c.text);
@@ -97,14 +111,23 @@ ${baseMapScript(p, dark)}
     var cur = pts.length > 0 ? pts[pts.length - 1] : (fallback ? toLatLng(fallback) : null);
     if (showCurrent && cur) { me.setLatLng(cur).addTo(map); } else { map.removeLayer(me); }
     if (fit === 'route' && pts.length > 1) { map.fitBounds(line.getBounds(), { padding:[24,24] }); }
-    else if (cur) { map.setView(cur, 16); }
-    else { map.setView([37.5665,126.978], 13); }
+    else if (cur && !placed) { map.setView(cur, 16); placed = true; }
+    else if (cur && following) { map.panTo(cur, { animate:true, duration:0.5 }); }
+    else if (!cur && !placed) { map.setView([37.5665,126.978], 13); }
     drawTicks();
   };
+  var placed = false;
   window.__recenter = function(){
+    following = true;
     var pts = line.getLatLngs();
+    var cur = pts.length > 0 ? pts[pts.length - 1] : (me._map ? me.getLatLng() : null);
     if (mode === 'route' && pts.length > 1) map.fitBounds(line.getBounds(), { padding:[24,24] });
-    else if (pts.length > 0) map.setView(pts[pts.length - 1], 16);
+    else if (cur) map.setView(cur, Math.max(map.getZoom(), 15));
+  };
+  // 경로 점의 화면 좌표(지도 왼쪽 위 기준)를 앱으로 보낸다
+  window.__project = function(){
+    var pts = line.getLatLngs().map(function(ll){ var q = map.latLngToContainerPoint(ll); return [q.x, q.y]; });
+    window.ReactNativeWebView.postMessage(JSON.stringify({ type:'project', pts:pts }));
   };
 </script>
 </body>
@@ -112,7 +135,7 @@ ${baseMapScript(p, dark)}
 }
 
 export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
-  { coordinates, fallbackCenter, showCurrent = false, fit = 'follow', kmTicks = false, style },
+  { coordinates, fallbackCenter, showCurrent = false, fit = 'follow', kmTicks = false, interactive = false, highlighter = false, style },
   ref,
 ) {
   const c = useColors();
@@ -120,7 +143,8 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
   const webViewRef = useRef<WebViewHandle>(null);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
   const { initial, applyTheme } = useMapTheme(webViewRef, c, dark);
-  const html = useMemo(() => buildHtml(initial.p, initial.dark), [initial]);
+  const html = useMemo(() => buildHtml(initial.p, initial.dark, interactive, highlighter), [initial, interactive, highlighter]);
+  const projectWaiters = useRef<((pts: [number, number][]) => void)[]>([]);
   const loaded = useRef(false);
 
   const marks = useMemo(() => (kmTicks ? kmMarks(coordinates) : []), [kmTicks, coordinates]);
@@ -135,10 +159,18 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
 
   useImperativeHandle(ref, () => ({
     recenter: () => webViewRef.current?.injectJavaScript('window.__recenter();true;'),
+    projectRoute: () => new Promise<[number, number][]>((resolve) => {
+      if (!loaded.current) { resolve([]); return; }
+      // 지도가 응답하지 않으면 0.4초 뒤 빈 목록으로
+      const timer = setTimeout(() => { projectWaiters.current = projectWaiters.current.filter((w) => w !== done); resolve([]); }, 400);
+      const done = (pts: [number, number][]) => { clearTimeout(timer); resolve(pts); };
+      projectWaiters.current.push(done);
+      webViewRef.current?.injectJavaScript('window.__project();true;');
+    }),
   }), []);
 
   return (
-    <View style={[styles.root, { backgroundColor: c.map.bg }, style]} pointerEvents="none">
+    <View style={[styles.root, { backgroundColor: c.map.bg }, style]} pointerEvents={interactive ? 'auto' : 'none'}>
       <WebView
         ref={webViewRef}
         source={{ html }}
@@ -148,6 +180,16 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
         style={StyleSheet.absoluteFill}
         onLoadStart={() => { loaded.current = false; }}
         onLoadEnd={() => { loaded.current = true; applyTheme(); push(); }}
+        onMessage={(e) => {
+          try {
+            const msg = JSON.parse(e.nativeEvent.data);
+            if (msg.type === 'project') {
+              const waiters = projectWaiters.current;
+              projectWaiters.current = [];
+              waiters.forEach((w) => w(msg.pts));
+            }
+          } catch { /* 다른 메시지는 무시 */ }
+        }}
       />
     </View>
   );
