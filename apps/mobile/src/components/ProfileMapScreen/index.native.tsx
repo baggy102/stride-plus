@@ -211,7 +211,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     try {
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude, longitude } = pos.coords;
-      webViewRef.current?.injectJavaScript(`map.flyTo([${latitude}, ${longitude}], 14); true;`);
+      webViewRef.current?.injectJavaScript(`map.flyTo([${latitude}, ${longitude}], Math.max(map.getZoom(), 13)); true;`);
     } catch {}
   }, []);
 
