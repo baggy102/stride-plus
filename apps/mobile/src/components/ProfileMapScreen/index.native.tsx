@@ -15,7 +15,7 @@ import { useColors, useScheme } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import { Glass } from '@/components/Glass';
 import { fetchRunStats, type RunStats } from '@/api/stats';
-import { withAlpha, type Palette } from '@/theme/colors';
+import { elevationStyle, withAlpha, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
 
@@ -438,7 +438,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   segmentOn: { backgroundColor: c.accent, borderColor: c.accent },
   myLocBtn: {
     position: 'absolute', right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22,
-    shadowColor: c.shadow, shadowOpacity: c.dark ? 0.45 : 0.1, shadowRadius: 15, shadowOffset: { width: 0, height: 8 }, elevation: 4,
+    ...elevationStyle(c),
   },
   myLocGlass: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
 });

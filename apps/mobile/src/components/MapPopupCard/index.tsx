@@ -4,7 +4,7 @@ import { RunMarker } from '../RunCard';
 import { CloseIcon } from '../icons';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
-import type { Palette } from '@/theme/colors';
+import { elevationStyle, type Palette } from '@/theme/colors';
 import { formatDuration, formatPace } from '@/utils/pace';
 import { formatDay } from '@/utils/date';
 
@@ -84,7 +84,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     paddingTop: 16, paddingHorizontal: 18,
     borderRadius: 24, backgroundColor: c.surface,
     borderWidth: 1, borderColor: c.border,
-    shadowColor: c.shadow, shadowOpacity: c.dark ? 0.45 : 0.1, shadowRadius: 15, shadowOffset: { width: 0, height: 10 }, elevation: 6,
+    ...elevationStyle(c),
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   avatar: {

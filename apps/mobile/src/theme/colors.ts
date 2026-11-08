@@ -19,6 +19,8 @@ export interface Palette {
   logo: string;
   danger: string;
   shadow: string;
+  /** 떠 있는 요소(탭바·시트·카드·버튼)의 그림자. 캔버스 CSS box-shadow 값을 RN으로 옮긴 것(radius = blur ÷ 2) */
+  elevation: { color: string; opacity: number; radius: number; offsetY: number; android: number };
   scrim: string; // 시트·다이얼로그 뒤 어둡게
   ok: string; // GPS 양호 점
   warn: string; // 경고 아이콘·글자
@@ -66,6 +68,8 @@ export const palettes: Record<Scheme, Palette> = {
     logo: '#4B83B5',
     danger: '#E5484D',
     shadow: '#000000',
+    // 0 10px 30px rgba(0,0,0,0.45)
+    elevation: { color: '#000000', opacity: 0.45, radius: 15, offsetY: 10, android: 8 },
     scrim: 'rgba(0,0,0,0.55)',
     ok: '#4CC38A',
     warn: '#FFC66B',
@@ -97,7 +101,7 @@ export const palettes: Record<Scheme, Palette> = {
   light: {
     dark: false,
     bg: '#F2F5F8',
-    header: 'rgba(242,245,248,0.94)',
+    header: 'rgba(242,245,248,0.92)',
     surface: '#FFFFFF',
     surface2: '#E6ECF2',
     border: '#DDE4EB',
@@ -111,6 +115,8 @@ export const palettes: Record<Scheme, Palette> = {
     logo: '#4B83B5',
     danger: '#E5484D',
     shadow: '#0B1016',
+    // 0 8px 24px rgba(17,19,22,0.10)
+    elevation: { color: '#111316', opacity: 0.1, radius: 12, offsetY: 8, android: 3 },
     scrim: 'rgba(17,19,22,0.4)',
     ok: '#2E9E6B',
     warn: '#B45309',
@@ -140,6 +146,18 @@ export const palettes: Record<Scheme, Palette> = {
     },
   },
 };
+
+// 그림자 토큰 → RN 스타일(iOS shadow* + Android elevation). 테마마다 값이 달라 컴포넌트에서 직접 쓰지 않는다
+export function elevationStyle(c: Pick<Palette, 'elevation'>) {
+  const e = c.elevation;
+  return {
+    shadowColor: e.color,
+    shadowOpacity: e.opacity,
+    shadowRadius: e.radius,
+    shadowOffset: { width: 0, height: e.offsetY },
+    elevation: e.android,
+  };
+}
 
 // '#RRGGBB' → 'rgba(r,g,b,a)'
 export function withAlpha(hex: string, alpha: number): string {
