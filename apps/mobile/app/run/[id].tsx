@@ -143,7 +143,7 @@ export default function RunDetailScreen() {
       )}
 
       {state === 'ready' && run && (
-        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}>
+        <ScrollView contentContainerStyle={{ paddingBottom: insets.bottom + 24 }} showsVerticalScrollIndicator={false}>
           <View style={styles.mapCard}>
             <RouteMap coordinates={run.route.coordinates} fit="route" kmTicks style={StyleSheet.absoluteFill} />
           </View>

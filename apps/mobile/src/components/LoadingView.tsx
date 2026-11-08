@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { View, Animated, Easing, StyleSheet } from 'react-native';
+import { View, Animated, Easing, Platform, StyleSheet } from 'react-native';
 import Svg, { Circle, Defs, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Wordmark } from './Wordmark';
@@ -14,6 +14,8 @@ export function LoadingView() {
   const glow = dark ? c.accent : c.logo;
   const glowAlpha = dark ? [0.34, 0.12] : [0.16, 0.06];
   const bandMid = dark ? c.text : c.value;
+  const bandColors = [withAlpha(c.value, 0), withAlpha(c.value, dark ? 0.55 : 0.45), bandMid, withAlpha(c.value, dark ? 0.55 : 0.45), withAlpha(c.value, 0)] as const;
+  const bandLocations = [0, 0.3, 0.5, 0.7, 1] as const;
   const spin = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -40,13 +42,22 @@ export function LoadingView() {
       </Svg>
       <View style={styles.mark}>
         <Wordmark width={141} />
-        <LinearGradient
-          start={{ x: 0, y: 0.5 }}
-          end={{ x: 1, y: 0.5 }}
-          colors={[withAlpha(c.value, 0), withAlpha(c.value, dark ? 0.55 : 0.45), bandMid, withAlpha(c.value, dark ? 0.55 : 0.45), withAlpha(c.value, 0)]}
-          locations={[0, 0.3, 0.5, 0.7, 1]}
-          style={[styles.band, { shadowColor: c.value, shadowOpacity: dark ? 0.6 : 0.3 }]}
-        />
+        <View style={styles.bandWrap}>
+          {/* Android는 shadow* 속성을 그리지 않아 번짐이 없다 → 같은 그라데이션을 위아래로 옅게 한 겹씩 깐다 */}
+          {Platform.OS === 'android' && (
+            <>
+              <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} colors={bandColors} locations={bandLocations} style={[styles.halo, styles.haloTop]} />
+              <LinearGradient start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} colors={bandColors} locations={bandLocations} style={[styles.halo, styles.haloBottom]} />
+            </>
+          )}
+          <LinearGradient
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            colors={bandColors}
+            locations={bandLocations}
+            style={[styles.band, { shadowColor: c.value, shadowOpacity: dark ? 0.6 : 0.3 }]}
+          />
+        </View>
       </View>
       <Animated.View style={{ transform: [{ rotate }] }}>
         <Svg width={40} height={40} viewBox="0 0 40 40" fill="none" strokeWidth={3.5} strokeLinecap="round">
@@ -61,5 +72,9 @@ export function LoadingView() {
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 28 },
   mark: { alignItems: 'center', gap: 16 },
+  bandWrap: { width: 270, height: 1 },
   band: { width: 270, height: 1, shadowRadius: 8, shadowOffset: { width: 0, height: 0 } },
+  halo: { position: 'absolute', left: 0, width: 270, height: 6, opacity: 0.15 },
+  haloTop: { top: -6 },
+  haloBottom: { top: 1 },
 });

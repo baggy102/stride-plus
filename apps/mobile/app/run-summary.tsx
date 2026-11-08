@@ -251,6 +251,7 @@ export default function RunSummaryScreen() {
           onLayout={onLayoutOf('scroll')}
           contentContainerStyle={{ flexGrow: 1, paddingTop: insets.top + 10 }}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
           {/* 머리: 「러닝 종료 · 10.16 목 · 07:05」 + 장소 */}
           <Animated.View style={[styles.head, headStyle]}>

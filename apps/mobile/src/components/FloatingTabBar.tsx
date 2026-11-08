@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Tabs } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { useColors } from '@/theme/useColors';
+import { elevationStyle } from '@/theme/colors';
 import { useRunStore } from '@/store/run';
 import { FONT } from '@/theme/fonts';
 import { Glass } from './Glass';
@@ -63,7 +64,7 @@ export function FloatingTabBar({ state, emitter, navigateToTab }: TabBarProps) {
   return (
     <View
       accessibilityRole="tablist"
-      style={[styles.shadow, { bottom: barBottom(insets.bottom), shadowColor: c.shadow }]}
+      style={[styles.shadow, elevationStyle(c), { bottom: barBottom(insets.bottom) }]}
     >
       <Glass style={styles.bar}>
         {state.routes.map((route, index) => {
@@ -100,10 +101,6 @@ const styles = StyleSheet.create({
     right: 16,
     height: BAR_HEIGHT,
     borderRadius: BAR_HEIGHT / 2,
-    shadowOpacity: 0.3,
-    shadowRadius: 15,
-    shadowOffset: { width: 0, height: 10 },
-    elevation: 8,
   },
   bar: {
     flex: 1,
