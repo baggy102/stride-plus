@@ -1,0 +1,48 @@
+# AWS CodeBuild(stride-api): 서버 이미지를 빌드해 Lightsail 컨테이너 저장소에 올리고 서비스(stride-api)에 배포한다.
+# (ECR 비공개 저장소는 Lightsail이 이미지를 받지 못해 쓰지 않는다)
+# 비밀값은 Parameter Store(/stride/*)에서 읽어 배포 환경 변수로만 넘긴다(저장소·로그에 남기지 않음).
+version: 0.2
+
+env:
+  variables:
+    AWS_REGION: ap-southeast-2
+    SERVICE_NAME: stride-api
+  parameter-store:
+    MONGODB_URI: /stride/MONGODB_URI
+    JWT_SECRET: /stride/JWT_SECRET
+    S3_BUCKET: /stride/S3_BUCKET
+    S3_ACCESS_KEY_ID: /stride/S3_ACCESS_KEY_ID
+    S3_SECRET_ACCESS_KEY: /stride/S3_SECRET_ACCESS_KEY
+
+phases:
+  install:
+    commands:
+      # aws lightsail push-container-image에 필요한 플러그인
+      - curl -fsSL https://s3.us-west-2.amazonaws.com/lightsailctl/latest/linux-amd64/lightsailctl -o /usr/local/bin/lightsailctl
+      - chmod +x /usr/local/bin/lightsailctl
+  build:
+    commands:
+      - LOCAL_IMAGE=stride-api:${CODEBUILD_RESOLVED_SOURCE_VERSION:0:12}
+      - docker build -f apps/server/Dockerfile -t $LOCAL_IMAGE .
+      - aws lightsail push-container-image --region $AWS_REGION --service-name $SERVICE_NAME --label api --image $LOCAL_IMAGE | tee /tmp/push.txt
+      # 출력의 'Refer to this image as ":stride-api.api.N"'에서 배포용 이름을 꺼낸다
+      - IMAGE=$(grep -o '":[^"]*"' /tmp/push.txt | tail -1 | tr -d '"')
+      - test -n "$IMAGE" && echo "image $IMAGE"
+  post_build:
+    commands:
+      - |
+        python3 - <<'PY'
+        import json, os
+        env = {k: os.environ[k] for k in ["MONGODB_URI", "JWT_SECRET", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]}
+        env.update({"NODE_ENV": "production", "PORT": "3000", "S3_REGION": os.environ["AWS_REGION"]})
+        containers = {"api": {"image": os.environ["IMAGE"], "environment": env, "ports": {"3000": "HTTP"}}}
+        endpoint = {"containerName": "api", "containerPort": 3000,
+                    "healthCheck": {"path": "/api", "intervalSeconds": 10, "timeoutSeconds": 5,
+                                    "healthyThreshold": 2, "unhealthyThreshold": 3, "successCodes": "200-399"}}
+        json.dump(containers, open("/tmp/containers.json", "w"))
+        json.dump(endpoint, open("/tmp/endpoint.json", "w"))
+        PY
+      # 앞선 배포가 아직 진행 중이면 새 배포가 거절된다 → 최대 15분 기다린다
+      - for i in $(seq 1 90); do NEXT=$(aws lightsail get-container-services --region $AWS_REGION --service-name $SERVICE_NAME --query 'containerServices[0].nextDeployment.state' --output text); [ "$NEXT" = "None" ] && break; echo "waiting for deployment ($NEXT)"; sleep 10; done
+      - aws lightsail create-container-service-deployment --region $AWS_REGION --service-name $SERVICE_NAME --containers file:///tmp/containers.json --public-endpoint file:///tmp/endpoint.json --query 'containerService.state' --output text
+      - rm -f /tmp/containers.json /tmp/endpoint.json

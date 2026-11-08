@@ -68,8 +68,8 @@ export default function RootLayout() {
         <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
         {/* 스택: 상세·설정·사용자 프로필에서 뒤로 가면 원래 화면(탭 상태 유지)으로 돌아간다 */}
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
-          {/* Settle(기록 중 → 요약): 화면은 페이드로 바뀌고, 요약 안에서 도면 선이 그려진다 */}
-          <Stack.Screen name="run-summary" options={{ animation: 'fade', animationDuration: MOTION.settle, gestureEnabled: false }} />
+          {/* 짧은 페이드로 기록 중 점 구름 위에 요약 화면의 가루 레이어가 겹쳐 이어진다(전환 본체는 요약 화면 안) */}
+          <Stack.Screen name="run-summary" options={{ animation: 'fade', animationDuration: MOTION.dustIn, gestureEnabled: false }} />
         </Stack>
         {isHydrating && (
           <View style={{ position: 'absolute', inset: 0 }}>

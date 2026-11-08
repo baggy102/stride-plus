@@ -5,7 +5,7 @@ import { CloseIcon } from '../icons';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import { elevationStyle, type Palette } from '@/theme/colors';
-import { formatDuration, formatPace } from '@/utils/pace';
+import { formatDuration, formatRunPace } from '@/utils/pace';
 import { formatDay } from '@/utils/date';
 
 interface Props {
@@ -69,7 +69,7 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
             <Text style={styles.minorLabel}>TIME</Text>
           </View>
           <View style={styles.minorItem}>
-            <Text style={styles.minorValue}>{formatPace(run.paceSecPerKm)}</Text>
+            <Text style={styles.minorValue}>{formatRunPace(run.paceSecPerKm, run.distanceKm)}</Text>
             <Text style={styles.minorLabel}>PACE</Text>
           </View>
         </View>

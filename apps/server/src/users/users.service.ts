@@ -1,13 +1,12 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, isValidObjectId } from 'mongoose';
-import { promises as fs } from 'fs';
-import { basename, join } from 'path';
 import { User, UserDocument } from './users.schema';
 import { Run, RunDocument } from '../runs/runs.schema';
 import { Post, PostDocument } from '../posts/posts.schema';
 import { RefreshToken, RefreshTokenDocument } from '../auth/auth.schema';
 import type { Consents } from '../auth/legal-versions';
+import { StorageService } from '../storage/storage.service';
 
 @Injectable()
 export class UsersService {
@@ -20,6 +19,7 @@ export class UsersService {
     private readonly postModel: Model<PostDocument>,
     @InjectModel(RefreshToken.name)
     private readonly refreshTokenModel: Model<RefreshTokenDocument>,
+    private readonly storage: StorageService,
   ) {}
 
   findByEmail(email: string): Promise<UserDocument | null> {
@@ -82,15 +82,6 @@ export class UsersService {
       ...((run.photoUrls as string[] | undefined) ?? []),
       (run as unknown as { routeImageUrl?: string }).routeImageUrl ?? '',
     ]);
-    await this.removeUploads(uploadUrls);
-  }
-
-  // '/uploads/<파일명>'의 파일명만 써서 uploads 폴더 밖을 가리키지 못하게 한다.
-  // 이미 없는 파일 등 삭제 실패는 계정 삭제를 막지 않는다. F4(오브젝트 스토리지)에서 교체.
-  private async removeUploads(urls: string[]) {
-    const files = urls.filter((url) => url.startsWith('/uploads/')).map((url) => basename(url));
-    await Promise.all(
-      files.map((file) => fs.unlink(join(process.cwd(), 'uploads', file)).catch(() => undefined)),
-    );
+    await this.storage.remove(uploadUrls);
   }
 }

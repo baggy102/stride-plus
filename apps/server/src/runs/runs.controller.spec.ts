@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { RunsController } from './runs.controller';
 import { RunsService } from './runs.service';
+import { StorageService } from '../storage/storage.service';
 
 const mockRunsService = {
   findNearby: jest.fn(),
@@ -16,7 +17,10 @@ describe('RunsController', () => {
   beforeEach(async () => {
     const module = await Test.createTestingModule({
       controllers: [RunsController],
-      providers: [{ provide: RunsService, useValue: mockRunsService }],
+      providers: [
+        { provide: RunsService, useValue: mockRunsService },
+        { provide: StorageService, useValue: { save: jest.fn() } },
+      ],
     }).compile();
 
     controller = module.get(RunsController);

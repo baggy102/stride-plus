@@ -19,9 +19,13 @@ interface Props {
   height: number;
   /** Settle 전환(기록 중 → 요약, 640ms): 경로가 시작점부터 그려지고 눈금·끝점은 마지막에 나타난다 */
   settle?: boolean;
+  /** 선 그리기를 늦춰 시작(ms) — 가루 전환에서는 가루가 빠져나간 뒤에 그린다 */
+  settleDelay?: number;
+  /** 선 그리기 길이(ms). 기본 MOTION.settle */
+  settleDuration?: number;
 }
 
-export function RouteBlueprint({ coords, width, height, settle = false }: Props) {
+export function RouteBlueprint({ coords, width, height, settle = false, settleDelay = 0, settleDuration = MOTION.settle }: Props) {
   const c = useColors();
   const tone = c.dark
     ? { marker: c.value, glow: 0.35, head: c.text, core: c.text }
@@ -62,11 +66,12 @@ export function RouteBlueprint({ coords, width, height, settle = false }: Props)
     // 동작 줄이기: 선을 다 그린 채 150ms 크로스페이드
     Animated.timing(progress, {
       toValue: 1,
-      duration: reduced ? MOTION.reduced : MOTION.settle,
+      duration: reduced ? MOTION.reduced : settleDuration,
+      delay: reduced ? 0 : settleDelay,
       easing: easeOutCubic,
       useNativeDriver: false,
     }).start();
-  }, [settle, reduced, progress]);
+  }, [settle, reduced, progress, settleDelay, settleDuration]);
   const dash = reduced ? 0 : length;
   const dashOffset = reduced ? 0 : progress.interpolate({ inputRange: [0, 1], outputRange: [length, 0] });
   const late = progress.interpolate({ inputRange: [0, reduced ? 0 : 0.7, 1], outputRange: [0, 0, 1] });

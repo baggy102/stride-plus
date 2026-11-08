@@ -5,7 +5,8 @@ import { AccessibilityInfo, Easing } from 'react-native';
 export const MOTION = {
   seal: 480, // 기록 중 → 잠금
   wake: 420, // 잠금 → 기록 중
-  settle: 640, // 기록 중 → 요약
+  settle: 640, // 요약 도면 선(기본)
+  dustIn: 300, // 기록 중 → 요약 화면 페이드(이후 가루 전환 약 3초는 utils/dust.ts)
   file: 520, // 요약 → 앨범
   reduced: 150,
 } as const;

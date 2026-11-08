@@ -35,6 +35,7 @@ export interface Palette {
   chipOnBg: string; // 활성 칩
   chipOnFg: string;
   headerFade: [string, string, string]; // 지도 위 헤더 세로 페이드(위 → 아래)
+  dust: { ice: string; ice2: string; spark: string }; // 러닝 종료 전환의 얼음빛 가루(밝은 알 · 퍼진 알 · 반짝임)
   map: {
     bg: string;
     dot: string;
@@ -84,6 +85,7 @@ export const palettes: Record<Scheme, Palette> = {
     chipOnBg: '#DCE6EE',
     chipOnFg: '#0B1016',
     headerFade: ['rgba(11,16,22,0.92)', 'rgba(11,16,22,0.72)', 'rgba(11,16,22,0)'],
+    dust: { ice: '#CFE8FF', ice2: '#7FBDF2', spark: '#F2FAFF' },
     map: {
       bg: '#16202B',
       dot: '#9DBFE0',
@@ -131,6 +133,7 @@ export const palettes: Record<Scheme, Palette> = {
     chipOnBg: '#24476B',
     chipOnFg: '#FFFFFF',
     headerFade: ['rgba(242,245,248,0.94)', 'rgba(242,245,248,0.76)', 'rgba(242,245,248,0)'],
+    dust: { ice: '#2F7BC0', ice2: '#6FA9DD', spark: '#1E64A8' },
     map: {
       bg: '#E9EEF3',
       dot: '#24476B',

@@ -21,6 +21,11 @@ function sample<T>(items: T[]): T[] {
   return out;
 }
 
+/** 격자에 그려지는 점 구름 좌표(격자 기준). 종료 전환이 같은 점에서 출발하도록 함께 쓴다 */
+export function telemetryDots(coords: LngLat[], width: number, height: number): [number, number][] {
+  return sample(fitToBox(coords, width, height, INSET));
+}
+
 interface GridProps {
   coords: LngLat[];
   width: number;
@@ -46,7 +51,7 @@ export function TelemetryGrid({ coords, width, height, pulse, showHead, accessib
     return d;
   }, [width, height]);
 
-  const dots = useMemo(() => sample(fitToBox(coords, width, height, INSET)), [coords, width, height]);
+  const dots = useMemo(() => telemetryDots(coords, width, height), [coords, width, height]);
   const head = dots.length > 0 ? dots[dots.length - 1] : showHead ? [width / 2, height / 2] : null;
 
   const spread = useRef(new Animated.Value(0)).current;

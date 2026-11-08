@@ -6,22 +6,25 @@
     "orientation": "portrait",
     "scheme": "strideplus",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
-      "supportsTablet": true,
+      "bundleIdentifier": "com.baggy102.strideplus",
+      "appleTeamId": "22KN2RK655",
+      "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "러닝 경로를 기록하기 위해 위치 정보가 필요합니다.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "백그라운드에서도 러닝 경로를 정확히 기록합니다.",
-        "UIBackgroundModes": ["location"],
-        "NSSupportsLiveActivities": true
+        "UIBackgroundModes": [
+          "location"
+        ],
+        "NSSupportsLiveActivities": true,
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
+      "package": "com.baggy102.strideplus",
       "adaptiveIcon": {
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0B1016"
       },
       "permissions": [
         "ACCESS_FINE_LOCATION",
@@ -32,6 +35,19 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0B1016",
+          "dark": {
+            "image": "./assets/images/splash-icon.png",
+            "backgroundColor": "#0B1016"
+          }
+        }
+      ],
       "expo-secure-store",
       [
         "expo-location",
@@ -58,6 +74,7 @@
     },
     "extra": {
       "apiUrl": "http://192.168.1.102:3000"
-    }
+    },
+    "icon": "./assets/images/icon.png"
   }
 }

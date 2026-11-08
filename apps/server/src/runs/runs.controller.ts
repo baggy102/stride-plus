@@ -3,23 +3,21 @@ import {
   UseInterceptors, UploadedFiles, Body,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { memoryStorage } from 'multer';
 import { RunsService } from './runs.service';
+import { StorageService } from '../storage/storage.service';
 import { FindRunsDto } from './dto/find-runs.dto';
 import { CreateRunDto } from './dto/create-run.dto';
 
-const storage = diskStorage({
-  destination: './uploads',
-  filename: (_, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${extname(file.originalname)}`);
-  },
-});
+// 메모리로 받아 StorageService가 S3(운영) 또는 uploads 폴더(로컬)에 쓴다. 사진 한 장 10MB까지
+const upload = { storage: memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } };
 
 @Controller('runs')
 export class RunsController {
-  constructor(private readonly runsService: RunsService) {}
+  constructor(
+    private readonly runsService: RunsService,
+    private readonly storage: StorageService,
+  ) {}
 
   @Get()
   findRuns(@Req() req: { user: { sub: string } }, @Query() dto: FindRunsDto) {
@@ -44,18 +42,16 @@ export class RunsController {
   @UseInterceptors(
     FileFieldsInterceptor(
       [{ name: 'routeImage', maxCount: 1 }, { name: 'photos', maxCount: 3 }],
-      { storage },
+      upload,
     ),
   )
-  create(
+  async create(
     @Req() req: { user: { sub: string } },
     @Body() dto: CreateRunDto,
     @UploadedFiles() files: { routeImage?: Express.Multer.File[]; photos?: Express.Multer.File[] },
   ) {
-    const routeImageUrl = files?.routeImage?.[0]
-      ? `/uploads/${files.routeImage[0].filename}`
-      : '';
-    const photoUrls = (files?.photos ?? []).map((f) => `/uploads/${f.filename}`);
+    const routeImageUrl = files?.routeImage?.[0] ? await this.storage.save(files.routeImage[0]) : '';
+    const photoUrls = await Promise.all((files?.photos ?? []).map((f) => this.storage.save(f)));
     return this.runsService.create(req.user.sub, dto, routeImageUrl, photoUrls);
   }
 }

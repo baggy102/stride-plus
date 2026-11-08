@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BASE_URL } from '@/api/client';
 import { useColors } from '@/theme/useColors';
+import { formatRunPace } from '@/utils/pace';
 
 export interface RunMarker {
   _id: string;
@@ -17,11 +18,6 @@ export interface RunMarker {
   description?: string;
   startPoint: [number, number] | null;
   createdAt: string;
-}
-
-function formatPace(sec: number) {
-  if (!sec) return '--\'--"';
-  return `${Math.floor(sec / 60)}'${String(Math.round(sec % 60)).padStart(2, '0')}"`;
 }
 
 function formatDate(iso: string) {
@@ -139,7 +135,7 @@ export function RunCard({ run }: Props) {
         <View>
           <Text className="text-brand-muted text-xs uppercase tracking-widest">페이스</Text>
           <Text className="text-brand-text-primary text-2xl font-bold tabular-nums">
-            {formatPace(run.paceSecPerKm)}{' '}
+            {formatRunPace(run.paceSecPerKm, run.distanceKm)}{' '}
             <Text className="text-brand-text-secondary text-sm">/km</Text>
           </Text>
         </View>
