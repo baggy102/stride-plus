@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import { RunActivity, type RunActivityState } from '../../modules/run-activity';
 import { useRunStore } from '@/store/run';
 import { fitToBox } from '@/utils/route';
+import { MIN_PACE_DISTANCE_KM } from '@/utils/pace';
 
 // 기록 상태를 잠금화면·다이내믹 아일랜드 Live Activity(iOS)에 옮긴다. _layout에서 한 번 import한다.
 // 백그라운드 위치 태스크로 점이 들어와도 같은 스토어를 쓰므로 화면이 꺼져 있어도 갱신된다.
@@ -27,7 +28,7 @@ function snapshot(): RunActivityState {
   const elapsedSec = s.startedAt !== null ? Math.max(0, (now - s.startedAt - s.pausedMs) / 1000) : 0;
   return {
     distanceKm: s.distanceKm,
-    paceSecPerKm: s.distanceKm >= 0.05 ? elapsedSec / s.distanceKm : 0,
+    paceSecPerKm: s.distanceKm >= MIN_PACE_DISTANCE_KM ? elapsedSec / s.distanceKm : 0,
     elapsedSec,
     timerStartMs: (s.startedAt ?? Date.now()) + s.pausedMs,
     paused: s.isPaused,

@@ -14,7 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { useRunStore } from '@/store/run';
 import client from '@/api/client';
-import { RouteBlueprint } from '@/components/RouteBlueprint';
+import { RouteMap } from '@/components/RouteMap';
 import { CoordLine } from '@/components/Telemetry';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
 import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
@@ -261,14 +261,7 @@ export default function RunSummaryScreen() {
 
           {/* 경로 도면: 가루가 빠져나간 자리에 그려진다 */}
           <Animated.View style={[styles.blueprint, blueprintStyle]}>
-            <RouteBlueprint
-              coords={summary.coordinates}
-              width={boxWidth}
-              height={192}
-              settle
-              settleDelay={TL.line[0] / DUST_SCALE}
-              settleDuration={(TL.line[1] - TL.line[0]) / DUST_SCALE}
-            />
+            <RouteMap coordinates={summary.coordinates} fit="route" kmTicks style={{ width: boxWidth, height: 192, borderRadius: 12, overflow: 'hidden' }} />
           </Animated.View>
           <Animated.View style={[styles.coords, coordsStyle]}>
             <CoordLine at={start} />
