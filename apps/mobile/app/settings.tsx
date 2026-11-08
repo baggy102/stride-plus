@@ -67,7 +67,7 @@ export default function SettingsScreen() {
         <View style={styles.iconBtn} />
       </View>
 
-      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]}>
+      <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]} showsVerticalScrollIndicator={false}>
         <Text style={styles.sectionTitle}>계정</Text>
         <View style={styles.group}>
           <View style={styles.row}>

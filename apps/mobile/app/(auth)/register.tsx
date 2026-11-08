@@ -102,7 +102,7 @@ export default function RegisterScreen() {
       </View>
 
       {step === 1 ? (
-        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <View style={styles.titleBlock}>
             <Text style={styles.title}>계정 만들기</Text>
             <Text style={styles.subtitle}>가입 정보를 입력해 주세요.</Text>
@@ -162,7 +162,7 @@ export default function RegisterScreen() {
           {described?.step === 1 ? <Text style={styles.error}>{described.text}</Text> : null}
         </ScrollView>
       ) : (
-        <ScrollView contentContainerStyle={styles.body}>
+        <ScrollView contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
           <View style={styles.titleBlock}>
             <Text style={styles.title}>약관에 동의해 주세요</Text>
             <Text style={styles.subtitle}>가입하려면 필수 항목 3개에 모두 동의해야 해요.</Text>
