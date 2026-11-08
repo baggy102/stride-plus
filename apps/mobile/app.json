@@ -73,8 +73,24 @@
       "typedRoutes": true
     },
     "extra": {
-      "apiUrl": "http://192.168.1.102:3000"
+      "apiUrl": "http://192.168.1.102:3000",
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "bundleIdentifier": "com.baggy102.strideplus.live",
+                  "targetName": "StrideLive"
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "40f9cf01-ed4a-4ed3-9928-642ef3195a42"
+      }
     },
-    "icon": "./assets/images/icon.png"
+    "icon": "./assets/images/icon.png",
+    "owner": "baggy102"
   }
 }
