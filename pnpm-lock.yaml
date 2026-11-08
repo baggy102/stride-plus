@@ -195,9 +195,15 @@ importers:
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
+      express:
+        specifier: 4.22.1
+        version: 4.22.1
       mongoose:
         specifier: ^8.0.0
         version: 8.23.1
+      multer:
+        specifier: 2.0.2
+        version: 2.0.2
       swagger-ui-express:
         specifier: ^5.0.1
         version: 5.0.1(express@4.22.1)
