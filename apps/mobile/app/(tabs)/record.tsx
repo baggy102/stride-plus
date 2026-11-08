@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
 import { HoldToStopButton } from '@/components/HoldToStopButton';
 import { LocationPermissionSheet } from '@/components/LocationPermissionSheet';
-import { CoordLine, telemetryDots } from '@/components/Telemetry';
+import { telemetryDots } from '@/components/Telemetry';
 import { RouteMap, type RouteMapHandle } from '@/components/RouteMap';
 import { LocateIcon, PlayIcon, WarnIcon } from '@/components/icons';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
@@ -34,7 +34,7 @@ export default function RecordScreen() {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const {
-    isTracking, isPaused, trackingMode, coordinates, distanceKm, elapsedSeconds, lastAccuracyM,
+    isTracking, isPaused, trackingMode, coordinates, distanceKm, elapsedSeconds,
     startTracking, stopTracking, pauseTracking, resumeTracking,
   } = useRunStore();
   const userId = useAuthStore((s) => s.user?._id);
@@ -130,20 +130,15 @@ export default function RecordScreen() {
     });
   }, [stopTracking, router]);
 
-  // 상단 줄: 상태(READY · REC · PAUSED) + 이번 러닝 번호, 오른쪽 GPS 정확도
+  // 상단 줄: 상태(READY · REC · PAUSED) + 가운데 로고만
   const state = !isTracking ? 'READY' : isPaused ? 'PAUSED' : 'REC';
   const stateColor = isPaused ? c.warn : c.value;
-  const runTag = runNo !== null ? ` · RUN/${String(runNo).padStart(4, '0')}` : '';
-  const accuracy = isTracking ? lastAccuracyM : here?.accuracy ?? null;
-  const gpsText = denied ? 'GPS OFF' : accuracy != null ? `GPS ±${Math.round(accuracy)}M` : 'GPS --';
-  const current = coordinates.length > 0 ? coordinates[coordinates.length - 1] : here?.at;
 
   // 격자 높이: 수치(약 210)와 아래 버튼 영역을 뺀 나머지, 작은 화면에서도 겹치지 않게
   const gridTop = insets.top + 44;
   const controlSpace = isTracking ? insets.bottom + 24 + 130 : tabClearance + 20 + 120;
-  const gridHeight = Math.round(Math.max(120, Math.min(root.height * 0.42, root.height - gridTop - 22 - 210 - controlSpace - 12)));
-  const lap = `LAP ${String(Math.floor(distanceKm) + 1).padStart(2, '0')}`;
-  // 상단 왼쪽 글자는 가운데 워드마크(71px) 왼쪽 끝을 넘지 않는다. 넘치면 끝(RUN 번호)부터 줄인다
+  const gridHeight = Math.round(Math.max(120, Math.min(root.height * 0.46, root.height - gridTop - 22 - 210 - controlSpace - 12)));
+  // 상단 왼쪽 글자는 가운데 워드마크(71px) 왼쪽 끝을 넘지 않는다
   const stateMaxWidth = Math.max(0, (root.width - 48) / 2 - 71 / 2 - 8);
 
   return (
@@ -160,6 +155,7 @@ export default function RecordScreen() {
               fit="follow"
               interactive
               highlighter
+              cloud
               style={{ width: root.width, height: gridHeight }}
             />
             <Pressable
@@ -173,7 +169,6 @@ export default function RecordScreen() {
             </Pressable>
           </View>
         )}
-        {!denied && <CoordLine at={current} />}
       </View>
 
       {/* 상단 텔레메트리 줄 */}
@@ -182,14 +177,14 @@ export default function RecordScreen() {
           {!denied && <View style={[styles.stateDot, { backgroundColor: stateColor }]} />}
           {!denied && (
             <Text style={[styles.topText, styles.stateText, { color: stateColor }]} numberOfLines={1} ellipsizeMode="tail" maxFontSizeMultiplier={TOP_MAX_SCALE}>
-              {`${state}${runTag}`}
+              {state}
             </Text>
           )}
         </View>
         <View style={styles.logo} pointerEvents="none">
           <Wordmark width={71} />
         </View>
-        <Text style={[styles.topText, { color: c.navOff }]} numberOfLines={1} maxFontSizeMultiplier={TOP_MAX_SCALE}>{gpsText}</Text>
+        <View style={{ maxWidth: stateMaxWidth }} />
       </View>
 
       {/* 항상 허용을 거부해 포그라운드로 기록 중 */}
@@ -215,22 +210,22 @@ export default function RecordScreen() {
           </Pressable>
         </View>
       ) : (
-        <View accessibilityLabel={isTracking ? '진행 중 러닝' : '러닝 대기'} style={[styles.stats, { marginTop: gridTop + gridHeight + 22 }]}>
+        <View accessibilityLabel={isTracking ? '진행 중 러닝' : '러닝 대기'} style={[styles.stats, { marginTop: gridTop + gridHeight + 18 }]}>
           <View style={styles.distanceRow} accessible accessibilityLabel={`거리 ${distanceKm.toFixed(2)} km`}>
             <Text style={[styles.distance, !isTracking && styles.distanceIdle]}>{distanceKm.toFixed(2)}</Text>
             <Text style={styles.distanceUnit}>KM</Text>
           </View>
           <View style={styles.grid}>
             <View style={styles.cell}>
+              <Text style={styles.label}>TIME</Text>
+              <Text style={styles.value}>{formatDuration(elapsedSeconds)}</Text>
+            </View>
+            <View style={[styles.cell, styles.cellDivider]}>
               <Text style={styles.label}>PACE</Text>
               <Text style={styles.value}>
                 {formatPace(paceSecPerKm)}
                 <Text style={styles.unit}> /KM</Text>
               </Text>
-            </View>
-            <View style={[styles.cell, styles.cellDivider]}>
-              <Text style={styles.label}>TIME</Text>
-              <Text style={styles.value}>{formatDuration(elapsedSeconds)}</Text>
             </View>
           </View>
         </View>
@@ -240,8 +235,6 @@ export default function RecordScreen() {
       <View style={[styles.control, { bottom: isTracking ? insets.bottom + 24 : tabClearance + 20 }]}>
         {isTracking ? (
           <>
-            {trackingMode === 'background' && <Text style={[styles.side, styles.sideLeft]}>◐ LOCK</Text>}
-            <Text style={[styles.side, styles.sideRight]}>{lap}</Text>
             <HoldToStopButton
               paused={isPaused}
               onTap={isPaused ? resumeTracking : pauseTracking}
@@ -281,7 +274,7 @@ export default function RecordScreen() {
 const makeStyles = (c: Palette) => StyleSheet.create({
   root: { flex: 1, backgroundColor: c.bg },
   locate: {
-    position: 'absolute', right: 16, bottom: 12, width: 40, height: 40, borderRadius: 20,
+    position: 'absolute', right: 14, bottom: 14, width: 44, height: 44, borderRadius: 22,
     alignItems: 'center', justifyContent: 'center', backgroundColor: c.bg,
     borderWidth: StyleSheet.hairlineWidth, borderColor: c.navOff,
   },
@@ -312,9 +305,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   value: { fontFamily: FONT.num, fontSize: 26, lineHeight: 28, color: c.text, fontVariant: ['tabular-nums'] },
   unit: { ...monoLabel(11, 0.06), color: c.navOff },
   control: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  side: { position: 'absolute', top: 46, ...monoLabel(10), lineHeight: 12, color: c.navOff },
-  sideLeft: { left: 30 },
-  sideRight: { right: 30 },
   startWrap: { alignItems: 'center', gap: 8 },
   startBtn: {
     width: 84, height: 84, borderRadius: 42, alignItems: 'center', justifyContent: 'center',

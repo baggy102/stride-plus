@@ -42,11 +42,7 @@ export function PhotoPicker({ photos, onChange }: Props) {
 
   return (
     <View>
-      {/* 확정 UI S07: 「사진 n/3」, 56px 썸네일·추가 버튼 */}
-      <View style={styles.header}>
-        <Text style={styles.label}>사진</Text>
-        <Text style={[styles.label, styles.count]}>{photos.length}/3</Text>
-      </View>
+      {/* 56px 썸네일(최대 3장) + 추가 버튼. 제목 줄 없이 단순하게 */}
       <View style={styles.row}>
         {photos.map((uri, i) => (
           <View key={i} style={styles.thumbWrap}>
@@ -78,9 +74,6 @@ export function PhotoPicker({ photos, onChange }: Props) {
 }
 
 const makeStyles = (c: Palette) => StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  label: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
-  count: { fontFamily: FONT.monoMedium, letterSpacing: 0.8 },
   row: { flexDirection: 'row', gap: 10 },
   thumbWrap: { position: 'relative' },
   thumb: { width: 56, height: 56, borderRadius: 14 },
