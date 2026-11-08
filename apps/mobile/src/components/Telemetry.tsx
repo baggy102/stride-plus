@@ -110,5 +110,6 @@ export function CoordLine({ at }: { at: LngLat | undefined }) {
 const styles = StyleSheet.create({
   pulse: { position: 'absolute', width: 14, height: 14, borderRadius: 7 },
   coordRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 26 },
-  coord: { ...monoLabel(9, 0.04), lineHeight: 12 },
+  // 모노 최소 크기: 핵심 13 / 라벨 11 / 장식 10 (9 이하 금지)
+  coord: { ...monoLabel(10, 0.04), lineHeight: 13 },
 });
