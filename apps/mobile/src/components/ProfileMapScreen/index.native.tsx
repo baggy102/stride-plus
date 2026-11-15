@@ -17,7 +17,9 @@ import { Glass } from '@/components/Glass';
 import { fetchRunStats, type RunStats } from '@/api/stats';
 import { elevationStyle, withAlpha, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
+import Svg, { Circle } from 'react-native-svg';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
+import { CalendarView } from './CalendarView';
 
 interface UserProfile {
   _id: string;
@@ -33,7 +35,19 @@ interface Props {
   filedRunId?: string;
 }
 
-type ProfileView = 'map' | 'list';
+type ProfileView = 'map' | 'list' | 'cal';
+
+// 캘린더 보기 버튼 아이콘(도트 격자)
+function CalendarDotsIcon({ color }: { color: string }) {
+  const dots = [[6, 6.5, 1], [12, 6.5, 1], [18, 6.5, 0], [6, 12.5, 1], [12, 12.5, 0], [18, 12.5, 0], [6, 18.5, 0], [12, 18.5, 0], [18, 18.5, 0]];
+  return (
+    <Svg width={18} height={18} viewBox="0 0 24 24">
+      {dots.map(([cx, cy, on]) => (
+        <Circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={2} fill={on ? color : 'none'} stroke={color} strokeWidth={on ? 0 : 1.8} />
+      ))}
+    </Svg>
+  );
+}
 
 const PAGE_SIZE = 20;
 
@@ -216,7 +230,10 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   }, []);
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/feed'));
-  const openRun = (runId: string) => router.push(`/run/${runId}`);
+  // top = 누른 카드의 화면 y — 상세가 그 자리에서 열린다(R4). 지도 팝업은 기본 전환
+  // src = row: 캘린더 한 줄 카드에서 열림(맨 위 카드가 겹쳐 나타난다)
+  const openRun = (runId: string, top?: number, src?: 'row') =>
+    router.push({ pathname: '/run/[id]', params: top === undefined ? { id: runId } : { id: runId, from: String(Math.round(top)), ...(src ? { src } : {}) } });
 
   // 누적은 서버 합계(D3). 실패하면 불러온 목록 합으로 대신하고 개수에 + 를 붙인다
   const totalKm = stats?.totalKm ?? runs.reduce((sum, run) => sum + run.distanceKm, 0);
@@ -269,7 +286,17 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
               </Glass>
             </Pressable>
           )}
-          {showMap ? null : view === 'map' && listState === 'loading' ? (
+          {showMap ? null : view === 'cal' && targetId ? (
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: c.bg }]}>
+              <CalendarView
+                userId={targetId}
+                topInset={headerHeight}
+                bottomInset={bottomBase}
+                reloadKey={`${runs.length}:${runs[0]?._id ?? ''}`}
+                onRunPress={(runId, top) => openRun(runId, top, 'row')}
+              />
+            </View>
+          ) : view === 'map' && listState === 'loading' ? (
             <View accessibilityLabel="불러오는 중" style={styles.center}>
               <ActivityIndicator color={c.value} size="large" />
             </View>
@@ -280,7 +307,6 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                 state={listState}
                 baseUrl={BASE_URL}
                 mine={mine}
-                totalRuns={stats?.runCount ?? null}
                 filedRunId={fileTarget}
                 refreshing={refreshing}
                 loadingMore={loadingMore}
@@ -358,20 +384,21 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
               )}
             </View>
             <View accessibilityRole="tablist" accessibilityLabel="기록 보기 방식" style={styles.segment}>
-              {/* Frost 아이콘 토글(D): 44px 버튼 두 개, 고른 쪽만 accent */}
-              {(['map', 'list'] as const).map((id) => {
+              {/* 보기 버튼 3개를 알약 하나로(2026-11-15 B안), 고른 칸만 포인트 색 */}
+              {(['map', 'list', 'cal'] as const).map((id) => {
                 const on = view === id;
-                const Icon = id === 'map' ? MapIcon : ListIcon;
+                const color = on ? c.onPoint : c.text2;
                 return (
                   <Pressable
                     key={id}
                     accessibilityRole="tab"
                     accessibilityState={{ selected: on }}
-                    accessibilityLabel={id === 'map' ? '지도 보기' : '목록 보기'}
+                    accessibilityLabel={id === 'map' ? '지도 보기' : id === 'list' ? '목록 보기' : '캘린더 보기'}
+                    hitSlop={{ top: 3, bottom: 3 }}
                     onPress={() => { setView(id); setSelected(null); setFileTarget(undefined); }}
                     style={[styles.segmentBtn, on && styles.segmentOn]}
                   >
-                    <Icon color={on ? c.ink : c.text2} />
+                    {id === 'map' ? <MapIcon color={color} /> : id === 'list' ? <ListIcon color={color} /> : <CalendarDotsIcon color={color} />}
                   </Pressable>
                 );
               })}
@@ -430,12 +457,12 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   username: { fontFamily: FONT.semibold, fontSize: 16, lineHeight: 22, color: c.text },
   stats: { ...monoLabel(12, 0.06), fontFamily: FONT.mono, lineHeight: 18, color: c.navOff },
   statsValue: { ...monoLabel(14, 0.02), color: c.text },
-  segment: { height: 44, flexDirection: 'row', gap: 6 },
-  segmentBtn: {
-    width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center',
+  segment: {
+    flexDirection: 'row', gap: 2, padding: 2, borderRadius: 14,
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
   },
-  segmentOn: { backgroundColor: c.accent, borderColor: c.accent },
+  segmentBtn: { width: 44, height: 40, borderRadius: 11, alignItems: 'center', justifyContent: 'center' },
+  segmentOn: { backgroundColor: c.point },
   myLocBtn: {
     position: 'absolute', right: 16, zIndex: 10, width: 44, height: 44, borderRadius: 22,
     ...elevationStyle(c),
