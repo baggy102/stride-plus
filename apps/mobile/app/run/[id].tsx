@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet, useWindowDimensions } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, Pressable, ScrollView, ActivityIndicator, StyleSheet, useWindowDimensions, type ScrollViewInstance } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -86,14 +86,24 @@ export default function RunDetailScreen() {
   const offset = fromCard ? fromY - heroTop : 0;
   const heroFades = !fromCard || src === 'row';
   const t = useSharedValue(0);
-  const settled = state !== 'loading';
+  // 카드 자리에서 열 때는 데이터를 받아 맨 위 카드를 그릴 수 있을 때 시작한다. 늦으면(300ms) 먼저 바탕 · 위 바를 덮어
+  // 뒤로 버튼이 보이게 한다(투명 모달이라 그 전에는 앞 화면만 보이고 조작이 막힌다)
+  const [waited, setWaited] = useState(false);
   useEffect(() => {
-    if (!settled) return;
+    const timer = setTimeout(() => setWaited(true), 300);
+    return () => clearTimeout(timer);
+  }, []);
+  const start = state !== 'loading' || waited || !fromCard;
+  useEffect(() => {
+    if (!start) return;
     t.value = withTiming(1, { duration: reduced ? MOTION.reduced : OPEN_MS, easing: Easing.out(Easing.cubic) });
-  }, [settled, reduced, t]);
+  }, [start, reduced, t]);
+  const scrollRef = useRef<ScrollViewInstance>(null);
 
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/(tabs)/feed'));
   const close = () => {
+    // 맨 위 카드가 누른 카드 자리로 정확히 돌아가도록 스크롤을 먼저 맨 위로
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
     t.value = withTiming(0, { duration: reduced ? MOTION.reduced : OPEN_MS, easing: Easing.out(Easing.cubic) }, (done) => {
       if (done) runOnJS(goBack)();
     });
@@ -183,7 +193,7 @@ export default function RunDetailScreen() {
       )}
 
       {state === 'ready' && run && feedRun && (
-        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 34 }]} showsVerticalScrollIndicator={false}>
+        <ScrollView ref={scrollRef} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 34 }]} showsVerticalScrollIndicator={false}>
           <Animated.View style={[styles.hero, heroStyle]}>
             <ExpandedCard run={feedRun} baseUrl={BASE_URL} liveMap pager mini={false} width={cardW} />
           </Animated.View>

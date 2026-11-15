@@ -192,7 +192,7 @@ export default function RecordScreen() {
       </View>
 
       {/* GPS 수신 약함(정확도 불량 위치 3번 연속) — 화면 꺼짐 배너와 함께 뜨면 이쪽이 위 */}
-      {isTracking && gpsWeak && (
+      {isTracking && !isPaused && gpsWeak && (
         <View accessibilityRole="alert" style={[styles.banner, styles.bannerNoBtn, { top: insets.top + 38 }]}>
           <WarnIcon color={c.warn} />
           <View style={styles.bannerTextCol}>
@@ -204,7 +204,7 @@ export default function RecordScreen() {
 
       {/* 항상 허용을 거부해 포그라운드로 기록 중 */}
       {isTracking && trackingMode === 'foreground' && (
-        <View accessibilityRole="alert" style={[styles.banner, { top: insets.top + 38 + (gpsWeak ? BANNER_HEIGHT + 8 : 0) }]}>
+        <View accessibilityRole="alert" style={[styles.banner, { top: insets.top + 38 + (!isPaused && gpsWeak ? BANNER_HEIGHT + 8 : 0) }]}>
           <WarnIcon color={c.warn} />
           <Text style={styles.bannerText}>화면이 꺼지면 기록이 멈출 수 있어요</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="설정 열기" onPress={() => Linking.openSettings()} style={styles.bannerBtn}>

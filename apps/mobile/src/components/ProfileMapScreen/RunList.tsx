@@ -167,10 +167,12 @@ export function RunList(props: Props) {
     (now, prev) => { if (now !== prev) runOnJS(setCurrent)(now); },
   );
   // 끝에서 세 칸 전부터 다음 페이지
-  const { onEndReached } = props;
+  // 실패하면 다음 스크롤(current 변화)에서 다시 시도한다. 콜백이 바뀌는 것만으로는 부르지 않는다
+  const onEndReached = useRef(props.onEndReached);
+  onEndReached.current = props.onEndReached;
   useEffect(() => {
-    if (n > 0 && current >= n - 3) onEndReached();
-  }, [current, n, onEndReached]);
+    if (n > 0 && current >= n - 3) onEndReached.current();
+  }, [current, n]);
 
   const stageStyle = useAnimatedStyle(() => ({ transform: [{ translateY: scrollY.value }] }));
 

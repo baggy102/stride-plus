@@ -80,7 +80,14 @@ export function CalendarView({ userId, topInset, bottomInset, reloadKey, onRunPr
         all.push(...data);
         if (data.length < PAGE) break;
       }
-      setCache((prev) => ({ ...prev, [k]: { runs: all } }));
+      // 기간 쿼리를 모르는 서버(배포 전)는 from·to를 버리고 전체를 주므로 앱에서도 그 달만 남긴다
+      const start = Date.parse(from);
+      const end = Date.parse(to);
+      const inMonth = all.filter((run) => {
+        const at = Date.parse(run.createdAt);
+        return at >= start && at < end;
+      });
+      setCache((prev) => ({ ...prev, [k]: { runs: inMonth } }));
     } catch {
       setCache((prev) => ({ ...prev, [k]: 'error' }));
     }
@@ -100,7 +107,8 @@ export function CalendarView({ userId, topInset, bottomInset, reloadKey, onRunPr
   const totalKm = runs.reduce((sum, run) => sum + run.distanceKm, 0);
   const isNow = month.y === today.getFullYear() && month.m === today.getMonth();
   const grid = useMemo(() => monthGrid(month.y, month.m), [month]);
-  const cell = width > 0 ? (width - GAP * 6) / 7 : 0;
+  // 정수로 내린다 — 7칸 + 간격 합이 폭과 딱 같으면 float 오차로 7번째 칸이 다음 줄로 넘어간다
+  const cell = width > 0 ? Math.floor((width - GAP * 6) / 7) : 0;
   // 들어올 때 달린 날이 날짜 순서로 하나씩(40ms 간격) 찍힌다
   const order = useMemo(() => {
     const o: Record<number, number> = {};

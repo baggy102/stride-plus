@@ -157,11 +157,12 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     [targetId],
   );
 
-  // 첫 페이지와 프로필을 다시 불러온다. refresh면 지금 화면을 유지한 채 당겨서 새로고침
-  const load = useCallback(async (mode: 'initial' | 'refresh') => {
+  // 첫 페이지와 프로필을 다시 불러온다. refresh = 당겨서 새로고침(스피너), quiet = 탭 재진입 · 저장 직후(스피너 없이).
+  // 매거진 피드에서 RefreshControl을 코드로 켜면 iOS가 스크롤 위치를 밀어 카드 스냅이 어긋나서 나눈다
+  const load = useCallback(async (mode: 'initial' | 'refresh' | 'quiet') => {
     if (!targetId) return;
     if (mode === 'initial') setListState('loading');
-    else setRefreshing(true);
+    else if (mode === 'refresh') setRefreshing(true);
     try {
       const [profileRes, runsRes, statsRes] = await Promise.all([
         client.get<UserProfile>(`/users/${targetId}`),
@@ -210,7 +211,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     setFileTarget(filedRunId);
     setView('list');
     setSelected(null);
-    load('refresh');
+    load('quiet');
     router.setParams({ filed: undefined });
   }, [filedRunId]);
 
@@ -218,7 +219,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const skipFirstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
     if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
-    load('refresh');
+    load('quiet');
   }, [load]));
 
   const handleMyLocation = useCallback(async () => {
@@ -292,7 +293,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                 userId={targetId}
                 topInset={headerHeight}
                 bottomInset={bottomBase}
-                reloadKey={`${runs.length}:${runs[0]?._id ?? ''}`}
+                reloadKey={`${runs[0]?._id ?? ''}:${stats?.runCount ?? ''}`}
                 onRunPress={(runId, top) => openRun(runId, top, 'row')}
               />
             </View>
