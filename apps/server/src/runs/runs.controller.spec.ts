@@ -75,6 +75,12 @@ describe('RunsController', () => {
     expect(mockRunsService.findByUser).not.toHaveBeenCalled();
   });
 
+  it('findRuns — ISO 8601이지만 Date로 못 바꾸는 값(주차 표기)은 500 대신 400', () => {
+    const userId = '507f1f77bcf86cd799439011';
+    expect(() => controller.findRuns(REQ, { userId, from: '2026-W01' })).toThrow(new BadRequestException('invalid_period'));
+    expect(mockRunsService.findByUser).not.toHaveBeenCalled();
+  });
+
   it('findById — runsService.findById 호출', async () => {
     mockRunsService.findById.mockResolvedValue({ _id: 'run1' });
     const result = await controller.findById(REQ, 'run1');

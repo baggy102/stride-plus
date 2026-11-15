@@ -24,6 +24,8 @@ export class RunsController {
     if (dto.userId) {
       const from = dto.from ? new Date(dto.from) : undefined;
       const to = dto.to ? new Date(dto.to) : undefined;
+      // IsISO8601이 통과시키는 주차 표기(2026-W01) 등은 Date로 못 바꾼다 → 500 대신 400
+      if ((from && isNaN(from.getTime())) || (to && isNaN(to.getTime()))) throw new BadRequestException('invalid_period');
       if (from && to && from >= to) throw new BadRequestException('invalid_period');
       return this.runsService.findByUser(req.user.sub, dto.userId, dto.page, dto.limit, from, to);
     }
