@@ -13,7 +13,7 @@ export interface RunActivityState {
 
 interface RunActivityNative {
   isSupported(): boolean;
-  start(runNo: string, state: RunActivityState): Promise<void>;
+  start(state: RunActivityState): Promise<void>;
   update(state: RunActivityState): Promise<void>;
   end(): Promise<void>;
 }

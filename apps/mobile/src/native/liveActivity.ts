@@ -36,8 +36,6 @@ function snapshot(): RunActivityState {
   };
 }
 
-const runTag = (runNo: number | null) => (runNo !== null ? String(runNo).padStart(4, '0') : '----');
-
 if (Platform.OS === 'ios' && RunActivity) {
   const native = RunActivity;
   let lastSent = 0;
@@ -46,7 +44,7 @@ if (Platform.OS === 'ios' && RunActivity) {
   useRunStore.subscribe((state, prev) => {
     if (state.isTracking && !prev.isTracking) {
       lastSent = Date.now();
-      native.start(runTag(state.runNo), snapshot()).catch(() => {});
+      native.start(snapshot()).catch(() => {});
       return;
     }
     if (!state.isTracking && prev.isTracking) {
