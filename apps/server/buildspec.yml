@@ -10,6 +10,7 @@ env:
   parameter-store:
     MONGODB_URI: /stride/MONGODB_URI
     JWT_SECRET: /stride/JWT_SECRET
+    JWT_REFRESH_SECRET: /stride/JWT_REFRESH_SECRET
     S3_BUCKET: /stride/S3_BUCKET
     S3_ACCESS_KEY_ID: /stride/S3_ACCESS_KEY_ID
     S3_SECRET_ACCESS_KEY: /stride/S3_SECRET_ACCESS_KEY
@@ -33,7 +34,7 @@ phases:
       - |
         python3 - <<'PY'
         import json, os
-        env = {k: os.environ[k] for k in ["MONGODB_URI", "JWT_SECRET", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]}
+        env = {k: os.environ[k] for k in ["MONGODB_URI", "JWT_SECRET", "JWT_REFRESH_SECRET", "S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"]}
         env.update({"NODE_ENV": "production", "PORT": "3000", "S3_REGION": os.environ["AWS_REGION"]})
         containers = {"api": {"image": os.environ["IMAGE"], "environment": env, "ports": {"3000": "HTTP"}}}
         endpoint = {"containerName": "api", "containerPort": 3000,

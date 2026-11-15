@@ -10,6 +10,8 @@ import { StorageService } from './storage/storage.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  // 없으면 @nestjs/jwt가 조용히 JWT_SECRET으로 대신 서명해 refresh 토큰이 access 토큰처럼 통한다 — 시작부터 막는다
+  for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) app.get(ConfigService).getOrThrow<string>(key);
   app.enableShutdownHooks();
   app.enableCors({
     origin: app.get(ConfigService).get('CORS_ALLOW_ALL') === 'true'

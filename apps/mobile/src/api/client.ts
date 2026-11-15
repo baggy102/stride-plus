@@ -39,7 +39,8 @@ client.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    if (error.response?.status !== 401 || original?._retry) {
+    // 로그인·가입 등 /auth/ 요청의 401은 자격 증명 오류다 — 갱신하지 않고 그대로 돌려준다
+    if (error.response?.status !== 401 || original?._retry || original?.url?.startsWith('/auth/')) {
       return Promise.reject(error);
     }
 
