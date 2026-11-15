@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { RunsController } from './runs.controller';
 import { RunsService } from './runs.service';
@@ -41,7 +42,37 @@ describe('RunsController', () => {
       '507f1f77bcf86cd799439011',
       undefined,
       undefined,
+      undefined,
+      undefined,
     );
+  });
+
+  it('findRuns — from·to를 Date로 바꿔 findByUser에 넘긴다', async () => {
+    mockRunsService.findByUser.mockResolvedValue([]);
+    await controller.findRuns(REQ, {
+      userId: '507f1f77bcf86cd799439011',
+      from: '2026-10-31T15:00:00.000Z',
+      to: '2026-11-30T15:00:00.000Z',
+    });
+    expect(mockRunsService.findByUser).toHaveBeenCalledWith(
+      'me',
+      '507f1f77bcf86cd799439011',
+      undefined,
+      undefined,
+      new Date('2026-10-31T15:00:00.000Z'),
+      new Date('2026-11-30T15:00:00.000Z'),
+    );
+  });
+
+  it('findRuns — from이 to보다 늦거나 같으면 400(invalid_period)', () => {
+    const userId = '507f1f77bcf86cd799439011';
+    expect(() =>
+      controller.findRuns(REQ, { userId, from: '2026-12-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' }),
+    ).toThrow(new BadRequestException('invalid_period'));
+    expect(() =>
+      controller.findRuns(REQ, { userId, from: '2026-11-01T00:00:00.000Z', to: '2026-11-01T00:00:00.000Z' }),
+    ).toThrow(BadRequestException);
+    expect(mockRunsService.findByUser).not.toHaveBeenCalled();
   });
 
   it('findById — runsService.findById 호출', async () => {
