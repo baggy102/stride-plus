@@ -42,8 +42,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
       const { data } = await client.get<User>('/users/me');
       set({ user: data, isAuthenticated: true });
     } catch {
-      await SecureStorage.deleteItem('access_token');
-      await SecureStorage.deleteItem('refresh_token');
+      // 토큰은 지우지 않는다. 갱신 실패(401)면 client.ts가 이미 지웠고,
+      // 네트워크 오류·서버 오류라면 다음 실행에서 다시 확인한다.
     } finally {
       set({ isHydrating: false });
     }
@@ -61,7 +61,8 @@ export const useAuthStore = create<AuthStore>((set) => ({
       await SecureStorage.setItem('refresh_token', data.refreshToken);
       set({ user: data.user, isAuthenticated: true });
     } catch (e) {
-      set({ error: extractMessage(e) });
+      const invalid = axios.isAxiosError(e) && e.response?.status === 401;
+      set({ error: invalid ? '이메일 또는 비밀번호가 맞지 않습니다.' : extractMessage(e) });
     } finally {
       set({ isLoading: false });
     }
