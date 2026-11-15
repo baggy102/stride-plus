@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import * as Location from 'expo-location';
 import { haversineKm } from '@/utils/route';
+import { nextWeakStreak } from '@/utils/gpsSignal';
 
 export interface RunSummary {
   coordinates: [number, number][];
@@ -48,13 +49,15 @@ interface RunStore {
   segmentBreaks: number[];
   /** 마지막 점의 GPS 정확도(m) — 기록 중 상단 줄 */
   lastAccuracyM: number | null;
+  /** 정확도 불량으로 버린 위치의 연속 횟수 — 3번 이상이면 기록 중 화면에 GPS 약함 배너(isGpsWeak) */
+  weakGpsStreak: number;
   /** 받은 점마다 누적한 거리(필터를 통과한 구간만) */
   distanceKm: number;
   lastSampleAt: number | null;
   elapsedSeconds: number;
   pendingSummary: RunSummary | null;
   settleFrom: SettleFrom | null;
-  /** 이번이 내 몇 번째 러닝인지(「RUN/0427」, 잠금화면 위젯). 모르면 null */
+  /** 이번이 내 몇 번째 러닝인지(「RUN/0427」, 러닝 요약 머리줄). 모르면 null */
   runNo: number | null;
   startTracking: (runNo?: number | null) => Promise<void>;
   stopTracking: () => RunSummary;
@@ -111,6 +114,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   routeTimes: [],
   segmentBreaks: [],
   lastAccuracyM: null,
+  weakGpsStreak: 0,
   distanceKm: 0,
   lastSampleAt: null,
   elapsedSeconds: 0,
@@ -125,7 +129,9 @@ export const useRunStore = create<RunStore>((set, get) => ({
 
   _addCoordinate: (lng, lat, accuracy, timestamp) => {
     if (get().isPaused) return;
-    if (accuracy != null && accuracy > MAX_ACCURACY_M) return;
+    const weakGpsStreak = nextWeakStreak(get().weakGpsStreak, accuracy, MAX_ACCURACY_M);
+    if (weakGpsStreak !== get().weakGpsStreak) set({ weakGpsStreak });
+    if (weakGpsStreak > 0) return;
     const now = timestamp ?? Date.now();
     const { coordinates, routeTimes, segmentBreaks, distanceKm, lastSampleAt, skipNextSegment, startedAt, pausedMs } = get();
     const prev = coordinates[coordinates.length - 1];
@@ -152,7 +158,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     // 권한 순서: 사용 중 허용(위) → 항상 허용(여기). 항상 허용을 거부해도 포그라운드로 계속한다
     set({
       isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, runNo,
-      startedAt: Date.now(), coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
+      startedAt: Date.now(), coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, weakGpsStreak: 0, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
     });
 
     if (await startBackgroundUpdates()) {
@@ -199,7 +205,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   resetRun: () => set({
-    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null,
+    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, weakGpsStreak: 0, distanceKm: 0, lastSampleAt: null,
     elapsedSeconds: 0, pendingSummary: null, settleFrom: null,
   }),
 

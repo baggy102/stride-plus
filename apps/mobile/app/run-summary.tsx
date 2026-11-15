@@ -17,6 +17,7 @@ import client from '@/api/client';
 import { RouteMap } from '@/components/RouteMap';
 import { Wordmark } from '@/components/Wordmark';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
+import { TrashIcon } from '@/components/icons';
 import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
@@ -74,6 +75,8 @@ export default function RunSummaryScreen() {
   const pendingSummary = useRunStore((s) => s.pendingSummary);
   const resetRun = useRunStore((s) => s.resetRun);
   const clearPendingSummary = useRunStore((s) => s.clearPendingSummary);
+  // 기록 화면에서 뺀 「RUN/0427」(내 몇 번째 러닝인지)을 머리줄에 붙인다. 모르면 생략
+  const runNo = useRunStore((s) => s.runNo);
 
   const [photos, setPhotos] = useState<string[]>([]);
   const [description, setDescription] = useState('');
@@ -252,9 +255,9 @@ export default function RunSummaryScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* 머리: 「러닝 종료 · 10.16 목 · 07:05」 + 장소 */}
+          {/* 머리: 「RUN/0427 · 10.16 목 · 07:05」 + 장소 */}
           <Animated.View style={[styles.head, headStyle]}>
-            <Text style={styles.kicker}>{`${formatDay(finishedAt)} · ${formatClock(finishedAt)}`}</Text>
+            <Text style={styles.kicker}>{`${runNo !== null ? `RUN/${String(runNo).padStart(4, '0')} · ` : ''}${formatDay(finishedAt)} · ${formatClock(finishedAt)}`}</Text>
             <Text accessibilityRole="header" style={styles.title} numberOfLines={1}>{place ?? '이번 러닝'}</Text>
           </Animated.View>
 
@@ -332,8 +335,8 @@ export default function RunSummaryScreen() {
       <View pointerEvents="none" style={[styles.logo, { top: insets.top + 10 }]}>
         <Wordmark width={71} />
       </View>
-      <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(true)} style={[styles.deleteBtn, { top: insets.top - 2 }]}>
-        <Text style={styles.deleteText}>삭제</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="기록 삭제" onPress={() => setConfirmDelete(true)} style={[styles.deleteBtn, { top: insets.top - 2 }]}>
+        <TrashIcon color={c.danger} />
       </Pressable>
 
       {/* 삭제 확인 */}
@@ -410,8 +413,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   title: { marginTop: 4, fontFamily: FONT.bold, fontSize: 20, lineHeight: 26, color: c.text },
   blueprint: { marginTop: 14, paddingHorizontal: 24 },
   logo: { position: 'absolute', left: 0, right: 0, height: 24, alignItems: 'center', justifyContent: 'center' },
-  deleteBtn: { position: 'absolute', right: 8, height: 44, paddingHorizontal: 12, justifyContent: 'center' },
-  deleteText: { fontFamily: FONT.semibold, fontSize: 15, color: c.text2 },
+  deleteBtn: { position: 'absolute', right: 8, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   // 결과 시트: 화면 아래에서 올라오는 면. 저장 버튼 줄(footer)과 같은 색으로 이어진다
   sheet: {
     flexGrow: 1, marginTop: 12, paddingTop: 10, paddingBottom: 24, backgroundColor: c.surface,

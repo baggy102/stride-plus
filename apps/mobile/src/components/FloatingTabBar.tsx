@@ -1,21 +1,19 @@
 import type { ComponentProps, ReactElement } from 'react';
-import { View, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { Tabs } from 'expo-router';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { useColors } from '@/theme/useColors';
 import { elevationStyle } from '@/theme/colors';
 import { useRunStore } from '@/store/run';
-import { FONT } from '@/theme/fonts';
 import { Glass } from './Glass';
 
 type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>>[0];
 
-// Frost 「주 메뉴」: 화면 아래 24px 위에 뜬 유리 알약, 아이콘 + 라벨 3개, 활성 탭은 navOn 색
-const ICONS: Record<string, { label: string; text: string; draw: (color: string) => ReactElement }> = {
+// Frost 「주 메뉴」: 화면 아래 24px 위에 뜬 유리 알약, 아이콘 3개(글자 없음). 활성 탭은 point로 채우고 아이콘은 onPoint
+const ICONS: Record<string, { label: string; draw: (color: string) => ReactElement }> = {
   feed: {
     label: '피드',
-    text: '지도',
     draw: (color) => (
       <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round">
         <Path d="M9 4 3 6.5V20l6-2.5 6 2.5 6-2.5V4l-6 2.5L9 4Z" />
@@ -25,7 +23,6 @@ const ICONS: Record<string, { label: string; text: string; draw: (color: string)
   },
   record: {
     label: '기록',
-    text: '기록 시작',
     draw: (color) => (
       <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
         <Circle cx={12} cy={13.5} r={7.5} />
@@ -35,7 +32,6 @@ const ICONS: Record<string, { label: string; text: string; draw: (color: string)
   },
   profile: {
     label: '프로필',
-    text: '내 기록',
     draw: (color) => (
       <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
         <Circle cx={12} cy={8} r={4} />
@@ -71,7 +67,7 @@ export function FloatingTabBar({ state, emitter, navigateToTab }: TabBarProps) {
           const icon = ICONS[route.name];
           if (!icon) return null;
           const focused = state.index === index;
-          const color = focused ? c.navOn : c.navOff;
+          const color = focused ? c.onPoint : c.navOff;
           return (
             <Pressable
               key={route.key}
@@ -82,10 +78,9 @@ export function FloatingTabBar({ state, emitter, navigateToTab }: TabBarProps) {
                 const event = emitter.emit({ type: 'tabPress', target: route.key, canPreventDefault: true });
                 if (!focused && !event.defaultPrevented) navigateToTab(route.key);
               }}
-              style={styles.item}
+              style={[styles.item, focused && { backgroundColor: c.point }]}
             >
               {icon.draw(color)}
-              <Text style={[styles.text, { color, fontFamily: focused ? FONT.semibold : FONT.regular }]}>{icon.text}</Text>
             </Pressable>
           );
         })}
@@ -112,9 +107,8 @@ const styles = StyleSheet.create({
   item: {
     flex: 1,
     height: 56,
+    borderRadius: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 3,
   },
-  text: { fontSize: 12, lineHeight: 15 },
 });
