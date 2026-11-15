@@ -46,7 +46,7 @@ export default function RecordScreen() {
   const tick = useRunStore((s) => s._tick);
   const gpsWeak = useRunStore((s) => isGpsWeak(s.weakGpsStreak));
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [here, setHere] = useState<{ at: [number, number]; accuracy: number | null } | undefined>(undefined);
+  const [here, setHere] = useState<{ at: [number, number] } | undefined>(undefined);
   const [explainVisible, setExplainVisible] = useState(false);
   const [denied, setDenied] = useState(false);
   // 「RUN/0427」 = 이번이 내 몇 번째 러닝인지(D5). 기록 중에는 고정
@@ -63,13 +63,13 @@ export default function RecordScreen() {
     };
   }, [isTracking, tick]);
 
-  // 시작 전 좌표·GPS 정확도: 이미 허용돼 있으면 마지막으로 알려진 위치
+  // 시작 전 좌표: 이미 허용돼 있으면 마지막으로 알려진 위치
   useEffect(() => {
     (async () => {
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const pos = await Location.getLastKnownPositionAsync();
-      if (pos) setHere({ at: [pos.coords.longitude, pos.coords.latitude], accuracy: pos.coords.accuracy });
+      if (pos) setHere({ at: [pos.coords.longitude, pos.coords.latitude] });
     })();
   }, []);
 

@@ -15,7 +15,7 @@ import client, { BASE_URL } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
 import { elevationStyle, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
-import { RunMarker } from '../RunCard';
+import type { RunMarker } from '@/types/run';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 

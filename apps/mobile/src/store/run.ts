@@ -47,8 +47,6 @@ interface RunStore {
   /** coordinates와 같은 길이. 점마다 시작 후 흐른 시간(초, 일시정지 제외) */
   routeTimes: number[];
   segmentBreaks: number[];
-  /** 마지막 점의 GPS 정확도(m) — 기록 중 상단 줄 */
-  lastAccuracyM: number | null;
   /** 정확도 불량으로 버린 위치의 연속 횟수 — 3번 이상이면 기록 중 화면에 GPS 약함 배너(isGpsWeak) */
   weakGpsStreak: number;
   /** 받은 점마다 누적한 거리(필터를 통과한 구간만) */
@@ -113,7 +111,6 @@ export const useRunStore = create<RunStore>((set, get) => ({
   coordinates: [],
   routeTimes: [],
   segmentBreaks: [],
-  lastAccuracyM: null,
   weakGpsStreak: 0,
   distanceKm: 0,
   lastSampleAt: null,
@@ -145,7 +142,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     // 점 시간은 줄어들지 않게(서버도 줄어들면 버린다)
     const time = Math.max(atSec, routeTimes[routeTimes.length - 1] ?? 0);
     set({
-      coordinates: [...coordinates, [lng, lat]], routeTimes: [...routeTimes, time], lastAccuracyM: accuracy ?? null,
+      coordinates: [...coordinates, [lng, lat]], routeTimes: [...routeTimes, time],
       segmentBreaks: prev && skipNextSegment ? [...segmentBreaks, coordinates.length] : segmentBreaks,
       distanceKm: distanceKm + addKm, lastSampleAt: now, skipNextSegment: false,
     });
@@ -158,7 +155,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
     // 권한 순서: 사용 중 허용(위) → 항상 허용(여기). 항상 허용을 거부해도 포그라운드로 계속한다
     set({
       isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, runNo,
-      startedAt: Date.now(), coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, weakGpsStreak: 0, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
+      startedAt: Date.now(), coordinates: [], routeTimes: [], segmentBreaks: [], weakGpsStreak: 0, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
     });
 
     if (await startBackgroundUpdates()) {
@@ -205,7 +202,7 @@ export const useRunStore = create<RunStore>((set, get) => ({
   },
 
   resetRun: () => set({
-    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, weakGpsStreak: 0, distanceKm: 0, lastSampleAt: null,
+    isTracking: false, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, trackingMode: null, startedAt: null, coordinates: [], routeTimes: [], segmentBreaks: [], weakGpsStreak: 0, distanceKm: 0, lastSampleAt: null,
     elapsedSeconds: 0, pendingSummary: null, settleFrom: null,
   }),
 

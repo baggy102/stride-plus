@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
-import { RunMarker } from '../RunCard';
+import type { RunMarker } from '@/types/run';
 import { ChevronIcon, CloseIcon } from '../icons';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
