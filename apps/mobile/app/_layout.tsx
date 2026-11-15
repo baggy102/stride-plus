@@ -70,6 +70,8 @@ export default function RootLayout() {
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
           {/* 짧은 페이드로 기록 중 점 구름 위에 요약 화면의 가루 레이어가 겹쳐 이어진다(전환 본체는 요약 화면 안) */}
           <Stack.Screen name="run-summary" options={{ animation: 'fade', animationDuration: MOTION.dustIn, gestureEnabled: false }} />
+          {/* 러닝 상세는 앞 화면 위에 겹쳐 열고, 누른 카드 자리에서 올라오는 전환은 상세 화면 안에서 한다(R4) */}
+          <Stack.Screen name="run/[id]" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
         </Stack>
         {isHydrating && (
           <View style={{ position: 'absolute', inset: 0 }}>
