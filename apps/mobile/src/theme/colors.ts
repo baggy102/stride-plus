@@ -17,6 +17,11 @@ export interface Palette {
   ink: string; // accent 위 글자
   value: string; // 수치·마커·링크·스피너
   logo: string;
+  /** 포인트 Signal Blue(2026-11-14 확정): 고른 토글·탭 채움, 캘린더 달린 날 */
+  point: string;
+  onPoint: string; // point 위 글자·아이콘
+  /** 캘린더 거리 단계 색(5 km 미만 · 5~10 km · 10 km 이상). 2단계 = point. 라이트는 길수록 진하게, 다크는 길수록 밝게 */
+  level: [string, string, string];
   danger: string;
   shadow: string;
   /** 떠 있는 요소(탭바·시트·카드·버튼)의 그림자. 캔버스 CSS box-shadow 값을 RN으로 옮긴 것(radius = blur ÷ 2) */
@@ -67,6 +72,9 @@ export const palettes: Record<Scheme, Palette> = {
     ink: '#FFFFFF',
     value: '#9DBFE0',
     logo: '#4B83B5',
+    point: '#2E8BFF',
+    onPoint: '#0B1016',
+    level: ['#1E5AA8', '#2E8BFF', '#9CCBFF'],
     danger: '#E5484D',
     shadow: '#000000',
     // 0 10px 30px rgba(0,0,0,0.45)
@@ -115,6 +123,9 @@ export const palettes: Record<Scheme, Palette> = {
     ink: '#FFFFFF',
     value: '#24476B',
     logo: '#4B83B5',
+    point: '#2E8BFF',
+    onPoint: '#0B1016',
+    level: ['#6AABFF', '#2E8BFF', '#0A56C2'],
     danger: '#E5484D',
     shadow: '#0B1016',
     // 0 8px 24px rgba(17,19,22,0.10)
