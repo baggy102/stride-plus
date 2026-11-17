@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { AppState } from 'react-native';
 import * as Location from 'expo-location';
 import { haversineKm } from '@/utils/route';
 
@@ -61,6 +62,8 @@ interface RunStore {
   pauseTracking: () => void;
   resumeTracking: () => void;
   resetRun: () => void;
+  /** 포그라운드로 기록 중 「항상 허용」이 됐으면 백그라운드 수집으로 바꾼다 */
+  upgradeToBackground: () => Promise<void>;
   clearPendingSummary: () => void;
   setSettleFrom: (from: SettleFrom | null) => void;
   _tick: () => void;
@@ -68,6 +71,7 @@ interface RunStore {
 }
 
 let nativeWatchSub: Location.LocationSubscription | null = null;
+let upgrading = false;
 
 // src/tasks/locationTask.ts의 태스크 이름과 같아야 한다(순환 import를 피하려 문자열로 둔다)
 const LOCATION_TASK = 'stride-run-location';
@@ -203,7 +207,33 @@ export const useRunStore = create<RunStore>((set, get) => ({
     elapsedSeconds: 0, pendingSummary: null, settleFrom: null,
   }),
 
+  // 기록 방식은 시작할 때 한 번 정해진다. 기록 중 설정에서 「항상」으로 바꾸고 돌아와도
+  // 포그라운드 수집이 그대로라 홈으로 나가면 기록이 멈췄다(2026-11 테스터 제보) → 앱으로 돌아올 때 다시 확인한다
+  upgradeToBackground: async () => {
+    if (upgrading || !get().isTracking || get().trackingMode !== 'foreground') return;
+    upgrading = true;
+    try {
+      const { status } = await Location.getBackgroundPermissionsAsync();
+      if (status !== 'granted' || !(await startBackgroundUpdates())) return;
+      // 확인하는 사이 기록이 끝났으면 방금 켠 수집을 끈다
+      if (!get().isTracking) {
+        Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
+        return;
+      }
+      nativeWatchSub?.remove();
+      nativeWatchSub = null;
+      set({ trackingMode: 'background' });
+    } finally {
+      upgrading = false;
+    }
+  },
+
   clearPendingSummary: () => set({ pendingSummary: null, settleFrom: null }),
 
   setSettleFrom: (from) => set({ settleFrom: from }),
 }));
+
+// 설정 앱에서 권한을 바꾸고 돌아오면 active가 된다
+AppState.addEventListener('change', (next) => {
+  if (next === 'active') useRunStore.getState().upgradeToBackground();
+});
