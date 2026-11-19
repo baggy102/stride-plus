@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { AppState } from 'react-native';
 import * as Location from 'expo-location';
 import { haversineKm } from '@/utils/route';
 
@@ -28,7 +29,7 @@ export function elapsedSecondsSince(startedAtMs: number, nowMs: number, pausedMs
 const MAX_ACCURACY_M = 30;
 const MAX_SPEED_MPS = 10;
 
-// 위치 수집 방식: background = 화면이 꺼져도 계속, foreground = 앱이 보일 때만(항상 허용 거부·Expo Go)
+// 위치 수집 방식: background = 화면이 꺼져도 계속, foreground = 앱이 보일 때만(백그라운드 업데이트를 못 켠 경우·Expo Go)
 export type TrackingMode = 'background' | 'foreground';
 
 interface RunStore {
@@ -61,6 +62,8 @@ interface RunStore {
   pauseTracking: () => void;
   resumeTracking: () => void;
   resetRun: () => void;
+  /** 포그라운드 구독으로 기록 중이면 백그라운드 수집으로 다시 바꿔 본다 */
+  upgradeToBackground: () => Promise<void>;
   clearPendingSummary: () => void;
   setSettleFrom: (from: SettleFrom | null) => void;
   _tick: () => void;
@@ -68,6 +71,7 @@ interface RunStore {
 }
 
 let nativeWatchSub: Location.LocationSubscription | null = null;
+let upgrading = false;
 
 // src/tasks/locationTask.ts의 태스크 이름과 같아야 한다(순환 import를 피하려 문자열로 둔다)
 const LOCATION_TASK = 'stride-run-location';
@@ -78,11 +82,14 @@ const TRACKING_OPTIONS = {
   distanceInterval: 5,
 };
 
-// 항상 허용이면 백그라운드 업데이트를 시작하고, 아니거나 실패하면(Expo Go 등) false
-async function startBackgroundUpdates(): Promise<boolean> {
+// 백그라운드 업데이트를 시작한다. 실패하면(Expo Go 등) false.
+// 앱이 보일 때 시작하면 「사용하는 동안」 권한만으로도 홈으로 나가거나 화면이 꺼져도 이어진다
+// (iOS: UIBackgroundModes location + 파란 위치 표시, Android: 포그라운드 서비스 알림). Strava 등도 같은 방식.
+// 예전에는 「항상」이 아니면 여기서 포기하고 앱이 보일 때만 받는 구독으로 내려가서, 홈으로 나가면 기록이 멈췄다(2026-11 테스터 제보).
+// askAlways: 「항상」 허용을 한 번 물어본다(거부해도 기록은 백그라운드로 계속)
+async function startBackgroundUpdates(askAlways: boolean): Promise<boolean> {
   try {
-    const { status } = await Location.requestBackgroundPermissionsAsync();
-    if (status !== 'granted') return false;
+    if (askAlways) await Location.requestBackgroundPermissionsAsync().catch(() => {});
     await Location.startLocationUpdatesAsync(LOCATION_TASK, {
       ...TRACKING_OPTIONS,
       activityType: Location.ActivityType.Fitness,
@@ -149,13 +156,13 @@ export const useRunStore = create<RunStore>((set, get) => ({
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== 'granted') throw new Error('location_permission_denied');
 
-    // 권한 순서: 사용 중 허용(위) → 항상 허용(여기). 항상 허용을 거부해도 포그라운드로 계속한다
+    // 권한 순서: 사용 중 허용(위) → 항상 허용(startBackgroundUpdates). 항상 허용을 거부해도 백그라운드로 계속한다
     set({
       isTracking: true, isPaused: false, pausedAt: null, pausedMs: 0, skipNextSegment: false, runNo,
       startedAt: Date.now(), coordinates: [], routeTimes: [], segmentBreaks: [], lastAccuracyM: null, distanceKm: 0, lastSampleAt: null, elapsedSeconds: 0,
     });
 
-    if (await startBackgroundUpdates()) {
+    if (await startBackgroundUpdates(true)) {
       set({ trackingMode: 'background' });
       return;
     }
@@ -203,7 +210,31 @@ export const useRunStore = create<RunStore>((set, get) => ({
     elapsedSeconds: 0, pendingSummary: null, settleFrom: null,
   }),
 
+  // 시작할 때 백그라운드 업데이트를 못 켰으면(포그라운드 구독으로 기록 중) 앱으로 돌아올 때마다 다시 시도한다
+  upgradeToBackground: async () => {
+    if (upgrading || !get().isTracking || get().trackingMode !== 'foreground') return;
+    upgrading = true;
+    try {
+      if (!(await startBackgroundUpdates(false))) return;
+      // 확인하는 사이 기록이 끝났으면 방금 켠 수집을 끈다
+      if (!get().isTracking) {
+        Location.stopLocationUpdatesAsync(LOCATION_TASK).catch(() => {});
+        return;
+      }
+      nativeWatchSub?.remove();
+      nativeWatchSub = null;
+      set({ trackingMode: 'background' });
+    } finally {
+      upgrading = false;
+    }
+  },
+
   clearPendingSummary: () => set({ pendingSummary: null, settleFrom: null }),
 
   setSettleFrom: (from) => set({ settleFrom: from }),
 }));
+
+// 앱이 다시 보일 때(권한 변경 후 돌아올 때 포함)
+AppState.addEventListener('change', (next) => {
+  if (next === 'active') useRunStore.getState().upgradeToBackground();
+});
