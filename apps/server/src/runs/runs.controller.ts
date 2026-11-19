@@ -7,6 +7,7 @@ import { memoryStorage } from 'multer';
 import { RunsService } from './runs.service';
 import { StorageService } from '../storage/storage.service';
 import { FindRunsDto } from './dto/find-runs.dto';
+import { FindDensityDto } from './dto/find-density.dto';
 import { CreateRunDto } from './dto/create-run.dto';
 
 // 메모리로 받아 StorageService가 S3(운영) 또는 uploads 폴더(로컬)에 쓴다. 사진 한 장 10MB까지
@@ -30,6 +31,12 @@ export class RunsController {
       return this.runsService.findByUser(req.user.sub, dto.userId, dto.page, dto.limit, from, to);
     }
     return this.runsService.findNearby(req.user.sub, dto.lat ?? 0, dto.lng ?? 0, dto.radius ?? 5000);
+  }
+
+  // ':id'보다 먼저 선언해야 'density'가 러닝 ID로 잡히지 않는다
+  @Get('density')
+  density(@Req() req: { user: { sub: string } }, @Query() dto: FindDensityDto) {
+    return this.runsService.density(req.user.sub, dto.lat, dto.lng, dto.radius, dto.cell);
   }
 
   // ':id'보다 먼저 선언해야 'stats'가 러닝 ID로 잡히지 않는다

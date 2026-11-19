@@ -8,6 +8,7 @@ const mockRunsService = {
   findNearby: jest.fn(),
   findByUser: jest.fn(),
   findById: jest.fn(),
+  density: jest.fn(),
 };
 
 const REQ = { user: { sub: 'me' } };
@@ -86,5 +87,12 @@ describe('RunsController', () => {
     const result = await controller.findById(REQ, 'run1');
     expect(result).toEqual({ _id: 'run1' });
     expect(mockRunsService.findById).toHaveBeenCalledWith('me', 'run1');
+  });
+
+  it('density — 칸 크기까지 서비스에 넘긴다', async () => {
+    mockRunsService.density.mockResolvedValue([{ lng: 127, lat: 37.5, n: 3 }]);
+    const result = await controller.density(REQ, { lat: 37.5, lng: 127, radius: 2000, cell: 50 });
+    expect(mockRunsService.density).toHaveBeenCalledWith('me', 37.5, 127, 2000, 50);
+    expect(result).toEqual([{ lng: 127, lat: 37.5, n: 3 }]);
   });
 });

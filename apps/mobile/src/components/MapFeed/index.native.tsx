@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
 import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { traceLayerScript, type TraceColors } from '@/components/map/traceLayer';
 import { routeGeometry, type LngLat } from '@/utils/route';
 import { useAuthStore } from '@/store/auth';
 import client, { BASE_URL } from '@/api/client';
@@ -26,7 +27,9 @@ const SEOUL = { lat: 37.5665, lng: 126.978 };
 // 서버 FindRunsDto의 radius 상한과 같다.
 const MAX_RADIUS_M = 300000;
 
-type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number };
+// cell: 지금 줌에서 화면 11px에 해당하는 미터(D3 칸, 서버 FindDensityDto 범위 5~5000)
+type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number; cell: number };
+type DensityCell = { lng: number; lat: number; n: number };
 type RunMessage = { type: 'run'; run: RunMarker };
 type RunDetailResponse = { route?: { coordinates?: [number, number][] } };
 
@@ -102,6 +105,9 @@ ${markerIconsScript(p)}
 
   var lastRuns=[],markers=[];
 ${routeFxScript()}
+${traceLayerScript()}
+  // D3 바탕 색: 데이터 칸은 TOTAL 링과 같은 Ice(지도 피드에는 「새 길」 민트가 없다)
+  window.__trace.setColors(${JSON.stringify(feedTraceColors(p))});
 
   // 테마 전환: 마커 아이콘과 내 위치 색을 바꾸고 지금 러닝을 다시 그린다(고른 경로는 앱이 다시 그린다)
   window.__onTheme=function(c){
@@ -140,7 +146,9 @@ ${routeFxScript()}
   function reportViewport(){
     var c=map.getCenter();
     var r=Math.min(Math.ceil(c.distanceTo(map.getBounds().getNorthEast())),${MAX_RADIUS_M});
-    window.ReactNativeWebView.postMessage(JSON.stringify({type:'viewport',lat:c.lat,lng:c.lng,radius:r}));
+    var mpp=40075016.686*Math.cos(c.lat*Math.PI/180)/Math.pow(2,map.getZoom()+8);
+    var cell=Math.min(5000,Math.max(5,Math.round(mpp*11)));
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'viewport',lat:c.lat,lng:c.lng,radius:r,cell:cell}));
   }
   var moveTimer;
   map.on('moveend',function(){
@@ -183,6 +191,10 @@ function nearbyLabel(radiusM: number | null) {
 // 경로 그리기 시작(카메라가 먼저 움직이고, 카드는 0.22초 뒤 올라온다)
 const ROUTE_DELAY_MS = 380;
 const HOME_LABEL = '집 근처 100m 가림 · 기본 ON';
+
+function feedTraceColors(p: Palette): TraceColors {
+  return { base: p.muted, ice: p.map.dot, mint: p.map.dot };
+}
 
 // 러닝마다 같은 가루 무늬(연출 시드)
 function seedOf(id: string) {
@@ -235,8 +247,14 @@ export function MapFeed() {
     webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs.map((run) => toMapRun(run, now)))});true;`);
   }, [checkNoMatch]);
 
-  const fetchRuns = useCallback(async ({ lat, lng, radius }: ViewportMessage) => {
+  const fetchRuns = useCallback(async ({ lat, lng, radius, cell }: ViewportMessage) => {
     const seq = ++requestSeq.current;
+    // D3 바탕(이번 주 칸별 서로 다른 러너 수). 실패해도 러닝은 보여 주고 바탕 점만 남는다
+    client.get<DensityCell[]>(`/runs/density?lat=${lat}&lng=${lng}&radius=${radius}&cell=${cell}`)
+      .then((res) => {
+        if (seq === requestSeq.current) webViewRef.current?.injectJavaScript(`window.__trace.setCells(${JSON.stringify(res.data)});true;`);
+      })
+      .catch(() => {});
     try {
       const res = await client.get<RunMarker[]>(`/runs?lat=${lat}&lng=${lng}&radius=${radius}`);
       // 늦게 도착한 이전 요청의 응답은 버린다
@@ -320,6 +338,11 @@ export function MapFeed() {
     webViewRef.current?.injectJavaScript(`window.__routeFx.show(${JSON.stringify(geometry)},${JSON.stringify(options)});true;`);
   }, [selectedRoute, routeColor, mine, c]);
 
+  // D3 바탕 색은 테마를 따른다
+  useEffect(() => {
+    webViewRef.current?.injectJavaScript(`window.__trace&&window.__trace.setColors(${JSON.stringify(feedTraceColors(c))});true;`);
+  }, [c]);
+
   // 응원이 바뀌면 목록 값도 고친다. HYPE가 뒤바뀔 때만 마커를 다시 그린다
   const onCheered = useCallback((runId: string, cheers: number, cheered: boolean) => {
     const runs = lastRuns.current;
@@ -352,7 +375,10 @@ export function MapFeed() {
         javaScriptEnabled
         startInLoadingState
         // 로드 중에 테마가 바뀌었을 수 있다
-        onLoadEnd={applyTheme}
+        onLoadEnd={() => {
+          applyTheme();
+          webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(feedTraceColors(c))});true;`);
+        }}
         onMessage={(e) => {
           try {
             const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage;

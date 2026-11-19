@@ -6,12 +6,15 @@ import { User, UserDocument } from '../users/users.schema';
 import { Post, PostDocument } from '../posts/posts.schema';
 import { CreateRunDto } from './dto/create-run.dto';
 import { trimHomeEnds } from './home-privacy';
+import { densityCells, type DensityCell } from './density';
 
 const MARKER_SELECT = 'userId distanceKm paceSecPerKm routeImageUrl photoUrls description createdAt route';
 const USER_SELECT = '_id username profileImageUrl';
 const DEFAULT_RADIUS = 5000;
 // 지도를 넓게 축소했을 때 응답 크기 상한. $near라 가까운 순으로 자른다.
 const MAX_NEARBY_RESULTS = 500;
+// D3 바탕은 이번 주(최근 7일) 러닝만 센다
+const DENSITY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class RunsService {
@@ -84,6 +87,29 @@ export class RunsService {
         createdAt,
       };
     });
+  }
+
+  // 지도 피드 D3 바탕: 최근 7일 러닝이 지난 칸마다 서로 다른 러너 수(3명 이상만). 남의 경로는 집 근처를 잘라 센다
+  async density(viewerId: string, lat: number, lng: number, radius: number, cellMeters: number): Promise<DensityCell[]> {
+    const hidden = await this.hiddenUserIds(viewerId);
+    const runs = await this.runModel
+      .find({
+        userId: { $nin: hidden },
+        createdAt: { $gte: new Date(Date.now() - DENSITY_WINDOW_MS) },
+        route: { $near: { $geometry: { type: 'Point', coordinates: [lng, lat] }, $maxDistance: radius } },
+      })
+      .select('userId route')
+      .limit(MAX_NEARBY_RESULTS)
+      .lean()
+      .exec();
+    return densityCells(
+      runs.map((run) => {
+        const route = (run.route as { coordinates: [number, number][] } | undefined)?.coordinates ?? [];
+        return { userId: String(run.userId), route: visibleRoute(viewerId, run.userId, route) };
+      }),
+      cellMeters,
+      lat,
+    );
   }
 
   // from·to를 주면 그 기간만: createdAt >= from, < to(to 미포함)

@@ -363,6 +363,38 @@ describe('RunsService', () => {
     });
   });
 
+  describe('density(D3 바탕)', () => {
+    const chain = (value: unknown) => ({
+      select: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(value),
+    });
+    // 같은 동서 직선을 서로 다른 3명이 달림(약 880m)
+    const route = Array.from({ length: 11 }, (_, i) => [127 + i * 0.001, 37.5]);
+    const owners = ['64b7f0c2a1b2c3d4e5f60a01', '64b7f0c2a1b2c3d4e5f60a02', '64b7f0c2a1b2c3d4e5f60a03'];
+
+    it('최근 7일 · 차단 제외 · 반경 조건으로 찾고, 3명이 지난 칸만 돌려준다', async () => {
+      mockFind.mockReturnValue(chain(owners.map((id) => ({ userId: new Types.ObjectId(id), route: { coordinates: route } }))));
+      const before = Date.now();
+      const cells = await service.density(VIEWER, 37.5, 127.005, 2000, 50);
+
+      const [query] = mockFind.mock.calls[0];
+      expect(query.userId).toEqual({ $nin: [BLOCKED, BLOCKER] });
+      expect(query.route.$near.$maxDistance).toBe(2000);
+      const since = query.createdAt.$gte.getTime();
+      expect(before - since).toBeGreaterThanOrEqual(7 * 24 * 3600 * 1000 - 1000);
+      expect(cells.length).toBeGreaterThan(0);
+      expect(cells.every((c) => c.n === 3)).toBe(true);
+    });
+
+    it('남의 경로는 집 근처를 잘라 센다 — 출발점 칸은 나오지 않는다', async () => {
+      mockFind.mockReturnValue(chain(owners.map((id) => ({ userId: new Types.ObjectId(id), route: { coordinates: route } }))));
+      const cells = await service.density(VIEWER, 37.5, 127.005, 2000, 50);
+      expect(cells.some((c) => c.lng < 127.0005)).toBe(false);
+    });
+  });
+
   describe('응원 수(cheers)', () => {
     const RUN_A = new Types.ObjectId('64b7f0c2a1b2c3d4e5f60801');
     const RUN_B = new Types.ObjectId('64b7f0c2a1b2c3d4e5f60802');

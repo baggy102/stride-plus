@@ -30,8 +30,15 @@ export function traceLayerScript(): string {
     function radius(n){return n>=30?4.4:n>=10?3.6:n>=3?2.7:1.7;}
     function key(x,y){return Math.floor(x/CELL)+','+Math.floor(y/CELL);}
     // 지금 줌의 레이어 좌표로 칸을 센다: 칸마다 지난 러닝 수(같은 러닝은 한 번), 처음 지난 시각, 재생 러닝의 진행 비율
+    var served=null; // 서버가 센 칸 [{lng,lat,n}](지도 피드). 있으면 runs 대신 쓴다
     function build(){
       cells=new Map();
+      if(served){
+        served.forEach(function(s){var p=map.latLngToLayerPoint([s.lat,s.lng]),k=key(p.x,p.y),c=cells.get(k);
+          if(!c){c={i:Math.floor(p.x/CELL),j:Math.floor(p.y/CELL),n:0,first:Infinity,f:-1};cells.set(k,c);}
+          if(s.n>c.n)c.n=s.n;});
+        return;
+      }
       runs.forEach(function(r){
         var seen={},ps=r.route.map(function(c){var p=map.latLngToLayerPoint([c[1],c[0]]);return [p.x,p.y];});
         var L=0,seg=[];for(var i=1;i<ps.length;i++){var l=Math.hypot(ps[i][0]-ps[i-1][0],ps[i][1]-ps[i-1][1]);seg.push(l);L+=l;}
@@ -87,6 +94,8 @@ export function traceLayerScript(): string {
     window.__trace={
       // runs: [{_id, t(ms), route:[lng,lat][]}]
       setRuns:function(next){runs=next.filter(function(r){return r.route&&r.route.length;});build();redraw();},
+      // 지도 피드: 서버가 센 칸(서로 다른 러너 3명 이상)
+      setCells:function(next){served=next;build();redraw();},
       setColors:function(next){col=next;redraw();},
       // 방금 저장한 러닝이 지도에 스며든다(동작 줄이기면 바로 끝 상태로)
       play:function(id){var r=runs.find(function(q){return q._id===id;});if(!r)return;
