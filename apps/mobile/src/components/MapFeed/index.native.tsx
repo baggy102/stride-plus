@@ -101,13 +101,6 @@ ${markerIconsScript(p)}
   map.addLayer(group);
 
   var lastRuns=[],markers=[];
-  // 고른 러닝: 경로 전체가 헤더와 카드 사이 빈 곳에 들어오게 0.55초 동안 카메라를 옮긴다. coords: [lng,lat][], pad: [위, 아래]
-  window.__fitRoute=function(coords,pad){
-    var pts=coords.map(function(c){return [c[1],c[0]];});
-    if(pts.length===0)return;
-    if(pts.length===1){map.flyTo(pts[0],Math.max(map.getZoom(),15),{duration:0.55});return;}
-    map.flyToBounds(L.latLngBounds(pts),{paddingTopLeft:[32,pad[0]],paddingBottomRight:[32,pad[1]],maxZoom:16,duration:0.55});
-  };
 ${routeFxScript()}
 
   // 테마 전환: 마커 아이콘과 내 위치 색을 바꾸고 지금 러닝을 다시 그린다(고른 경로는 앱이 다시 그린다)
