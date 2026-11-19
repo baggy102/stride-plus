@@ -20,7 +20,7 @@ import { useColors, useScheme } from '@/theme/useColors';
 import { elevationStyle, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import type { RunMarker } from '@/types/run';
-import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isNew, matchesFilter, safeImageUrl, type FeedFilter } from './feedFilter';
+import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isNew, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 
@@ -68,25 +68,30 @@ ${baseMapScript(p, dark)}
 
 ${markerIconsScript(p)}
 
-  // 얼굴 링 마커(TOTAL·HYPE·NEW). run에는 앱이 붙인 hype·fresh·cheers·avatar(검사한 주소)·initial·t가 있다
+  // 얼굴 링 마커(TOTAL·HYPE·NEW). run에는 앱이 붙인 hype·fresh·cheers·avatar(검사한 주소)·initial·t·tone(사용자 색 칸)·operator가 있다
   var mode='total';
   var HEART='<svg width="9" height="9" viewBox="0 0 24 24" style="display:block"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.1 4.2 2.4h2c.6-1.3 2.1-2.4 4.2-2.4 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z"/></svg>';
   function esc(s){return String(s).replace(/[&<>"']/g,function(ch){return '&#'+ch.charCodeAt(0)+';';});}
   function matches(run){return mode==='total'||(mode==='hype'&&run.hype)||(mode==='new'&&run.fresh);}
   function ringOf(run,base){var c=iconColors;return mode==='hype'&&run.hype?c.hype:(mode==='new'&&run.fresh?c.fresh:base);}
+  // TOTAL 링 바탕: 운영자는 Indigo, 나머지는 사용자별 4색
+  function toneOf(run){var c=iconColors;return run.operator?c.operator:c.runners[run.tone];}
   // 이니셜을 깔고 사진을 덮는다(사진을 못 받아도 이니셜이 보인다)
   function face(run,size,ring,ringW){
     var c=iconColors;
     var img=run.avatar?'<div style="position:absolute;inset:0;background:url('+run.avatar+') center/cover"></div>':'';
     return '<div style="position:relative;width:'+size+'px;height:'+size+'px;box-sizing:border-box;border-radius:50%;border:'+ringW+'px solid '+ring+';background:'+c.face+';overflow:hidden;display:flex;align-items:center;justify-content:center;font:600 '+Math.round(size*0.38)+'px/1 -apple-system,system-ui,sans-serif;color:'+c.faceText+'">'+esc(run.initial)+img+'</div>';
   }
-  // HYPE에서 해당 러닝: Pearl 링 · 1.16배 · 번짐 · 응원 수. NEW에서 해당 러닝: 민트 링. TOTAL에서 NEW 러닝엔 민트 점. 나머지는 흐리게
+  // HYPE에서 해당 러닝: Pearl 링 · 1.16배 · 번짐 · Pearl 응원 배지. NEW에서 해당 러닝: 민트 링. TOTAL에서 NEW 러닝엔 민트 점(오른쪽 위). 나머지는 흐리게
+  // 응원 수: 보이는 러닝에 1개 이상이면 유리 칩(오른쪽 아래). 운영자: 왼쪽 아래 S 배지
   function faceIcon(run){
     var c=iconColors,on=matches(run),hot=mode==='hype'&&run.hype;
     var shadow=hot?'0 0 0 4px '+c.hypeSoft+',0 0 22px '+c.hypeGlow:'0 4px 12px rgba(0,0,0,'+(c.dark?0.45:0.16)+')';
-    var badge=hot?'<div style="position:absolute;top:-2px;left:28px;display:flex;align-items:center;gap:3px;padding:3px 7px 3px 6px;border-radius:99px;background:'+c.hype+';color:'+c.onSocial+';font:600 11px/1 ui-monospace,Menlo,monospace;white-space:nowrap">'+HEART+run.cheers+'</div>':'';
+    var badge=hot?'<div style="position:absolute;top:-2px;left:28px;display:flex;align-items:center;gap:3px;padding:3px 7px 3px 6px;border-radius:99px;background:'+c.hype+';color:'+c.onSocial+';font:600 11px/1 ui-monospace,Menlo,monospace;white-space:nowrap">'+HEART+run.cheers+'</div>'
+      :(on&&run.cheers>0?'<div style="position:absolute;bottom:-1px;left:27px;display:flex;align-items:center;gap:2px;padding:2px 5px 2px 4px;border-radius:99px;background:'+c.glass+';border:1px solid '+c.glassBorder+';-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:'+c.text+';font:600 11px/1 ui-monospace,Menlo,monospace;white-space:nowrap">'+HEART+run.cheers+'</div>':'');
     var dot=mode==='total'&&run.fresh?'<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;box-sizing:border-box;border-radius:50%;background:'+c.fresh+';border:2px solid '+c.ring+'"></div>':'';
-    return L.divIcon({html:'<div class="face-in"><div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;transform:scale('+(hot?1.16:1)+');opacity:'+(on?1:0.38)+';filter:'+(on?'none':'grayscale(1)')+'"><div style="border-radius:50%;box-shadow:'+shadow+'">'+face(run,34,ringOf(run,c.dot),2.5)+'</div>'+dot+badge+'</div></div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});
+    var op=run.operator?'<div style="position:absolute;bottom:1px;left:1px;width:14px;height:14px;box-sizing:border-box;border-radius:50%;background:'+c.operator+';border:2px solid '+c.ring+';display:flex;align-items:center;justify-content:center;color:'+c.onOperator+';font:700 8px/1 -apple-system,system-ui,sans-serif">S</div>':'';
+    return L.divIcon({html:'<div class="face-in"><div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;transform:scale('+(hot?1.16:1)+');opacity:'+(on?1:0.38)+';filter:'+(on?'none':'grayscale(1)')+'"><div style="border-radius:50%;box-shadow:'+shadow+'">'+face(run,34,ringOf(run,toneOf(run)),2.5)+'</div>'+dot+op+badge+'</div></div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});
   }
   // 묶음: 얼굴 최대 3개 겹침 + 수. 얼굴 순서 HYPE(응원 수) → NEW → 최근
   function rank(a,b){return (b.hype-a.hype)||(b.cheers-a.cheers)||(b.fresh-a.fresh)||(b.t-a.t);}
@@ -94,7 +99,7 @@ ${markerIconsScript(p)}
     var c=iconColors,runs=cl.getAllChildMarkers().map(function(m){return m.options.run;}).sort(rank);
     var top=runs.slice(0,3),anyOn=runs.some(matches),n=String(runs.length);
     var faces=top.map(function(run,i){
-      return '<div style="margin-left:'+(i?-10:0)+'px;position:relative;z-index:'+(3-i)+';opacity:'+(matches(run)?1:0.5)+'">'+face(run,28,ringOf(run,c.ring),2)+'</div>';
+      return '<div style="margin-left:'+(i?-10:0)+'px;position:relative;z-index:'+(3-i)+';opacity:'+(matches(run)?1:0.5)+'">'+face(run,28,ringOf(run,toneOf(run)),2)+'</div>';
     }).join('');
     var w=Math.round(8+28+18*(top.length-1)+14+n.length*7.5);
     return L.divIcon({html:'<div class="face-in"><div style="display:inline-flex;align-items:center;padding:3px;border-radius:99px;background:'+c.glass+';border:1px solid '+c.glassBorder+';-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 8px 24px rgba(0,0,0,'+(c.dark?0.45:0.12)+');opacity:'+(anyOn?1:0.45)+';filter:'+(anyOn?'none':'grayscale(1)')+'">'+faces+'<div style="padding:0 8px 0 6px;font:500 12px/1 ui-monospace,Menlo,monospace;color:'+c.text+'">'+n+'</div></div></div>',className:'',iconSize:[w,36],iconAnchor:[w/2,18]});
@@ -130,6 +135,17 @@ ${traceLayerScript()}
       markers.push(m);
     });
     group.addLayers(markers);
+  };
+
+  // 응원 수가 바뀐 러닝 하나만 다시 그린다(전체 다시 그리기 없음)
+  window.__updateRun=function(next){
+    lastRuns=lastRuns.map(function(run){return run._id===next._id?next:run;});
+    markers.forEach(function(m){
+      if(m.options.run._id!==next._id)return;
+      m.options.run=next;
+      m.setIcon(faceIcon(next));
+      group.refreshClusters(m);
+    });
   };
 
   // 필터 바꿈: 지도 가운데에서 바깥으로 0~260ms 물결처럼 아이콘을 바꾼다(묶음은 중간에 한 번)
@@ -179,6 +195,8 @@ function toMapRun(run: RunMarker, now: number) {
     avatar: safeImageUrl(run.userId.profileImageUrl, BASE_URL),
     initial: (run.userId.username?.[0] ?? '?').toUpperCase(),
     t: Date.parse(run.createdAt) || 0,
+    tone: runnerTone(run.userId._id),
+    operator: run.userId.role === 'operator',
   };
 }
 
@@ -343,15 +361,16 @@ export function MapFeed() {
     webViewRef.current?.injectJavaScript(`window.__trace&&window.__trace.setColors(${JSON.stringify(feedTraceColors(c))});true;`);
   }, [c]);
 
-  // 응원이 바뀌면 목록 값도 고친다. HYPE가 뒤바뀔 때만 마커를 다시 그린다
+  // 응원이 바뀌면 목록 값을 고치고 그 마커 하나만 다시 그린다(응원 수 칩·HYPE). 필터 결과가 바뀔 수 있어 안내도 다시 본다
   const onCheered = useCallback((runId: string, cheers: number, cheered: boolean) => {
     const runs = lastRuns.current;
     const run = runs?.find((r) => r._id === runId);
     if (!runs || !run) return;
-    const wasHype = isHype(run);
-    lastRuns.current = runs.map((r) => (r._id === runId ? { ...r, cheers, cheered } : r));
-    if (wasHype !== isHype({ cheers })) showRuns();
-  }, [showRuns]);
+    const next = { ...run, cheers, cheered };
+    lastRuns.current = runs.map((r) => (r._id === runId ? next : r));
+    checkNoMatch();
+    webViewRef.current?.injectJavaScript(`window.__updateRun(${JSON.stringify(toMapRun(next, Date.now()))});true;`);
+  }, [checkNoMatch]);
 
   const retry = useCallback(() => {
     if (lastViewport.current) fetchRuns(lastViewport.current);

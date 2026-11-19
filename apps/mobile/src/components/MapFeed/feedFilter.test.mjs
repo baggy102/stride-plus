@@ -1,6 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HYPE_MIN_CHEERS, isHype, isNew, matchesFilter, safeImageUrl } from './feedFilter.ts';
+import { HYPE_MIN_CHEERS, RUNNER_TONES, isHype, isNew, matchesFilter, runnerTone, safeImageUrl } from './feedFilter.ts';
+
+test('사용자 색 칸: 같은 id는 늘 같은 칸, 0~3, 여러 사람이면 여러 칸', () => {
+  const ids = Array.from({ length: 40 }, (_, i) => `6af57af9b13cd774468bc5${i.toString(16).padStart(2, '0')}`);
+  for (const id of ids) {
+    assert.equal(runnerTone(id), runnerTone(id));
+    assert.ok(runnerTone(id) >= 0 && runnerTone(id) < RUNNER_TONES);
+  }
+  assert.equal(new Set(ids.map(runnerTone)).size, RUNNER_TONES);
+});
 
 const NOW = Date.parse('2026-11-19T12:00:00Z');
 const hoursAgo = (h) => new Date(NOW - h * 3600 * 1000).toISOString();

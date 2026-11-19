@@ -29,6 +29,7 @@ export function mapColors(p: Palette) {
     face: p.surface2, faceText: p.text2,
     hype: p.hype, hypeSoft: withAlpha(p.hype, 0.22), hypeGlow: withAlpha(p.hype, 0.45),
     fresh: p.fresh, onSocial: p.onSocial,
+    runners: m.runners, operator: m.operator, onOperator: m.onOperator,
     dark: p.dark,
   };
 }

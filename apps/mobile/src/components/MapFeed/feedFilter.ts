@@ -29,6 +29,14 @@ export function matchesFilter(run: Pick<RunMarker, 'cheers' | 'createdAt'>, filt
   return true;
 }
 
+// 사용자별 링 색 칸(0~3). 같은 사람은 늘 같은 칸
+export const RUNNER_TONES = 4;
+export function runnerTone(userId: string): number {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) hash = (hash * 31 + userId.charCodeAt(i)) >>> 0;
+  return hash % RUNNER_TONES;
+}
+
 // WebView 안 style="background-image:url(...)"에 넣어도 되는 주소만(http(s), 따옴표·괄호·공백·꺾쇠 없음)
 export function safeImageUrl(url: string | null | undefined, baseUrl: string): string | null {
   if (!url) return null;
