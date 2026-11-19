@@ -17,3 +17,5 @@ export class Post {
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);
+// 러닝 하나에 포스트 하나. 응원 집계·토글이 runId로 찾는다
+PostSchema.index({ runId: 1 }, { unique: true });

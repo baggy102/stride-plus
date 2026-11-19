@@ -9,12 +9,12 @@ import { Types } from 'mongoose';
 const RUN_ID = '64b7f0c2a1b2c3d4e5f60718';
 const USER_ID = '64b7f0c2a1b2c3d4e5f60719';
 
-const mockSave = jest.fn();
-// new postModel(data) 호출을 흉내 낸다
-const mockPostModel = Object.assign(
-  jest.fn().mockImplementation((data) => ({ ...data, save: mockSave })),
-  { findOne: jest.fn(), findByIdAndUpdate: jest.fn() },
-);
+const mockUpsertExec = jest.fn();
+const mockPostModel = {
+  findOne: jest.fn(),
+  findByIdAndUpdate: jest.fn(),
+  findOneAndUpdate: jest.fn(() => ({ exec: mockUpsertExec })),
+};
 const chain = (value: unknown) => ({ select: () => ({ lean: () => ({ exec: jest.fn().mockResolvedValue(value) }) }) });
 
 const mockRunExec = jest.fn();
@@ -39,14 +39,18 @@ describe('PostsService', () => {
   });
 
   describe('create', () => {
-    it('run이 있으면 runId·userId로 저장하고 저장 결과를 돌려준다', async () => {
+    it('run이 있으면 runId로 포스트를 upsert하고 결과를 돌려준다(이미 있으면 있던 포스트)', async () => {
       mockRunExec.mockResolvedValue({ _id: RUN_ID, userId: USER_ID });
       const saved = { _id: 'p1', runId: RUN_ID, userId: USER_ID };
-      mockSave.mockResolvedValue(saved);
+      mockUpsertExec.mockResolvedValue(saved);
 
       const result = await service.create(USER_ID, { runId: RUN_ID });
 
-      expect(mockPostModel).toHaveBeenCalledWith({ runId: RUN_ID, userId: USER_ID });
+      expect(mockPostModel.findOneAndUpdate).toHaveBeenCalledWith(
+        { runId: RUN_ID },
+        { $setOnInsert: { runId: RUN_ID, userId: USER_ID } },
+        { upsert: true, new: true },
+      );
       expect(result).toBe(saved);
     });
 
@@ -56,8 +60,7 @@ describe('PostsService', () => {
       await expect(service.create(USER_ID, { runId: RUN_ID })).rejects.toThrow(
         new NotFoundException('run_not_found'),
       );
-      expect(mockPostModel).not.toHaveBeenCalled();
-      expect(mockSave).not.toHaveBeenCalled();
+      expect(mockPostModel.findOneAndUpdate).not.toHaveBeenCalled();
     });
 
     it('남의 run이면 ForbiddenException(not_run_owner), 저장하지 않는다', async () => {
@@ -66,12 +69,12 @@ describe('PostsService', () => {
       await expect(service.create(USER_ID, { runId: RUN_ID })).rejects.toThrow(
         new ForbiddenException('not_run_owner'),
       );
-      expect(mockPostModel).not.toHaveBeenCalled();
+      expect(mockPostModel.findOneAndUpdate).not.toHaveBeenCalled();
     });
 
     it('dto.runId로 run을 조회한다', async () => {
       mockRunExec.mockResolvedValue({ _id: RUN_ID, userId: USER_ID });
-      mockSave.mockResolvedValue({});
+      mockUpsertExec.mockResolvedValue({});
 
       await service.create(USER_ID, { runId: RUN_ID });
 

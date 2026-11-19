@@ -19,3 +19,9 @@ describe('PostSchema ID 타입', () => {
     expect(String(post.runId)).toBe(runId);
   });
 });
+
+describe('PostSchema 인덱스', () => {
+  it('runId는 유니크 — 러닝 하나에 포스트 하나', () => {
+    expect(PostSchema.indexes()).toContainEqual([{ runId: 1 }, expect.objectContaining({ unique: true })]);
+  });
+});
