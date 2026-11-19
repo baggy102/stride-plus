@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { RunsService, normalizeRouteTimes } from './runs.service';
 import { Run } from './runs.schema';
 import { User } from '../users/users.schema';
+import { Post } from '../posts/posts.schema';
 import { Types } from 'mongoose';
 
 const mockFind = jest.fn();
@@ -13,6 +14,9 @@ const mockRunModel = {
   findById: jest.fn(),
   aggregate: jest.fn(),
 };
+
+const mockPostAggregate = jest.fn();
+const mockPostModel = { aggregate: mockPostAggregate };
 
 const VIEWER = '64b7f0c2a1b2c3d4e5f60700';
 const BLOCKED = new Types.ObjectId('64b7f0c2a1b2c3d4e5f60701');
@@ -35,11 +39,13 @@ describe('RunsService', () => {
         RunsService,
         { provide: getModelToken(Run.name), useValue: mockRunModel },
         { provide: getModelToken(User.name), useValue: mockUserModel },
+        { provide: getModelToken(Post.name), useValue: mockPostModel },
       ],
     }).compile();
 
     service = module.get(RunsService);
     jest.clearAllMocks();
+    mockPostAggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([]) });
   });
 
   describe('findNearby', () => {
@@ -354,6 +360,47 @@ describe('RunsService', () => {
       await expect(service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718')).rejects.toThrow(
         new NotFoundException('run_not_found'),
       );
+    });
+  });
+
+  describe('응원 수(cheers)', () => {
+    const RUN_A = new Types.ObjectId('64b7f0c2a1b2c3d4e5f60801');
+    const RUN_B = new Types.ObjectId('64b7f0c2a1b2c3d4e5f60802');
+    const chain = (value: unknown) => ({
+      select: jest.fn().mockReturnThis(),
+      populate: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(value),
+    });
+    const runs = [RUN_A, RUN_B].map((_id) => ({ _id, userId: { _id: VIEWER }, route: { coordinates: [[127, 37.5]] } }));
+
+    it('findNearby — 러닝마다 cheers·cheered, 포스트 없는 러닝은 0·false', async () => {
+      mockFind.mockReturnValue(chain(runs));
+      mockPostAggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([{ runId: RUN_A, cheers: 4, cheered: true }]) });
+
+      const [a, b] = await service.findNearby(VIEWER, 37.5, 127);
+      expect(a).toMatchObject({ cheers: 4, cheered: true });
+      expect(b).toMatchObject({ cheers: 0, cheered: false });
+      const [pipeline] = mockPostAggregate.mock.calls[0];
+      expect(pipeline[0]).toEqual({ $match: { runId: { $in: [RUN_A, RUN_B] } } });
+    });
+
+    it('findByUser — 같은 방식으로 cheers·cheered', async () => {
+      mockFind.mockReturnValue(chain(runs));
+      mockPostAggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([{ runId: RUN_B, cheers: 2, cheered: false }]) });
+
+      const [a, b] = await service.findByUser(VIEWER, VIEWER);
+      expect(a).toMatchObject({ cheers: 0, cheered: false });
+      expect(b).toMatchObject({ cheers: 2, cheered: false });
+    });
+
+    it('결과가 없으면 집계하지 않는다', async () => {
+      mockFind.mockReturnValue(chain([]));
+      expect(await service.findNearby(VIEWER, 37.5, 127)).toEqual([]);
+      expect(mockPostAggregate).not.toHaveBeenCalled();
     });
   });
 

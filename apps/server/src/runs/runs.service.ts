@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types, isValidObjectId } from 'mongoose';
 import { Run, RunDocument } from './runs.schema';
 import { User, UserDocument } from '../users/users.schema';
+import { Post, PostDocument } from '../posts/posts.schema';
 import { CreateRunDto } from './dto/create-run.dto';
 import { trimHomeEnds } from './home-privacy';
 
@@ -19,7 +20,21 @@ export class RunsService {
     private readonly runModel: Model<RunDocument>,
     @InjectModel(User.name)
     private readonly userModel: Model<UserDocument>,
+    @InjectModel(Post.name)
+    private readonly postModel: Model<PostDocument>,
   ) {}
+
+  // 러닝별 응원 수와 내가 응원했는지. 포스트가 없는 러닝은 0
+  private async cheersByRun(viewerId: string, runIds: unknown[]): Promise<Map<string, { cheers: number; cheered: boolean }>> {
+    if (runIds.length === 0) return new Map();
+    const rows = await this.postModel
+      .aggregate<{ runId: Types.ObjectId; cheers: number; cheered: boolean }>([
+        { $match: { runId: { $in: runIds } } },
+        { $project: { runId: 1, cheers: { $size: '$likes' }, cheered: { $in: [new Types.ObjectId(viewerId), '$likes'] } } },
+      ])
+      .exec();
+    return new Map(rows.map((row) => [String(row.runId), { cheers: row.cheers, cheered: row.cheered }]));
+  }
 
   // 차단은 양방향: 내가 차단한 사용자 + 나를 차단한 사용자의 러닝을 보이지 않게 한다.
   private async hiddenUserIds(viewerId: string): Promise<Types.ObjectId[]> {
@@ -48,6 +63,7 @@ export class RunsService {
       .limit(MAX_NEARBY_RESULTS)
       .lean()
       .exec();
+    const cheers = await this.cheersByRun(viewerId, runs.map((run) => run._id));
 
     return runs.map((run) => {
       const route = run.route as { type: string; coordinates: [number, number][] } | undefined;
@@ -63,6 +79,8 @@ export class RunsService {
         photoUrls: photoUrls ?? [],
         description: (run as unknown as { description?: string }).description ?? '',
         startPoint: visibleRoute(viewerId, run.userId, route?.coordinates ?? [])[0] ?? null,
+        cheers: cheers.get(String(run._id))?.cheers ?? 0,
+        cheered: cheers.get(String(run._id))?.cheered ?? false,
         createdAt,
       };
     });
@@ -85,6 +103,7 @@ export class RunsService {
       .limit(limit)
       .lean()
       .exec();
+    const cheers = await this.cheersByRun(viewerId, runs.map((run) => run._id));
 
     return runs.map((run) => {
       const route = run.route as { type: string; coordinates: [number, number][] } | undefined;
@@ -102,6 +121,8 @@ export class RunsService {
         description: (run as unknown as { description?: string }).description ?? '',
         startPoint: coordinates[0] ?? null,
         route: coordinates,
+        cheers: cheers.get(String(run._id))?.cheers ?? 0,
+        cheered: cheers.get(String(run._id))?.cheered ?? false,
         createdAt,
       };
     });
