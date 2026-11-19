@@ -70,6 +70,35 @@ export function kmSplits(coords: LngLat[], times: number[] | undefined, breaks: 
   return splits;
 }
 
+// 이보다 짧은 자투리는 막대로 그리지 않는다(km)
+const MIN_TAIL_KM = 0.04;
+
+/**
+ * 다 채운 km 뒤에 남은 거리(km)와 그 시간(초). kmSplits와 같은 구간만 센다.
+ * 0.84 km면 { km: 0.84, sec }, 3.1 km면 { km: 0.1, sec }. 0.04 km 미만이거나 시간이 없으면 null
+ */
+export function kmTail(coords: LngLat[], times: number[] | undefined, breaks: number[] = []): { km: number; sec: number } | null {
+  if (!times || times.length !== coords.length || coords.length < 2) return null;
+  const skip = new Set(breaks);
+  let total = 0;
+  let whole = 0;
+  let lastKmTime = times[0];
+  for (let i = 1; i < coords.length; i++) {
+    const seg = haversineKm(coords[i - 1], coords[i]);
+    const dt = times[i] - times[i - 1];
+    if (seg <= 0 || skip.has(i)) continue;
+    if (dt <= 0 || (seg * 1000) / dt > MAX_SPEED_MPS) continue;
+    while (total + seg >= whole + 1) {
+      lastKmTime = times[i - 1] + dt * ((whole + 1 - total) / seg);
+      whole++;
+    }
+    total += seg;
+  }
+  const km = total - whole;
+  if (km < MIN_TAIL_KM) return null;
+  return { km, sec: times[times.length - 1] - lastKmTime };
+}
+
 /** 경로를 w×h 상자 안에 비율을 지켜 맞춘 화면 좌표(위도 보정한 평면 근사). 점이 한 곳뿐이면 가운데 */
 export function fitToBox(coords: LngLat[], width: number, height: number, inset: number): [number, number][] {
   if (coords.length === 0) return [];
