@@ -167,3 +167,12 @@ export function BlockedIcon({ size = 32, color }: IconProps) {
     </Svg>
   );
 }
+
+// 응원: filled면 채운 하트
+export function HeartIcon({ size = 18, color, filled = false }: IconProps & { filled?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : "none"} stroke={color} strokeWidth={2} strokeLinejoin="round">
+      <Path d="M12 20s-7-4.4-8.9-8.7C1.7 8 3.7 4.5 7.1 4.5c2 0 3.4 1 4.1 2.3h1.6c.7-1.3 2.1-2.3 4.1-2.3 3.4 0 5.4 3.5 4 6.8C19 15.6 12 20 12 20z" />
+    </Svg>
+  );
+}

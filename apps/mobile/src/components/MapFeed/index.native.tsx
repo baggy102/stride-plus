@@ -10,7 +10,10 @@ import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { MapPopupCard } from '@/components/MapPopupCard';
+import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
+import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { routeGeometry, type LngLat } from '@/utils/route';
+import { useAuthStore } from '@/store/auth';
 import client, { BASE_URL } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
 import { elevationStyle, type Palette } from '@/theme/colors';
@@ -98,34 +101,20 @@ ${markerIconsScript(p)}
   map.addLayer(group);
 
   var lastRuns=[],markers=[];
-  // 선택한 기록(S05)의 경로만 그린다: 다크는 옅은 번짐 + 바탕색 테두리(8) + 경로(4) + 시작점
-  var selGlow=L.polyline([],{weight:12,opacity:0,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-  var selEdge=L.polyline([],{weight:8,opacity:0.9,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-  var selLine=L.polyline([],{weight:4,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-  var selStart=L.circleMarker([0,0],{radius:5,weight:2.5,fillOpacity:1,interactive:false});
-  function styleSelected(c){
-    selGlow.setStyle({color:c.dot,opacity:c.dark?0.25:0});
-    selEdge.setStyle({color:c.ring});
-    selLine.setStyle({color:c.dot});
-    selStart.setStyle({color:c.dot,fillColor:c.ring});
-  }
-  styleSelected(iconColors);
-  // coords: [lng,lat][] (없으면 지운다). pad: 헤더·카드에 가리지 않게 둘 여백 [위, 아래]
-  window.__setSelected=function(coords,pad){
-    var pts=(coords||[]).map(function(c){return [c[1],c[0]];});
-    selGlow.setLatLngs(pts);selEdge.setLatLngs(pts);selLine.setLatLngs(pts);
-    if(pts.length>0){
-      selStart.setLatLng(pts[0]).addTo(map);
-      if(pts.length>1)map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[32,pad[0]],paddingBottomRight:[32,pad[1]],maxZoom:16});
-    }else{map.removeLayer(selStart);}
+  // 고른 러닝: 경로 전체가 헤더와 카드 사이 빈 곳에 들어오게 0.55초 동안 카메라를 옮긴다. coords: [lng,lat][], pad: [위, 아래]
+  window.__fitRoute=function(coords,pad){
+    var pts=coords.map(function(c){return [c[1],c[0]];});
+    if(pts.length===0)return;
+    if(pts.length===1){map.flyTo(pts[0],Math.max(map.getZoom(),15),{duration:0.55});return;}
+    map.flyToBounds(L.latLngBounds(pts),{paddingTopLeft:[32,pad[0]],paddingBottomRight:[32,pad[1]],maxZoom:16,duration:0.55});
   };
+${routeFxScript()}
 
-  // 테마 전환: 마커 아이콘과 내 위치·선택 경로 색을 바꾸고 지금 러닝을 다시 그린다
+  // 테마 전환: 마커 아이콘과 내 위치 색을 바꾸고 지금 러닝을 다시 그린다(고른 경로는 앱이 다시 그린다)
   window.__onTheme=function(c){
     makeIcons(c);
     me.setStyle({color:c.meRing,fillColor:c.meFill});
     meHalo.setStyle({fillColor:c.meHalo});
-    styleSelected(c);
     window.__setRuns(lastRuns);
   };
 
@@ -198,7 +187,16 @@ function nearbyLabel(radiusM: number | null) {
   return `NEARBY ${Math.max(1, Math.round(radiusM / 1000))} KM`;
 }
 
-const CARD_HEIGHT = 152;
+// 경로 그리기 시작(카메라가 먼저 움직이고, 카드는 0.22초 뒤 올라온다)
+const ROUTE_DELAY_MS = 380;
+const HOME_LABEL = '집 근처 100m 가림 · 기본 ON';
+
+// 러닝마다 같은 가루 무늬(연출 시드)
+function seedOf(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
+}
 
 export function MapFeed() {
   const router = useRouter();
@@ -288,22 +286,56 @@ export function MapFeed() {
     } catch {}
   }, []);
 
-  // 마커를 고르면 그 기록의 경로를 받아 지도에 그린다(목록 응답에는 경로가 없다)
+  // 마커를 고르면 그 기록의 경로를 받는다(목록 응답에는 경로가 없다). 남의 러닝은 서버가 집 근처를 잘라 보낸다
   const cardBottom = tabClearance + 12;
+  const myId = useAuthStore((s) => s.user?._id);
+  const [selectedRoute, setSelectedRoute] = useState<{ id: string; coords: LngLat[] } | null>(null);
   useEffect(() => {
-    const clear = () => webViewRef.current?.injectJavaScript('window.__setSelected&&window.__setSelected(null,[0,0]);true;');
-    if (!selected) { clear(); return; }
+    setSelectedRoute(null);
+    if (!selected) { webViewRef.current?.injectJavaScript('window.__routeFx&&window.__routeFx.clear();true;'); return; }
     let cancelled = false;
     client.get<RunDetailResponse>(`/runs/${selected._id}`)
       .then((res) => {
         if (cancelled) return;
         const coords = res.data.route?.coordinates ?? [];
-        const pad = [headerHeight + 16, cardBottom + CARD_HEIGHT + 24];
-        webViewRef.current?.injectJavaScript(`window.__setSelected(${JSON.stringify(coords)},${JSON.stringify(pad)});true;`);
+        setSelectedRoute({ id: selected._id, coords });
+        const pad = [headerHeight + 16, cardBottom + POSTER_HEIGHT + 24];
+        webViewRef.current?.injectJavaScript(`window.__fitRoute(${JSON.stringify(coords)},${JSON.stringify(pad)});true;`);
       })
-      .catch(() => { if (!cancelled) clear(); });
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [selected, headerHeight, cardBottom]);
+    // 헤더 높이가 바뀌어도 다시 받지 않는다
+  }, [selected]);
+
+  // 경로 연출 A+: 처음엔 그리며 재생, 필터·테마만 바뀌면 끝 상태로 색만 바꾼다
+  const drawnId = useRef<string | null>(null);
+  const routeColor = selected
+    ? filter === 'hype' && isHype(selected) ? c.hype : filter === 'new' && isNew(selected, Date.now()) ? c.fresh : c.map.dot
+    : c.map.dot;
+  const mine = !!selected && selected.userId._id === myId;
+  useEffect(() => {
+    if (!selectedRoute) { drawnId.current = null; return; }
+    const geometry = routeGeometry(selectedRoute.coords, mine);
+    const options: RouteFxOptions = {
+      col: routeColor, bg: c.bg, glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
+      label: mine ? HOME_LABEL : null,
+      delay: ROUTE_DELAY_MS,
+      keep: drawnId.current === selectedRoute.id,
+      seed: seedOf(selectedRoute.id),
+    };
+    drawnId.current = selectedRoute.id;
+    webViewRef.current?.injectJavaScript(`window.__routeFx.show(${JSON.stringify(geometry)},${JSON.stringify(options)});true;`);
+  }, [selectedRoute, routeColor, mine, c]);
+
+  // 응원이 바뀌면 목록 값도 고친다. HYPE가 뒤바뀔 때만 마커를 다시 그린다
+  const onCheered = useCallback((runId: string, cheers: number, cheered: boolean) => {
+    const runs = lastRuns.current;
+    const run = runs?.find((r) => r._id === runId);
+    if (!runs || !run) return;
+    const wasHype = isHype(run);
+    lastRuns.current = runs.map((r) => (r._id === runId ? { ...r, cheers, cheered } : r));
+    if (wasHype !== isHype({ cheers })) showRuns();
+  }, [showRuns]);
 
   const retry = useCallback(() => {
     if (lastViewport.current) fetchRuns(lastViewport.current);
@@ -418,7 +450,7 @@ export function MapFeed() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="내 위치로 이동"
-        style={[styles.myLocShadow, { bottom: (selected ? cardBottom + CARD_HEIGHT : tabClearance) + 12 }]}
+        style={[styles.myLocShadow, { bottom: (selected ? cardBottom + POSTER_HEIGHT : tabClearance) + 12 }]}
         onPress={handleMyLocation}
       >
         <Glass style={styles.myLocBtn}>
@@ -428,9 +460,14 @@ export function MapFeed() {
 
       {selected && (
         <MapPopupCard
+          key={selected._id}
           run={selected}
           baseUrl={BASE_URL}
           bottom={cardBottom}
+          route={selectedRoute?.id === selected._id ? selectedRoute.coords : undefined}
+          routeColor={routeColor}
+          mine={mine}
+          onCheered={onCheered}
           onClose={() => setSelected(null)}
           onUserPress={(userId) => {
             setSelected(null);
