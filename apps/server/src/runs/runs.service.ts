@@ -4,6 +4,7 @@ import { Model, Types, isValidObjectId } from 'mongoose';
 import { Run, RunDocument } from './runs.schema';
 import { User, UserDocument } from '../users/users.schema';
 import { CreateRunDto } from './dto/create-run.dto';
+import { trimHomeEnds } from './home-privacy';
 
 const MARKER_SELECT = 'userId distanceKm paceSecPerKm routeImageUrl photoUrls description createdAt route';
 const USER_SELECT = '_id username profileImageUrl';
@@ -61,7 +62,7 @@ export class RunsService {
         thumbnailUrl: photoUrls?.[0] ?? null,
         photoUrls: photoUrls ?? [],
         description: (run as unknown as { description?: string }).description ?? '',
-        startPoint: route?.coordinates?.[0] ?? null,
+        startPoint: visibleRoute(viewerId, run.userId, route?.coordinates ?? [])[0] ?? null,
         createdAt,
       };
     });
@@ -87,6 +88,7 @@ export class RunsService {
 
     return runs.map((run) => {
       const route = run.route as { type: string; coordinates: [number, number][] } | undefined;
+      const coordinates = visibleRoute(viewerId, run.userId, route?.coordinates ?? []);
       const photoUrls = run.photoUrls as string[] | undefined;
       const createdAt = (run as unknown as { createdAt?: Date }).createdAt;
       return {
@@ -98,8 +100,8 @@ export class RunsService {
         thumbnailUrl: photoUrls?.[0] ?? null,
         photoUrls: photoUrls ?? [],
         description: (run as unknown as { description?: string }).description ?? '',
-        startPoint: route?.coordinates?.[0] ?? null,
-        route: route?.coordinates ?? [],
+        startPoint: coordinates[0] ?? null,
+        route: coordinates,
         createdAt,
       };
     });
@@ -133,7 +135,9 @@ export class RunsService {
     const ownerId = (run.userId as unknown as { _id?: Types.ObjectId } | null)?._id;
     const hidden = await this.hiddenUserIds(viewerId);
     if (ownerId && hidden.some((id) => id.equals(ownerId))) throw new NotFoundException('run_not_found');
-    return run;
+    if (!ownerId || ownerId.equals(viewerId) || !run.route) return run;
+    const trimmed = trimHomeEnds(run.route.coordinates, run.routeTimes ?? []);
+    return { ...run, route: { ...run.route, coordinates: trimmed.coordinates }, routeTimes: trimmed.times };
   }
 
   async create(
@@ -154,6 +158,12 @@ export class RunsService {
     });
     return run.save();
   }
+}
+
+// 남의 러닝이면 집 근처(출발·도착 100m)를 잘라 보여준다. owner는 populate된 사용자 또는 ObjectId
+function visibleRoute(viewerId: string, owner: unknown, coordinates: [number, number][]): [number, number][] {
+  const ownerId = (owner as { _id?: Types.ObjectId } | null)?._id ?? owner;
+  return String(ownerId) === viewerId ? coordinates : trimHomeEnds(coordinates).coordinates;
 }
 
 // 점마다의 시간은 좌표와 길이가 같고, 0 이상이며 줄어들지 않을 때만 저장한다. 아니면 빈 배열(스플릿 없음)

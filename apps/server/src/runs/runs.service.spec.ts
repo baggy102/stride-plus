@@ -47,7 +47,7 @@ describe('RunsService', () => {
       const raw = [
         {
           _id: 'run1',
-          userId: { _id: 'u1', profileImageUrl: 'img.png' },
+          userId: { _id: VIEWER, profileImageUrl: 'img.png' },
           distanceKm: 5.2,
           paceSecPerKm: 330,
           photoUrls: ['photo1.jpg'],
@@ -168,7 +168,7 @@ describe('RunsService', () => {
       const raw = [
         {
           _id: 'run1',
-          userId: { _id: 'u1', username: 'alice', profileImageUrl: null },
+          userId: { _id: VIEWER, username: 'alice', profileImageUrl: null },
           distanceKm: 5.2,
           paceSecPerKm: 330,
           photoUrls: ['photo1.jpg'],
@@ -354,6 +354,57 @@ describe('RunsService', () => {
       await expect(service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718')).rejects.toThrow(
         new NotFoundException('run_not_found'),
       );
+    });
+  });
+
+  describe('집 근처 가림(남의 러닝)', () => {
+    // 위도 37.5에서 경도 0.001도 ≈ 88m — 11점이면 약 880m
+    const coordinates = Array.from({ length: 11 }, (_, i) => [127 + i * 0.001, 37.5]);
+    const routeTimes = coordinates.map((_, i) => i * 30);
+    const OTHER = '64b7f0c2a1b2c3d4e5f60799';
+    const chain = (value: unknown) => ({
+      select: jest.fn().mockReturnThis(),
+      populate: jest.fn().mockReturnThis(),
+      sort: jest.fn().mockReturnThis(),
+      skip: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockReturnThis(),
+      lean: jest.fn().mockReturnThis(),
+      exec: jest.fn().mockResolvedValue(value),
+    });
+    const run = (owner: string) => ({
+      _id: 'run1',
+      userId: { _id: new Types.ObjectId(owner) },
+      distanceKm: 0.88,
+      route: { type: 'LineString', coordinates },
+      routeTimes,
+    });
+
+    it('findNearby — 남의 시작점은 출발점에서 100m 안쪽, 내 시작점은 원본', async () => {
+      mockFind.mockReturnValue(chain([run(OTHER), run(VIEWER)]));
+      const [other, mine] = await service.findNearby(VIEWER, 37.5, 127);
+      expect(other.startPoint).not.toEqual(coordinates[0]);
+      expect(other.startPoint?.[0]).toBeGreaterThan(127.001);
+      expect(mine.startPoint).toEqual(coordinates[0]);
+    });
+
+    it('findByUser — 남의 목록은 경로 앞뒤를 자른다', async () => {
+      mockFind.mockReturnValue(chain([run(OTHER)]));
+      const [result] = await service.findByUser(VIEWER, OTHER);
+      expect(result.route).not.toContainEqual(coordinates[0]);
+      expect(result.route).not.toContainEqual(coordinates[10]);
+      expect(result.startPoint).toEqual(result.route[0]);
+      expect(result.distanceKm).toBe(0.88);
+    });
+
+    it('findById — 남의 러닝은 경로와 routeTimes를 같이 자르고, 내 러닝은 그대로', async () => {
+      mockRunModel.findById.mockReturnValue(chain(run(OTHER)));
+      const other = await service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718');
+      expect(other.route.coordinates).not.toContainEqual(coordinates[0]);
+      expect(other.routeTimes).toHaveLength(other.route.coordinates.length);
+
+      const mineRun = run(VIEWER);
+      mockRunModel.findById.mockReturnValue(chain(mineRun));
+      expect(await service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718')).toBe(mineRun);
     });
   });
 });
