@@ -4,6 +4,7 @@ import { PostsService } from './posts.service';
 
 const mockPostsService = {
   create: jest.fn(),
+  cheer: jest.fn(),
 };
 
 describe('PostsController', () => {
@@ -28,5 +29,12 @@ describe('PostsController', () => {
 
     expect(mockPostsService.create).toHaveBeenCalledWith('u1', dto);
     expect(result).toBe(created);
+  });
+
+  it('cheer — req.user.sub와 runId를 서비스에 넘긴다', async () => {
+    mockPostsService.cheer.mockResolvedValue({ cheers: 1, cheered: true });
+    const result = await controller.cheer({ user: { sub: 'u1' } }, 'r1');
+    expect(mockPostsService.cheer).toHaveBeenCalledWith('u1', 'r1');
+    expect(result).toEqual({ cheers: 1, cheered: true });
   });
 });

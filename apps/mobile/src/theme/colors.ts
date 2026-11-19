@@ -20,6 +20,10 @@ export interface Palette {
   /** 포인트 Signal Blue(2026-11-14 확정): 고른 토글·탭 채움, 캘린더 달린 날 */
   point: string;
   onPoint: string; // point 위 글자·아이콘
+  /** 지도 피드 소셜 색(2026-11-19 확정): HYPE = Pearl(응원 많은 러닝), NEW = Aurora Mint(24시간 안). 지도 피드에서만 쓴다 */
+  hype: string;
+  fresh: string;
+  onSocial: string; // hype·fresh 위 글자
   /** 캘린더 거리 단계 색(5 km 미만 · 5~10 km · 10 km 이상). 2단계 = point. 라이트는 길수록 진하게, 다크는 길수록 밝게 */
   level: [string, string, string];
   danger: string;
@@ -74,6 +78,9 @@ export const palettes: Record<Scheme, Palette> = {
     logo: '#4B83B5',
     point: '#2E8BFF',
     onPoint: '#0B1016',
+    hype: '#F2FAFF',
+    fresh: '#5CF0C2',
+    onSocial: '#0B1016',
     level: ['#1E5AA8', '#2E8BFF', '#9CCBFF'],
     danger: '#E5484D',
     shadow: '#000000',
@@ -125,6 +132,9 @@ export const palettes: Record<Scheme, Palette> = {
     logo: '#4B83B5',
     point: '#2E8BFF',
     onPoint: '#0B1016',
+    hype: '#0B1016',
+    fresh: '#0A7D60',
+    onSocial: '#FFFFFF',
     level: ['#6AABFF', '#2E8BFF', '#0A56C2'],
     danger: '#E5484D',
     shadow: '#0B1016',

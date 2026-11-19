@@ -7,7 +7,10 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
-import { MapPopupCard } from '@/components/MapPopupCard';
+import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
+import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { traceLayerScript, type TraceColors, type TraceMessage } from '@/components/map/traceLayer';
+import { routeGeometry } from '@/utils/route';
 import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
@@ -50,6 +53,16 @@ function CalendarDotsIcon({ color }: { color: string }) {
 }
 
 const PAGE_SIZE = 20;
+// 고른 경로는 카메라가 먼저 움직이고 0.38초 뒤 그린다(지도 피드와 같다)
+const ROUTE_DELAY_MS = 380;
+const HOME_LABEL = '집 근처 100m 가림 · 기본 ON';
+// 저장 직후 「내 흔적」: 카메라가 새 경로로 간 뒤 스며들기 시작
+const TRACE_DELAY_MS = 650;
+const TOAST_MS = 2800;
+
+function traceColors(c: Palette): TraceColors {
+  return { base: c.muted, ice: c.map.dot, mint: c.fresh };
+}
 
 // 테마가 바뀔 때만 새로 만든다. 러닝은 window.__setRuns로 넣는다(D2 — 재로드 없음)
 function buildHtml(p: Palette, dark: boolean) {
@@ -78,6 +91,8 @@ ${MARKER_PULSE_CSS}
   var map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
 ${baseMapScript(p, dark)}
 ${markerIconsScript(p, 'profile')}
+${routeFxScript()}
+${traceLayerScript()}
   var group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   map.addLayer(group);
   var fitted = false;
@@ -91,6 +106,8 @@ ${markerIconsScript(p, 'profile')}
 
   window.__setRuns = function(runs) {
     lastRuns = runs;
+    // 내 흔적: 러닝이 지난 칸(D3 격자)
+    window.__trace.setRuns(runs.map(function(r) { return { _id: r._id, t: Date.parse(r.createdAt) || 0, route: r.route || [] }; }));
     group.clearLayers();
     var all = [];
     runs.forEach(function(run) {
@@ -138,6 +155,9 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const [view, setView] = useState<ProfileView>('map');
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
   const [headerHeight, setHeaderHeight] = useState(0);
+  const headerHeightRef = useRef(0);
+  headerHeightRef.current = headerHeight;
+  const [toast, setToast] = useState<{ title: string; sub: string } | null>(null);
   const webViewRef = useRef<WebViewHandle>(null);
   const mapLoaded = useRef(false);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
@@ -145,10 +165,18 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const html = useMemo(() => buildHtml(initialTheme.p, initialTheme.dark), [initialTheme]);
 
   // 지도에 러닝을 넣는다 — WebView를 다시 로드하지 않는다
+  const pendingTrace = useRef<string | null>(null);
   const pushRuns = useCallback(() => {
     if (!mapLoaded.current) return;
     webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs)});true;`);
-  }, [runs]);
+    const filed = runs.find((run) => run._id === pendingTrace.current);
+    if (!filed) return;
+    pendingTrace.current = null;
+    const pad = [headerHeightRef.current + 16, bottomBase + 96];
+    webViewRef.current?.injectJavaScript(
+      `window.__fitRoute(${JSON.stringify(filed.route)},${JSON.stringify(pad)});setTimeout(function(){window.__trace.play(${JSON.stringify(filed._id)});},${TRACE_DELAY_MS});true;`,
+    );
+  }, [runs, bottomBase]);
 
   useEffect(pushRuns, [pushRuns]);
 
@@ -203,17 +231,54 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     load('initial');
   }, [load]);
 
-  // 저장 직후(요약 → 앨범): 목록 보기로 바꾸고 새 기록을 불러온다. 파라미터는 지우고, 히어로가
-  // 새 기록으로 바뀔 때 File 전환을 하도록 대상 ID만 남겨 둔다(보기를 바꾸면 지운다)
-  const [fileTarget, setFileTarget] = useState<string | undefined>(undefined);
+  // 저장 직후: 지도 보기로 바꾸고 새 기록을 불러온 뒤, 그 경로가 내 흔적(칸)으로 스며든다(2026-11-19 내 피드 A안).
+  // 파라미터는 지우고 재생할 러닝 ID만 남긴다(pushRuns가 재생한다)
   useEffect(() => {
     if (!filedRunId) return;
-    setFileTarget(filedRunId);
-    setView('list');
+    pendingTrace.current = filedRunId;
+    setView('map');
     setSelected(null);
     load('quiet');
     router.setParams({ filed: undefined });
   }, [filedRunId]);
+
+  // 내 흔적 결과 알림(잠깐 떴다 사라진다)
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // 칸 색은 테마를 따른다
+  useEffect(() => {
+    if (!mapLoaded.current) return;
+    webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(traceColors(c))});true;`);
+  }, [c]);
+
+  // 고른 러닝: 카메라를 경로에 맞추고 경로 연출 A+(지도 피드와 같다). 남의 러닝은 서버가 집 근처를 잘라 보낸다
+  const drawnId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mapLoaded.current) return;
+    if (!selected) {
+      drawnId.current = null;
+      webViewRef.current?.injectJavaScript('window.__routeFx&&window.__routeFx.clear();true;');
+      return;
+    }
+    const geometry = routeGeometry(selected.route, mine);
+    const options: RouteFxOptions = {
+      col: c.map.dot, bg: c.bg, glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
+      label: mine ? HOME_LABEL : null,
+      delay: ROUTE_DELAY_MS,
+      keep: drawnId.current === selected._id,
+      seed: selected._id.length,
+    };
+    const first = drawnId.current !== selected._id;
+    drawnId.current = selected._id;
+    const pad = [headerHeightRef.current + 16, bottomBase + POSTER_HEIGHT + 24];
+    webViewRef.current?.injectJavaScript(
+      `${first ? `window.__fitRoute(${JSON.stringify(selected.route)},${JSON.stringify(pad)});` : ''}window.__routeFx.show(${JSON.stringify(geometry)},${JSON.stringify(options)});true;`,
+    );
+  }, [selected, mine, c, bottomBase]);
 
   // 탭 재진입 시 화면을 유지한 채 다시 불러온다
   const skipFirstFocus = useRef(true);
@@ -269,9 +334,23 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
               style={StyleSheet.absoluteFill}
               originWhitelist={['*']}
               onLoadStart={() => { mapLoaded.current = false; }}
-              onLoadEnd={() => { mapLoaded.current = true; applyTheme(); pushRuns(); }}
+              onLoadEnd={() => {
+                mapLoaded.current = true;
+                applyTheme();
+                webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(traceColors(c))});true;`);
+                pushRuns();
+              }}
               onMessage={(e) => {
-                try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
+                try {
+                  const message = JSON.parse(e.nativeEvent.data) as RunWithRoute | TraceMessage;
+                  if ('type' in message && message.type === 'trace') {
+                    setToast(message.fresh > 0
+                      ? { title: `새 길 ${message.fresh}칸을 열었어요`, sub: `내 흔적 +${message.total}칸` }
+                      : { title: `익숙한 길 ${message.total}칸을 다시 달렸어요`, sub: '내 흔적' });
+                  } else {
+                    setSelected(message as RunWithRoute);
+                  }
+                } catch {}
               }}
             />
           )}
@@ -308,7 +387,6 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                 state={listState}
                 baseUrl={BASE_URL}
                 mine={mine}
-                filedRunId={fileTarget}
                 refreshing={refreshing}
                 loadingMore={loadingMore}
                 topInset={headerHeight}
@@ -396,7 +474,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={id === 'map' ? '지도 보기' : id === 'list' ? '목록 보기' : '캘린더 보기'}
                     hitSlop={{ top: 3, bottom: 3 }}
-                    onPress={() => { setView(id); setSelected(null); setFileTarget(undefined); }}
+                    onPress={() => { setView(id); setSelected(null); }}
                     style={[styles.segmentBtn, on && styles.segmentOn]}
                   >
                     {id === 'map' ? <MapIcon color={color} /> : id === 'list' ? <ListIcon color={color} /> : <CalendarDotsIcon color={color} />}
@@ -408,15 +486,30 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
         )}
       </View>
 
-      {/* 선택된 런 카드 */}
+      {/* 선택된 런: 포스터 카드(지도 피드와 같다) */}
       {showMap && selected && (
         <MapPopupCard
+          key={selected._id}
           run={selected}
           baseUrl={BASE_URL}
           bottom={bottomBase}
+          route={selected.route}
+          routeColor={c.map.dot}
+          mine={mine}
           onClose={() => setSelected(null)}
           onDetailPress={openRun}
+          onCheered={(runId, cheers, cheered) => setRuns((prev) => prev.map((run) => (run._id === runId ? { ...run, cheers, cheered } : run)))}
         />
+      )}
+
+      {/* 내 흔적 알림 */}
+      {showMap && toast && !selected && (
+        <View accessibilityRole="alert" style={[styles.toastShadow, { bottom: bottomBase + 60 }]} pointerEvents="none">
+          <Glass style={styles.toast}>
+            <Text style={styles.toastTitle}>{toast.title}</Text>
+            <Text style={styles.toastSub}>{toast.sub}</Text>
+          </Glass>
+        </View>
       )}
     </View>
   );
@@ -469,4 +562,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     ...elevationStyle(c),
   },
   myLocGlass: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  toastShadow: { position: 'absolute', alignSelf: 'center', borderRadius: 16, ...elevationStyle(c) },
+  toast: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center' },
+  toastTitle: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text },
+  toastSub: { ...monoLabel(10, 0.08), lineHeight: 14, color: c.muted },
 });
