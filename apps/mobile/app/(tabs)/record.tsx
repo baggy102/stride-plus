@@ -202,7 +202,7 @@ export default function RecordScreen() {
         </View>
       )}
 
-      {/* 항상 허용을 거부해 포그라운드로 기록 중 */}
+      {/* 백그라운드 업데이트를 못 켜 앱이 보일 때만 기록 중(Expo Go 등) */}
       {isTracking && trackingMode === 'foreground' && (
         <View accessibilityRole="alert" style={[styles.banner, { top: insets.top + 38 + (!isPaused && gpsWeak ? BANNER_HEIGHT + 8 : 0) }]}>
           <WarnIcon color={c.warn} />
