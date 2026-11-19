@@ -5,6 +5,7 @@ import { register } from 'node:module';
 // run.ts가 쓰는 네이티브 모듈(expo-location, react-native)을 가짜로 바꿔 끼운다.
 // 가짜 동작은 globalThis.__loc / __appState에 두고 테스트마다 바꾼다.
 const routeUrl = new URL('../utils/route.ts', import.meta.url).href;
+const gpsSignalUrl = new URL('../utils/gpsSignal.ts', import.meta.url).href;
 const locationSrc = `
   const L = () => globalThis.__loc;
   export const Accuracy = { BestForNavigation: 6 };
@@ -23,6 +24,7 @@ const hooks = `
     'expo-location': 'data:text/javascript,' + encodeURIComponent(${JSON.stringify(locationSrc)}),
     'react-native': 'data:text/javascript,' + encodeURIComponent(${JSON.stringify(rnSrc)}),
     '@/utils/route': ${JSON.stringify(routeUrl)},
+    '@/utils/gpsSignal': ${JSON.stringify(gpsSignalUrl)},
   };
   export async function resolve(specifier, context, next) {
     if (map[specifier]) return { url: map[specifier], shortCircuit: true };

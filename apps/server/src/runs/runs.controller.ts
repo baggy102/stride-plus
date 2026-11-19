@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Param, Query, Req,
+  BadRequestException, Controller, Get, Post, Param, Query, Req,
   UseInterceptors, UploadedFiles, Body,
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
@@ -22,7 +22,12 @@ export class RunsController {
   @Get()
   findRuns(@Req() req: { user: { sub: string } }, @Query() dto: FindRunsDto) {
     if (dto.userId) {
-      return this.runsService.findByUser(req.user.sub, dto.userId, dto.page, dto.limit);
+      const from = dto.from ? new Date(dto.from) : undefined;
+      const to = dto.to ? new Date(dto.to) : undefined;
+      // IsISO8601이 통과시키는 주차 표기(2026-W01) 등은 Date로 못 바꾼다 → 500 대신 400
+      if ((from && isNaN(from.getTime())) || (to && isNaN(to.getTime()))) throw new BadRequestException('invalid_period');
+      if (from && to && from >= to) throw new BadRequestException('invalid_period');
+      return this.runsService.findByUser(req.user.sub, dto.userId, dto.page, dto.limit, from, to);
     }
     return this.runsService.findNearby(req.user.sub, dto.lat ?? 0, dto.lng ?? 0, dto.radius ?? 5000);
   }

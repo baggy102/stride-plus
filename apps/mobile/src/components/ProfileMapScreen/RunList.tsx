@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  View, Text, Pressable, Image, FlatList, RefreshControl, ActivityIndicator, StyleSheet, Animated,
+  View, Text, Pressable, RefreshControl, ActivityIndicator, StyleSheet, Animated as RNAnimated, type LayoutChangeEvent,
 } from 'react-native';
-import Svg, { Circle, Path, Polyline } from 'react-native-svg';
+import Animated, {
+  runOnJS, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { AlertIcon, RouteIcon } from '@/components/icons';
+import { CARD_FULL, CARD_HEAD, CARD_RADIUS, CollapsedRow, ExpandedCard, titleOf, type FeedRun } from '@/components/FeedCard';
 import { useColors } from '@/theme/useColors';
-import { FONT, monoLabel } from '@/theme/fonts';
-import { elevationStyle, type Palette } from '@/theme/colors';
-import type { RunMarker } from '../RunCard';
-import { formatDuration, formatRunPace } from '@/utils/pace';
-import { formatDay } from '@/utils/date';
-import { fitToBox } from '@/utils/route';
+import { FONT } from '@/theme/fonts';
+import { withAlpha, type Palette } from '@/theme/colors';
+import type { RunMarker } from '@/types/run';
+import { formatDate } from '@/utils/date';
 import { MOTION, easeOutCubic, useReducedMotion } from '@/utils/motion';
 
 export interface RunWithRoute extends RunMarker {
@@ -25,9 +27,7 @@ interface Props {
   state: ListState;
   baseUrl: string;
   mine: boolean;
-  /** 전체 러닝 수(서버 누적). 「27 RUNS · LATEST」 */
-  totalRuns: number | null;
-  /** 방금 저장한 러닝 — 그 기록이 히어로면 File 전환으로 들어온다 */
+  /** 방금 저장한 러닝 — 그 기록이 맨 위면 File 전환으로 들어온다 */
   filedRunId?: string;
   refreshing: boolean;
   loadingMore: boolean;
@@ -36,53 +36,57 @@ interface Props {
   onRefresh: () => void;
   onEndReached: () => void;
   onRetry: () => void;
-  onRunPress: (runId: string) => void;
+  /** top = 누른 펼친 카드의 화면 y(상세가 그 자리에서 열린다) */
+  onRunPress: (runId: string, top: number) => void;
   onStartRun: () => void;
 }
 
-const THUMB = 52;
-const HERO_HEIGHT = 280;
-const WHITE = '#FFFFFF';
+// 매거진형(2026-11-15 확정 시안 16차): 펼친 카드 1장 + 접힌 한 줄, 스크롤 한 칸(STEP)마다 멈춤
+const GAP = 6;
+const PEEK = 7; // 지나간 카드가 위에 겹쳐 보이는 두께
+const STEP = 300;
+const SIDE = 10;
 
-const titleOf = (run: RunMarker) => run.description?.trim() || '러닝 기록';
-const timeOf = (run: RunMarker) => (run.paceSecPerKm && run.distanceKm ? formatDuration(run.paceSecPerKm * run.distanceKm) : '--:--');
+const clamp01 = (v: number) => {
+  'worklet';
+  return Math.min(1, Math.max(0, v));
+};
 
-// 격자(간격 cell) 위 경로 선. 썸네일·히어로가 같이 쓴다
-function RouteOnGrid({ route, size, cell, stroke, grid, inset }: {
-  route: [number, number][]; size: [number, number]; cell: number; stroke: string; grid: string; inset: number;
-}) {
-  const [w, h] = size;
-  const d = useMemo(() => {
-    let g = '';
-    for (let x = 0; x <= w; x += cell) g += `M${x + 0.5} 0V${h}`;
-    for (let y = 0; y <= h; y += cell) g += `M0 ${y + 0.5}H${w}`;
-    return g;
-  }, [w, h, cell]);
-  const pts = useMemo(() => fitToBox(route, w, h, inset), [route, w, h, inset]);
-  return (
-    <Svg width={w} height={h} style={StyleSheet.absoluteFill}>
-      <Path d={d} stroke={grid} strokeWidth={1} fill="none" />
-      {pts.length > 1 && (
-        <>
-          <Polyline points={pts.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke={stroke} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" />
-          <Circle cx={pts[0][0]} cy={pts[0][1]} r={2.6} fill="none" stroke={stroke} strokeWidth={1.6} />
-          <Circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r={2.6} fill={stroke} />
-        </>
-      )}
-    </Svg>
-  );
+// p = 펼쳐진 카드 위치(0 ~ n-1, 소수면 두 카드 사이). 카드 k의 높이 · 위치 · 접힘 정도
+export function cardLayout(k: number, p: number, n: number, y0: number) {
+  'worklet';
+  const pos = Math.max(0, Math.min(n - 1, p));
+  let f = Math.floor(pos);
+  let t = pos - f;
+  if (f >= n - 1) { f = n - 1; t = 0; }
+  const hOf = (j: number) => CARD_HEAD + (CARD_FULL - CARD_HEAD) * clamp01(1 - Math.abs(j - pos));
+  const yf = f === 0 ? y0 : y0 + (CARD_HEAD + GAP) * (1 - t);
+  let y = yf;
+  if (k > f) {
+    y = yf + hOf(f) + GAP;
+    if (k > f + 1) y += hOf(f + 1) + GAP + (k - f - 2) * (CARD_HEAD + GAP);
+  } else if (k < f) {
+    y = yf - (f - k) * (CARD_HEAD + GAP);
+  }
+  let top = y;
+  let scale = 1;
+  let behind = 0; // 위로 지나간 정도(카드 칸 수)
+  if (top < y0) {
+    behind = (y0 - top) / (CARD_HEAD + GAP);
+    const b = Math.min(behind, 2);
+    top = y0 - PEEK * b;
+    scale = 1 - 0.045 * b;
+  }
+  return { height: hOf(k), top, scale, behind, open: clamp01(1 - Math.abs(k - pos)) };
 }
 
-// 최신 기록 히어로: 코스·날짜 / 거리 64 / 시간·페이스.
-// 사진이 있으면 사진 + 아래 어두운 스크림 + 흰 글자, 오른쪽 위 유리 상자에 경로.
-// 사진이 없으면 테마 카드(surface) 위 격자 + 경로, 스크림 없이 테마 글자색
 // File(520ms): 요약 화면에서 접혀 들어오듯 위에서 살짝 크게 시작해 제자리로
 function FileIn({ active, children }: { active: boolean; children: ReactNode }) {
   const reduced = useReducedMotion();
-  const p = useRef(new Animated.Value(active ? 0 : 1)).current;
+  const p = useRef(new RNAnimated.Value(active ? 0 : 1)).current;
   useEffect(() => {
     if (!active) return;
-    Animated.timing(p, { toValue: 1, duration: reduced ? MOTION.reduced : MOTION.file, easing: easeOutCubic, useNativeDriver: true }).start();
+    RNAnimated.timing(p, { toValue: 1, duration: reduced ? MOTION.reduced : MOTION.file, easing: easeOutCubic, useNativeDriver: true }).start();
   }, [active, reduced, p]);
   const style = reduced
     ? { opacity: p }
@@ -93,143 +97,101 @@ function FileIn({ active, children }: { active: boolean; children: ReactNode }) 
         { scale: p.interpolate({ inputRange: [0, 1], outputRange: [1.08, 1] }) },
       ],
     };
-  return <Animated.View style={style}>{children}</Animated.View>;
+  return <RNAnimated.View style={style}>{children}</RNAnimated.View>;
 }
 
-function Hero({ run, baseUrl, c, styles, onPress }: {
-  run: RunWithRoute; baseUrl: string; c: Palette; styles: ReturnType<typeof makeStyles>; onPress: () => void;
+function MagazineCard({ run, index, count, scrollY, y0, width, liveMap, filed, baseUrl, dimColor, dimMax, styles, onPress }: {
+  run: RunWithRoute; index: number; count: number; scrollY: SharedValue<number>; y0: number; width: number;
+  liveMap: boolean; filed: boolean; baseUrl: string; dimColor: string; dimMax: number;
+  styles: ReturnType<typeof makeStyles>; onPress: () => void;
 }) {
-  const photo = run.photoUrls[0];
-  const pace = formatRunPace(run.paceSecPerKm, run.distanceKm);
-  const time = timeOf(run);
-  const [width, setWidth] = useState(350);
-  const icon = photo ? WHITE : c.text2;
+  const cardStyle = useAnimatedStyle(() => {
+    const l = cardLayout(index, scrollY.value / STEP, count, y0);
+    return {
+      height: l.height,
+      opacity: l.behind > 2.5 ? 0 : 1,
+      transform: [{ translateY: l.top }, { scaleX: l.scale }],
+    };
+  });
+  // 펼친 내용은 흐리지 않고 카드 높이로만 잘라 보인다. 한 줄은 펼치기 시작할 때만 교차
+  const rowStyle = useAnimatedStyle(() => {
+    const l = cardLayout(index, scrollY.value / STEP, count, y0);
+    return { opacity: clamp01(1 - l.open * 5) * (1 - clamp01(l.behind)) };
+  });
+  const fullStyle = useAnimatedStyle(() => {
+    const l = cardLayout(index, scrollY.value / STEP, count, y0);
+    return { opacity: clamp01((l.open - 0.12) / 0.2) };
+  });
+  const dimStyle = useAnimatedStyle(() => {
+    const l = cardLayout(index, scrollY.value / STEP, count, y0);
+    return { opacity: Math.min(l.behind, 2) * dimMax };
+  });
   return (
-    <Pressable
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      accessibilityRole="button"
-      accessibilityLabel={`최근 러닝 ${titleOf(run)}, ${formatDay(run.createdAt)}, ${run.distanceKm.toFixed(2)} km, 시간 ${time}, 페이스 ${pace}`}
-      onPress={onPress}
-      style={styles.hero}
-    >
-      {photo ? (
-        <Image source={{ uri: `${baseUrl}${photo}` }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-      ) : (
-        <View style={[StyleSheet.absoluteFill, styles.heroPlain]}>
-          <RouteOnGrid route={run.route} size={[width, HERO_HEIGHT]} cell={24} stroke={c.value} grid={c.grid} inset={48} />
-        </View>
-      )}
-      {photo && (
-        <LinearGradient
-          colors={['rgba(11,16,22,0)', 'rgba(11,16,22,0.65)', 'rgba(11,16,22,0.88)']}
-          locations={[0, 0.25, 1]}
-          style={styles.heroShade}
-          pointerEvents="none"
-        />
-      )}
-      {photo && (
-        <View style={styles.heroBadge} pointerEvents="none">
-          <RouteOnGrid route={run.route} size={[58, 58]} cell={58} stroke={WHITE} grid="transparent" inset={10} />
-        </View>
-      )}
-      <View style={styles.heroText} pointerEvents="none">
-        <View style={styles.heroTitleRow}>
-          <Text style={[styles.heroTitle, !photo && styles.heroTitlePlain]} numberOfLines={1}>{titleOf(run)}</Text>
-          <Text style={[styles.heroDate, !photo && styles.heroDatePlain]}>{formatDay(run.createdAt)}</Text>
-        </View>
-        <View style={styles.heroDistRow}>
-          <Text style={[styles.heroDist, !photo && styles.heroDistPlain]}>{run.distanceKm.toFixed(2)}</Text>
-          <Text style={[styles.heroKm, !photo && styles.heroKmPlain]}>km</Text>
-        </View>
-        <View style={styles.heroMinor}>
-          <View style={styles.heroMinorItem}>
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={icon} strokeWidth={2} strokeLinecap="round">
-              <Circle cx={12} cy={13.5} r={7.5} />
-              <Path d="M12 13.5V10M9.5 2.5h5" />
-            </Svg>
-            <Text style={[styles.heroMinorText, !photo && styles.heroMinorTextPlain]}>{time}</Text>
-          </View>
-          <View style={styles.heroMinorItem}>
-            <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={icon} strokeWidth={2} strokeLinecap="round">
-              <Path d="M4 17a8 8 0 0 1 16 0" />
-              <Path d="m12 17 4-5" />
-            </Svg>
-            <Text style={[styles.heroMinorText, !photo && styles.heroMinorTextPlain]}>
-              {pace}
-              <Text style={[styles.heroMinorUnit, !photo && styles.heroMinorUnitPlain]}>/km</Text>
-            </Text>
-          </View>
-        </View>
-      </View>
-    </Pressable>
+    <Animated.View style={[styles.card, { zIndex: index + 1 }, cardStyle]}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${titleOf(run)}, ${formatDate(run.createdAt)}, ${run.distanceKm.toFixed(2)} km`}
+        onPress={onPress}
+        style={StyleSheet.absoluteFill}
+      >
+        <Animated.View style={[styles.layer, fullStyle]}>
+          <FileIn active={filed}>
+            <ExpandedCard run={run as FeedRun} baseUrl={baseUrl} liveMap={liveMap} width={width} />
+          </FileIn>
+        </Animated.View>
+        <Animated.View style={[styles.layer, rowStyle]}>
+          <CollapsedRow run={run as FeedRun} />
+        </Animated.View>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: dimColor }, dimStyle]} />
+      </Pressable>
+    </Animated.View>
   );
 }
 
-function RunItem({ run, baseUrl, c, styles, latest, onPress }: {
-  run: RunWithRoute; baseUrl: string; c: Palette; styles: ReturnType<typeof makeStyles>; latest: boolean; onPress: () => void;
-}) {
-  const date = formatDay(run.createdAt);
-  const photo = run.photoUrls[0];
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${titleOf(run)}, ${date} 러닝 ${run.distanceKm.toFixed(2)} km, 페이스 ${formatRunPace(run.paceSecPerKm, run.distanceKm)}, 시간 ${timeOf(run)}${run.photoUrls.length ? `, 사진 ${run.photoUrls.length}장` : ''}`}
-      onPress={onPress}
-      // 함수형 style은 NativeWind interop에서 적용되지 않아 정적 style을 쓴다
-      style={[styles.row, latest && styles.rowLatest]}
-    >
-      <View style={styles.thumb}>
-        {photo ? (
-          <Image source={{ uri: `${baseUrl}${photo}` }} style={StyleSheet.absoluteFill} />
-        ) : (
-          <RouteOnGrid route={run.route} size={[THUMB, THUMB]} cell={9} stroke={c.map.dot} grid={c.dark ? 'rgba(157,191,224,0.08)' : 'rgba(36,71,107,0.08)'} inset={9} />
-        )}
-      </View>
-      <View style={styles.rowBody}>
-        <Text style={styles.title} numberOfLines={1}>{titleOf(run)}</Text>
-        <Text style={[styles.date, latest && styles.dateLatest]}>{date}</Text>
-      </View>
-      <Text style={styles.distance}>
-        {run.distanceKm.toFixed(1)}
-        <Text style={[styles.distanceUnit, latest && styles.dateLatest]}> km</Text>
-      </Text>
-    </Pressable>
-  );
-}
-
-// Frost S08/S09 목록 보기 — 최신 기록 히어로 + 「러닝 앨범」 72px 줄 + 로딩·빈·오류·새로고침·다음 페이지 상태
+// Frost S08/S09 목록 보기 — 매거진형 + 로딩·빈·오류·새로고침·다음 페이지 상태
 export function RunList(props: Props) {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
-  const { runs, state, mine, topInset, bottomInset, totalRuns } = props;
-  const contentStyle = { paddingTop: topInset + 4, paddingBottom: bottomInset, paddingHorizontal: 20, gap: 8 };
+  const { runs, state, mine, topInset, bottomInset } = props;
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [current, setCurrent] = useState(0);
+  const scrollY = useSharedValue(0);
+  const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const n = runs.length;
+  const y0 = topInset + 10;
+  const cardWidth = Math.max(0, size.width - SIDE * 2);
+
+  const onScroll = useAnimatedScrollHandler((e) => { scrollY.value = e.contentOffset.y; });
+  useAnimatedReaction(
+    () => Math.round(Math.max(0, scrollY.value) / STEP),
+    (now, prev) => { if (now !== prev) runOnJS(setCurrent)(now); },
+  );
+  // 끝에서 세 칸 전부터 다음 페이지
+  // 실패하면 다음 스크롤(current 변화)에서 다시 시도한다. 콜백이 바뀌는 것만으로는 부르지 않는다
+  const onEndReached = useRef(props.onEndReached);
+  onEndReached.current = props.onEndReached;
+  useEffect(() => {
+    if (n > 0 && current >= n - 3) onEndReached.current();
+  }, [current, n]);
+
+  const stageStyle = useAnimatedStyle(() => ({ transform: [{ translateY: scrollY.value }] }));
+
+  const onLayout = (e: LayoutChangeEvent) => setSize({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height });
 
   if (state === 'loading') {
     return (
-      <View accessibilityLabel="러닝 기록을 불러오는 중" style={contentStyle}>
-        <View style={[styles.hero, styles.skeletonHero]}>
-          <View style={[styles.skeleton, styles.skeletonBadge]} />
-          <View style={styles.skeletonHeroText}>
-            <View style={[styles.skeleton, { width: 150, height: 16 }]} />
-            <View style={[styles.skeleton, { width: 170, height: 56, borderRadius: 12 }]} />
-            <View style={[styles.skeleton, { width: 160, height: 16 }]} />
-          </View>
+      <View accessibilityLabel="러닝 기록을 불러오는 중" style={{ paddingTop: y0, paddingHorizontal: SIDE, gap: GAP }}>
+        <View style={[styles.skeletonCard, { height: CARD_FULL }]}>
+          <View style={[styles.skeleton, { width: 160, height: 14, margin: 25 }]} />
         </View>
-        <View style={[styles.skeleton, { width: 92, height: 16, marginBottom: 8 }]} />
-        {[1, 0.8, 0.6, 0.4].map((opacity) => (
-          <View key={opacity} style={[styles.row, { opacity }]}>
-            <View style={[styles.skeleton, { width: THUMB, height: THUMB, borderRadius: 12 }]} />
-            <View style={[styles.rowBody, { gap: 8 }]}>
-              <View style={[styles.skeleton, { width: 120, height: 14 }]} />
-              <View style={[styles.skeleton, { width: 72, height: 12 }]} />
-            </View>
-          </View>
+        {[0.8, 0.6, 0.4].map((opacity) => (
+          <View key={opacity} style={[styles.skeletonCard, { height: CARD_HEAD, opacity }]} />
         ))}
       </View>
     );
   }
 
-  if (state === 'error' || runs.length === 0) {
+  if (state === 'error' || n === 0) {
     const isError = state === 'error';
     return (
       <View accessibilityRole={isError ? 'alert' : undefined} style={[styles.center, { paddingTop: topInset, paddingBottom: bottomInset }]}>
@@ -250,100 +212,87 @@ export function RunList(props: Props) {
     );
   }
 
-  const count = totalRuns ?? runs.length;
+  const press = (k: number) => {
+    const at = scrollY.value / STEP;
+    if (Math.abs(at - k) < 0.1) {
+      props.onRunPress(runs[k]._id, cardLayout(k, at, n, y0).top);
+      return;
+    }
+    scrollRef.current?.scrollTo({ y: k * STEP, animated: true });
+  };
+
   return (
-    <FlatList
-      accessibilityLabel="러닝 기록"
-      showsVerticalScrollIndicator={false}
-      data={runs}
-      keyExtractor={(run) => run._id}
-      ListHeaderComponent={
-        <View>
-          <FileIn key={runs[0]._id} active={!!props.filedRunId && props.filedRunId === runs[0]._id}>
-            <Hero run={runs[0]} baseUrl={props.baseUrl} c={c} styles={styles} onPress={() => props.onRunPress(runs[0]._id)} />
-          </FileIn>
-          <View style={styles.albumHead}>
-            <Text accessibilityRole="header" style={styles.albumTitle}>러닝 앨범</Text>
-            <Text style={styles.albumCount}>{`${count} RUNS · LATEST`}</Text>
-          </View>
-        </View>
-      }
-      renderItem={({ item, index }) => (
-        <RunItem run={item} baseUrl={props.baseUrl} c={c} styles={styles} latest={index === 0} onPress={() => props.onRunPress(item._id)} />
+    <View style={StyleSheet.absoluteFill} onLayout={onLayout}>
+      {size.height > 0 && (
+        <Animated.ScrollView
+          ref={scrollRef}
+          accessibilityLabel="러닝 기록"
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          snapToInterval={STEP}
+          decelerationRate="fast"
+          disableIntervalMomentum
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ height: (n - 1) * STEP + size.height }}
+          refreshControl={
+            <RefreshControl
+              refreshing={props.refreshing}
+              onRefresh={props.onRefresh}
+              tintColor={c.value}
+              colors={[c.value]}
+              progressViewOffset={topInset}
+            />
+          }
+        >
+          <Animated.View style={[styles.stage, { height: size.height }, stageStyle]}>
+            {runs.map((run, k) => (
+              <MagazineCard
+                key={run._id}
+                run={run}
+                index={k}
+                count={n}
+                scrollY={scrollY}
+                y0={y0}
+                width={cardWidth}
+                // 지도 WebView는 펼쳐진 카드와 그 앞뒤에만
+                liveMap={Math.abs(k - current) <= 1}
+                filed={k === 0 && !!props.filedRunId && props.filedRunId === run._id}
+                baseUrl={props.baseUrl}
+                dimColor={c.dark ? '#05080B' : '#111113'}
+                dimMax={c.dark ? 0.15 : 0.08}
+                styles={styles}
+                onPress={() => press(k)}
+              />
+            ))}
+          </Animated.View>
+        </Animated.ScrollView>
       )}
-      contentContainerStyle={contentStyle}
-      refreshControl={
-        <RefreshControl
-          refreshing={props.refreshing}
-          onRefresh={props.onRefresh}
-          tintColor={c.value}
-          colors={[c.value]}
-          progressViewOffset={topInset}
-        />
-      }
-      onEndReached={props.onEndReached}
-      onEndReachedThreshold={0.4}
-      ListFooterComponent={
-        props.loadingMore ? (
-          <View accessibilityLabel="다음 기록 불러오는 중" style={styles.footer}>
-            <ActivityIndicator color={c.value} />
-          </View>
-        ) : undefined
-      }
-    />
+      <LinearGradient
+        pointerEvents="none"
+        colors={[withAlpha(c.bg, 0), c.bg]}
+        locations={[0, 0.78]}
+        style={[styles.foot, { height: bottomInset + 40 }]}
+      />
+      {props.loadingMore && (
+        <View accessibilityLabel="다음 기록 불러오는 중" style={[styles.more, { bottom: bottomInset }]} pointerEvents="none">
+          <ActivityIndicator color={c.value} />
+        </View>
+      )}
+    </View>
   );
 }
 
 const makeStyles = (c: Palette) => StyleSheet.create({
-  hero: {
-    height: HERO_HEIGHT, marginBottom: 12, borderRadius: 20, overflow: 'hidden',
-    ...elevationStyle(c),
+  stage: { position: 'absolute', left: 0, right: 0, top: 0, overflow: 'hidden' },
+  card: {
+    position: 'absolute', left: SIDE, right: SIDE, top: 0,
+    borderRadius: CARD_RADIUS, overflow: 'hidden', backgroundColor: c.surface,
   },
-  heroShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 170 },
-  heroBadge: {
-    position: 'absolute', right: 14, top: 14, width: 60, height: 60, borderRadius: 14,
-    backgroundColor: 'rgba(157,191,224,0.14)', borderWidth: 1, borderColor: 'rgba(220,230,238,0.28)', overflow: 'hidden',
-  },
-  heroText: { position: 'absolute', left: 18, right: 18, bottom: 14 },
-  heroTitleRow: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  heroTitle: { flexShrink: 1, fontFamily: FONT.semibold, fontSize: 17, lineHeight: 22, color: WHITE },
-  heroDate: { ...monoLabel(12.5, 0.04), lineHeight: 20, color: WHITE },
-  heroDistRow: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-  heroDist: { fontFamily: FONT.num, fontSize: 64, lineHeight: 66, letterSpacing: -0.6, color: WHITE },
-  heroKm: { fontFamily: FONT.regular, fontSize: 18, color: 'rgba(255,255,255,0.78)' },
-  heroMinor: { marginTop: 2, flexDirection: 'row', gap: 16 },
-  heroMinorItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  heroMinorText: { fontFamily: FONT.num, fontSize: 16, lineHeight: 22, color: WHITE },
-  heroMinorUnit: { fontSize: 13, color: 'rgba(255,255,255,0.75)' },
-  // 사진 없는 히어로: 테마 카드 위 테마 글자색(스크림 없음)
-  heroPlain: { backgroundColor: c.surface, borderRadius: 20, borderWidth: 1, borderColor: c.border },
-  heroTitlePlain: { color: c.text },
-  heroDatePlain: { color: c.text2 },
-  heroDistPlain: { color: c.text },
-  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
-  heroKmPlain: { color: c.value },
-  heroMinorTextPlain: { color: c.text },
-  heroMinorUnitPlain: { color: c.text2 },
-  albumHead: { height: 24, marginBottom: 4, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  albumTitle: { fontFamily: FONT.bold, fontSize: 18, lineHeight: 24, color: c.text },
-  albumCount: { ...monoLabel(10.5, 0.14), lineHeight: 24, color: c.navOff },
-  row: {
-    height: 72, paddingLeft: 12, paddingRight: 16, borderRadius: 16, flexDirection: 'row', alignItems: 'center', gap: 12,
-    backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
-  },
-  rowLatest: { backgroundColor: c.surface2, borderWidth: 1.5, borderColor: c.value },
-  thumb: { width: THUMB, height: THUMB, borderRadius: 12, overflow: 'hidden', backgroundColor: c.surface2 },
-  rowBody: { flex: 1, minWidth: 0, gap: 1 },
-  title: { fontFamily: FONT.semibold, fontSize: 16, lineHeight: 22, color: c.text },
-  date: { ...monoLabel(12, 0.04), lineHeight: 18, color: c.navOff },
-  dateLatest: { color: c.text2 },
-  // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
-  distance: { fontFamily: FONT.num, fontSize: 22, lineHeight: 26, color: c.value },
-  distanceUnit: { fontFamily: FONT.num, fontSize: 13, color: c.navOff },
+  layer: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
+  foot: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  more: { position: 'absolute', left: 0, right: 0, height: 44, alignItems: 'center', justifyContent: 'center' },
+  skeletonCard: { borderRadius: CARD_RADIUS, backgroundColor: c.surface },
   skeleton: { height: 12, borderRadius: 6, backgroundColor: c.surface2 },
-  skeletonHero: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, shadowOpacity: 0, elevation: 0 },
-  skeletonBadge: { position: 'absolute', right: 14, top: 14, width: 60, height: 60, borderRadius: 14 },
-  skeletonHeroText: { position: 'absolute', left: 18, bottom: 18, gap: 10 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, paddingHorizontal: 24 },
   stateIcon: {
     width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center',
@@ -357,5 +306,4 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,
   },
   ghostText: { fontFamily: FONT.semibold, fontSize: 15, color: c.text },
-  footer: { height: 44, alignItems: 'center', justifyContent: 'center' },
 });

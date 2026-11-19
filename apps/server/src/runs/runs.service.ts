@@ -67,12 +67,16 @@ export class RunsService {
     });
   }
 
-  async findByUser(viewerId: string, userId: string, page = 1, limit = 50) {
+  // from·to를 주면 그 기간만: createdAt >= from, < to(to 미포함)
+  async findByUser(viewerId: string, userId: string, page = 1, limit = 50, from?: Date, to?: Date) {
     const oid = new Types.ObjectId(userId);
     const hidden = await this.hiddenUserIds(viewerId);
     if (hidden.some((id) => id.equals(oid))) return [];
+    const createdAt: { $gte?: Date; $lt?: Date } = {};
+    if (from) createdAt.$gte = from;
+    if (to) createdAt.$lt = to;
     const runs = await this.runModel
-      .find({ userId: oid })
+      .find(from || to ? { userId: oid, createdAt } : { userId: oid })
       .select(MARKER_SELECT)
       .populate('userId', USER_SELECT)
       .sort({ createdAt: -1 })

@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
-import { RunMarker } from '../RunCard';
-import { CloseIcon } from '../icons';
+import type { RunMarker } from '@/types/run';
+import { ChevronIcon, CloseIcon } from '../icons';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import { elevationStyle, type Palette } from '@/theme/colors';
@@ -21,7 +21,7 @@ interface Props {
 
 /**
  * 지도 마커 탭 시 뜨는 러닝 요약 카드 — Frost S05 (네이티브 전용, WebView 밖에서 렌더링).
- * 코스 이름 / 「작성자 · 08.30 일」 / 코스 보기 · 닫기, 아래에 거리 크게 + TIME·PACE. 경로는 지도에 그린다
+ * 코스 이름 / 「작성자 · 08.30 일」 / 코스 보기(›) · 닫기, 아래에 거리 크게 + TIME·PACE. 경로는 지도에 그린다
  */
 export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress, bottom = 24 }: Props) {
   const c = useColors();
@@ -51,8 +51,8 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
           <Text style={styles.meta} numberOfLines={1}>{`${username} · ${formatDay(run.createdAt)}`}</Text>
         </View>
         {onDetailPress && (
-          <Pressable accessibilityRole="button" onPress={() => onDetailPress(run._id)} style={styles.courseBtn} hitSlop={6}>
-            <Text style={styles.courseText}>코스 보기</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="코스 보기" onPress={() => onDetailPress(run._id)} style={styles.courseBtn} hitSlop={6}>
+            <ChevronIcon size={18} color={c.ink} />
           </Pressable>
         )}
         <Pressable accessibilityRole="button" accessibilityLabel="닫기" style={styles.closeBtn} onPress={onClose}>
@@ -95,11 +95,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   titleCol: { flex: 1, minWidth: 0 },
   title: { fontFamily: FONT.semibold, fontSize: 15, lineHeight: 20, color: c.text },
   meta: { ...monoLabel(12, 0.04), lineHeight: 17, color: c.navOff },
-  courseBtn: {
-    height: 32, paddingHorizontal: 12, borderRadius: 16, justifyContent: 'center',
-    borderWidth: 1, borderColor: c.glassBorder,
-  },
-  courseText: { fontFamily: FONT.regular, fontSize: 12, color: c.text },
+  // › 채운 원(옆 ✕와 구분). 32 + hitSlop 6 → 누르는 영역 44
+  courseBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
   closeBtn: { marginVertical: -5, marginRight: -12, marginLeft: -4, width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
   statsRow: { flexDirection: 'row', alignItems: 'flex-end', marginTop: 8 },
   distance: { fontFamily: FONT.num, fontSize: 56, lineHeight: 60, letterSpacing: -1.1, color: c.text },

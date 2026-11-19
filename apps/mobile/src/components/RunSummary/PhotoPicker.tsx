@@ -1,8 +1,7 @@
 import { useMemo } from 'react';
-import { View, Text, Pressable, Image, Alert, Linking, StyleSheet } from 'react-native';
+import { View, Pressable, Image, Alert, Linking, StyleSheet } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { useColors } from '@/theme/useColors';
-import { FONT } from '@/theme/fonts';
 import { PlusIcon, CloseIcon } from '../icons';
 import type { Palette } from '@/theme/colors';
 
@@ -65,7 +64,6 @@ export function PhotoPicker({ photos, onChange }: Props) {
             style={styles.addBtn}
           >
             <PlusIcon color={c.text} />
-            <Text style={styles.addText}>추가</Text>
           </Pressable>
         )}
       </View>
@@ -84,7 +82,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   addBtn: {
     width: 56, height: 56, borderColor: c.border, borderWidth: 1, backgroundColor: c.input,
-    borderRadius: 14, alignItems: 'center', justifyContent: 'center', gap: 1,
+    borderRadius: 14, alignItems: 'center', justifyContent: 'center',
   },
-  addText: { fontFamily: FONT.semibold, fontSize: 11, color: c.text },
 });

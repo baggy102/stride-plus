@@ -13,7 +13,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuthStore } from '@/store/auth';
-import { BackIcon, CheckIcon, EyeIcon } from '@/components/icons';
+import { BackIcon, CheckIcon, ChevronIcon, CloseIcon, EyeIcon } from '@/components/icons';
 import { LEGAL_DOCS, type LegalKey } from '@/config/legal';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
@@ -97,7 +97,6 @@ export default function RegisterScreen() {
             <View style={[styles.progressBar, styles.progressOn]} />
             <View style={[styles.progressBar, { backgroundColor: step === 2 ? c.value : c.surface2 }]} />
           </View>
-          <Text style={styles.progressLabel}>{step} / 2</Text>
         </View>
       </View>
 
@@ -202,7 +201,7 @@ export default function RegisterScreen() {
                   onPress={() => setNoticeVisible(true)}
                   style={styles.viewBtn}
                 >
-                  <Text style={styles.viewText}>보기</Text>
+                  <ChevronIcon color={c.text2} />
                 </Pressable>
               </View>
             ))}
@@ -215,9 +214,9 @@ export default function RegisterScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         {/* 약관 공개 페이지(F5) 전까지 안내만 띄운다 — 캔버스 결정 */}
         {step === 2 && noticeVisible && (
-          <Pressable accessibilityRole="button" onPress={() => setNoticeVisible(false)} style={styles.notice}>
+          <Pressable accessibilityRole="button" accessibilityLabel="약관 페이지 준비 중입니다. 닫기" onPress={() => setNoticeVisible(false)} style={styles.notice}>
             <Text style={styles.noticeText}>약관 페이지 준비 중입니다</Text>
-            <Text style={styles.noticeClose}>닫기</Text>
+            <CloseIcon color={c.text2} />
           </Pressable>
         )}
         {step === 1 ? (
@@ -259,7 +258,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   progressBar: { width: 20, height: 4, borderRadius: 2 },
   // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
   progressOn: { backgroundColor: c.value },
-  progressLabel: { fontFamily: FONT.num, fontSize: 14, lineHeight: 18, color: c.text2 },
   body: { paddingHorizontal: 24, paddingTop: 17, paddingBottom: 24, gap: 24 },
   titleBlock: { gap: 6 },
   title: { fontFamily: FONT.semibold, fontSize: 22, lineHeight: 30, color: c.text },
@@ -288,8 +286,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   agreeLabel: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 20, color: c.text },
   required: { fontFamily: FONT.semibold, color: c.value },
   agreeSub: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: c.text2 },
-  viewBtn: { height: 44, paddingHorizontal: 12, justifyContent: 'center' },
-  viewText: { fontFamily: FONT.semibold, fontSize: 14, color: c.text2, textDecorationLine: 'underline' },
+  viewBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   footer: { paddingHorizontal: 24, paddingTop: 8, gap: 12 },
   notice: {
     marginHorizontal: -8, height: 56, paddingHorizontal: 16, borderRadius: 16,
@@ -297,7 +294,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
   },
   noticeText: { fontFamily: FONT.regular, fontSize: 15, color: c.text },
-  noticeClose: { fontFamily: FONT.semibold, fontSize: 15, color: c.text2 },
   button: { height: 54, borderRadius: 10, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
   buttonDisabled: { backgroundColor: c.surface2 },
   buttonText: { fontFamily: FONT.semibold, fontSize: 16, color: c.ink },

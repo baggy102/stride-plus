@@ -97,7 +97,7 @@ export function HoldToStopButton({ onComplete, onTap, paused }: Props) {
         </Pressable>
       </View>
       <Text style={[styles.hint, { color: holding ? c.text : c.text2 }]}>
-        {holding ? '계속 누르고 있으면 종료돼요' : paused ? '탭하면 다시 시작 · 길게 누르면 종료' : '탭하면 일시정지 · 길게 누르면 종료'}
+        {holding ? '계속 누르고 있으면 종료돼요' : '길게 누르면 종료'}
       </Text>
     </View>
   );

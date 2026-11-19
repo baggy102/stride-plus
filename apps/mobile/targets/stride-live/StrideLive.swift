@@ -2,7 +2,7 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
-// Frost 잠금화면 위젯(캔버스 F-Lock): 서리 카드 안에 경로 점 구름 + 거리 + 페이스 · 시간, 아래 STRIDE+ LIVE · RUN/0427.
+// Frost 잠금화면 위젯(캔버스 F-Lock): 서리 카드 안에 경로 점 구름 + 거리 + 페이스 · 시간, 아래 STRIDE+ LIVE.
 // 다이내믹 아일랜드: 축소형은 Ice 점 + 거리, 펼침형은 거리 · 시간 · 페이스 + 경로.
 // 서체는 위젯에 앱 글꼴을 넣지 않고 시스템 글꼴로 대신한다(숫자 = 시스템 고정폭 숫자, 라벨 = 시스템 모노).
 
@@ -164,10 +164,6 @@ private struct LockScreenView: View {
           .tracking(1.4)
           .foregroundColor(state.paused ? p.warn : p.muted)
         Spacer()
-        Text("RUN/\(context.attributes.runNo)")
-          .font(.system(size: 10, weight: .medium, design: .monospaced))
-          .tracking(1.2)
-          .foregroundColor(p.muted)
       }
     }
     .padding(.horizontal, 20)
@@ -219,10 +215,12 @@ struct RunLiveActivity: Widget {
             RouteCloud(route: state.route, color: p.value, head: p.head)
               .frame(width: 64, height: 28)
             Spacer()
-            Text(state.paused ? "PAUSED" : "RUN/\(context.attributes.runNo)")
-              .font(.system(size: 10, weight: .medium, design: .monospaced))
-              .tracking(1.2)
-              .foregroundColor(state.paused ? p.warn : p.muted)
+            if state.paused {
+              Text("PAUSED")
+                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                .tracking(1.2)
+                .foregroundColor(p.warn)
+            }
           }
           .padding(.horizontal, 4)
         }

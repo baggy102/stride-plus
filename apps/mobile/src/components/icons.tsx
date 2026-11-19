@@ -150,6 +150,15 @@ export function ListIcon({ size = 18, color }: IconProps) {
   );
 }
 
+export function TrashIcon({ size = 22, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4 6.5h16M9.5 6.5V4h5v2.5M6 6.5l1 13.5h10l1-13.5" />
+      <Path d="M10 10.5v6M14 10.5v6" />
+    </Svg>
+  );
+}
+
 export function BlockedIcon({ size = 32, color }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">

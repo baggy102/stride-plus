@@ -18,3 +18,12 @@ test('다크 그림자 = 0 10px 30px rgba(0,0,0,0.45)', () => {
 test('라이트 헤더 알파는 디자인 값 0.92', () => {
   assert.equal(palettes.light.header, 'rgba(242,245,248,0.92)');
 });
+
+test('포인트 Signal Blue와 거리 단계 2단계는 같은 색(두 테마)', () => {
+  for (const p of [palettes.dark, palettes.light]) {
+    assert.equal(p.point, '#2E8BFF');
+    assert.equal(p.onPoint, '#0B1016');
+    assert.equal(p.level.length, 3);
+    assert.equal(p.level[1], p.point);
+  }
+});

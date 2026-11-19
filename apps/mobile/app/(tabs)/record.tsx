@@ -10,7 +10,7 @@ import { HoldToStopButton } from '@/components/HoldToStopButton';
 import { LocationPermissionSheet } from '@/components/LocationPermissionSheet';
 import { telemetryDots } from '@/components/Telemetry';
 import { RouteMap, type RouteMapHandle } from '@/components/RouteMap';
-import { LocateIcon, PlayIcon, WarnIcon } from '@/components/icons';
+import { GearIcon, LocateIcon, PlayIcon, WarnIcon } from '@/components/icons';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { fetchRunStats } from '@/api/stats';
 import * as SecureStorage from '@/utils/secureStorage';
@@ -18,10 +18,13 @@ import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import type { Palette } from '@/theme/colors';
 import { formatDuration, formatPace, MIN_PACE_DISTANCE_KM } from '@/utils/pace';
+import { isGpsWeak } from '@/utils/gpsSignal';
 
 const EXPLAIN_SEEN_KEY = 'location_explain_seen';
 // 상단 텔레메트리 줄은 글자 크기 설정을 키워도 1.2배까지만(왼쪽 글자와 가운데 로고가 겹치지 않게)
 const TOP_MAX_SCALE = 1.2;
+// 경고 배너 높이 — 둘 다 뜨면 아래 배너를 이만큼 + 8 내린다
+const BANNER_HEIGHT = 60;
 
 // Frost S06 기록 — 24px 격자 위 경로 점 구름(지도 대신) + 상단 텔레메트리 줄 + 거리 주 수치 + PACE·TIME.
 // 시작 전에도 같은 배치를 쓰고 종료 버튼 자리에 시작 버튼을 둔다(2026-10-18 결정).
@@ -41,8 +44,9 @@ export default function RecordScreen() {
   // 50 m 전에는 페이스를 보여 주지 않는다(시작 직후 값이 튐)
   const paceSecPerKm = distanceKm >= MIN_PACE_DISTANCE_KM ? elapsedSeconds / distanceKm : 0;
   const tick = useRunStore((s) => s._tick);
+  const gpsWeak = useRunStore((s) => isGpsWeak(s.weakGpsStreak));
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const [here, setHere] = useState<{ at: [number, number]; accuracy: number | null } | undefined>(undefined);
+  const [here, setHere] = useState<{ at: [number, number] } | undefined>(undefined);
   const [explainVisible, setExplainVisible] = useState(false);
   const [denied, setDenied] = useState(false);
   // 「RUN/0427」 = 이번이 내 몇 번째 러닝인지(D5). 기록 중에는 고정
@@ -59,13 +63,13 @@ export default function RecordScreen() {
     };
   }, [isTracking, tick]);
 
-  // 시작 전 좌표·GPS 정확도: 이미 허용돼 있으면 마지막으로 알려진 위치
+  // 시작 전 좌표: 이미 허용돼 있으면 마지막으로 알려진 위치
   useEffect(() => {
     (async () => {
       const { status } = await Location.getForegroundPermissionsAsync();
       if (status !== 'granted') return;
       const pos = await Location.getLastKnownPositionAsync();
-      if (pos) setHere({ at: [pos.coords.longitude, pos.coords.latitude], accuracy: pos.coords.accuracy });
+      if (pos) setHere({ at: [pos.coords.longitude, pos.coords.latitude] });
     })();
   }, []);
 
@@ -187,13 +191,24 @@ export default function RecordScreen() {
         <View style={{ maxWidth: stateMaxWidth }} />
       </View>
 
+      {/* GPS 수신 약함(정확도 불량 위치 3번 연속) — 화면 꺼짐 배너와 함께 뜨면 이쪽이 위 */}
+      {isTracking && !isPaused && gpsWeak && (
+        <View accessibilityRole="alert" style={[styles.banner, styles.bannerNoBtn, { top: insets.top + 38 }]}>
+          <WarnIcon color={c.warn} />
+          <View style={styles.bannerTextCol}>
+            <Text style={styles.bannerTitle}>GPS 신호가 약해요</Text>
+            <Text style={styles.bannerBody}>이 구간은 경로가 끊길 수 있어요</Text>
+          </View>
+        </View>
+      )}
+
       {/* 백그라운드 업데이트를 못 켜 앱이 보일 때만 기록 중(Expo Go 등) */}
       {isTracking && trackingMode === 'foreground' && (
-        <View accessibilityRole="alert" style={[styles.banner, { top: insets.top + 38 }]}>
+        <View accessibilityRole="alert" style={[styles.banner, { top: insets.top + 38 + (!isPaused && gpsWeak ? BANNER_HEIGHT + 8 : 0) }]}>
           <WarnIcon color={c.warn} />
           <Text style={styles.bannerText}>화면이 꺼지면 기록이 멈출 수 있어요</Text>
-          <Pressable accessibilityRole="button" onPress={() => Linking.openSettings()} style={styles.bannerBtn}>
-            <Text style={styles.bannerBtnText}>설정</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="설정 열기" onPress={() => Linking.openSettings()} style={styles.bannerBtn}>
+            <GearIcon color={c.text} />
           </Pressable>
         </View>
       )}
@@ -243,17 +258,14 @@ export default function RecordScreen() {
           </>
         ) : (
           !denied && (
-            <View style={styles.startWrap}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="러닝 시작"
-                onPress={handleStart}
-                style={styles.startBtn}
-              >
-                <PlayIcon color={c.ink} />
-              </Pressable>
-              <Text style={styles.hint}>눌러서 시작</Text>
-            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="러닝 시작"
+              onPress={handleStart}
+              style={styles.startBtn}
+            >
+              <PlayIcon color={c.ink} />
+            </Pressable>
           )
         )}
       </View>
@@ -285,13 +297,16 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   stateText: { flexShrink: 1 },
   logo: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   banner: {
-    position: 'absolute', left: 16, right: 16, height: 60, paddingLeft: 16, paddingRight: 6, borderRadius: 16,
+    position: 'absolute', left: 16, right: 16, height: BANNER_HEIGHT, paddingLeft: 16, paddingRight: 6, borderRadius: 16,
     flexDirection: 'row', alignItems: 'center', gap: 12,
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.warnLine,
   },
+  bannerNoBtn: { paddingRight: 16 },
+  bannerTextCol: { flex: 1 },
   bannerText: { flex: 1, fontFamily: FONT.regular, fontSize: 14, lineHeight: 20, color: c.text },
-  bannerBtn: { height: 44, paddingHorizontal: 12, justifyContent: 'center' },
-  bannerBtnText: { fontFamily: FONT.semibold, fontSize: 14, color: c.text, textDecorationLine: 'underline' },
+  bannerTitle: { fontFamily: FONT.semibold, fontSize: 14, lineHeight: 20, color: c.text },
+  bannerBody: { fontFamily: FONT.regular, fontSize: 14, lineHeight: 20, color: c.text2 },
+  bannerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   stats: { paddingHorizontal: 24 },
   distanceRow: { flexDirection: 'row', alignItems: 'flex-start' },
   distance: { fontFamily: FONT.num, fontSize: 120, lineHeight: 112, letterSpacing: -3.6, color: c.text, fontVariant: ['tabular-nums'] },
@@ -305,12 +320,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   value: { fontFamily: FONT.num, fontSize: 26, lineHeight: 28, color: c.text, fontVariant: ['tabular-nums'] },
   unit: { ...monoLabel(11, 0.06), color: c.navOff },
   control: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
-  startWrap: { alignItems: 'center', gap: 8 },
   startBtn: {
     width: 84, height: 84, borderRadius: 42, alignItems: 'center', justifyContent: 'center',
     backgroundColor: c.accent, borderWidth: 1, borderColor: c.stop.edge,
   },
-  hint: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
   deniedCard: {
     marginHorizontal: 16, padding: 20, borderRadius: 20, gap: 10,
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.border,

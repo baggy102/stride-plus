@@ -24,7 +24,7 @@ public class RunActivityModule: Module {
       return false
     }
 
-    AsyncFunction("start") { (runNo: String, state: RunStateRecord) async throws in
+    AsyncFunction("start") { (state: RunStateRecord) async throws in
       guard #available(iOS 16.2, *) else { return }
       // 앱이 다시 시작돼 남은 Activity가 있으면 정리하고 새로 연다
       for activity in Activity<RunActivityAttributes>.activities {
@@ -32,7 +32,7 @@ public class RunActivityModule: Module {
       }
       guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
       _ = try Activity.request(
-        attributes: RunActivityAttributes(runNo: runNo),
+        attributes: RunActivityAttributes(),
         content: ActivityContent(state: RunActivityModule.contentState(state), staleDate: nil),
         pushType: nil
       )

@@ -197,6 +197,71 @@ describe('RunsService', () => {
         description: '구성 코스',
       });
     });
+
+    describe('기간(from·to)', () => {
+      const USER = '64b7f0c2a1b2c3d4e5f60718';
+      const chain = () => {
+        const query = {
+          select: jest.fn().mockReturnThis(),
+          populate: jest.fn().mockReturnThis(),
+          sort: jest.fn().mockReturnThis(),
+          skip: jest.fn().mockReturnThis(),
+          limit: jest.fn().mockReturnThis(),
+          lean: jest.fn().mockReturnThis(),
+          exec: jest.fn().mockResolvedValue([]),
+        };
+        mockFind.mockReturnValue(query);
+        return query;
+      };
+
+      it('기간을 주면 createdAt >= from, < to 조건 — 정렬·페이지는 그대로', async () => {
+        const query = chain();
+        // KST 11월: 2026-11-01 00:00 KST ~ 2026-12-01 00:00 KST(미포함)
+        const from = new Date('2026-10-31T15:00:00.000Z');
+        const to = new Date('2026-11-30T15:00:00.000Z');
+
+        await service.findByUser(VIEWER, USER, 2, 10, from, to);
+
+        const [filter] = mockFind.mock.calls[0];
+        expect(filter.userId.equals(new Types.ObjectId(USER))).toBe(true);
+        expect(filter.createdAt).toEqual({ $gte: from, $lt: to });
+        expect(query.sort).toHaveBeenCalledWith({ createdAt: -1 });
+        expect(query.skip).toHaveBeenCalledWith(10);
+        expect(query.limit).toHaveBeenCalledWith(10);
+      });
+
+      it('경계 — from 시각은 포함($gte), to 시각은 미포함($lt)', async () => {
+        chain();
+        const from = new Date('2026-10-31T15:00:00.000Z');
+        const to = new Date('2026-11-30T15:00:00.000Z');
+
+        await service.findByUser(VIEWER, USER, 1, 50, from, to);
+
+        const { createdAt } = mockFind.mock.calls[0][0];
+        expect(Object.keys(createdAt).sort()).toEqual(['$gte', '$lt']);
+        expect(createdAt.$gte.getTime()).toBe(from.getTime());
+        expect(createdAt.$lt.getTime()).toBe(to.getTime());
+      });
+
+      it('한쪽만 주면 그 조건만', async () => {
+        chain();
+        const from = new Date('2026-11-01T00:00:00.000Z');
+        await service.findByUser(VIEWER, USER, 1, 50, from);
+        expect(mockFind.mock.calls[0][0].createdAt).toEqual({ $gte: from });
+
+        mockFind.mockClear();
+        chain();
+        const to = new Date('2026-12-01T00:00:00.000Z');
+        await service.findByUser(VIEWER, USER, 1, 50, undefined, to);
+        expect(mockFind.mock.calls[0][0].createdAt).toEqual({ $lt: to });
+      });
+
+      it('기간이 없으면 createdAt 조건 없이 기존과 같다', async () => {
+        chain();
+        await service.findByUser(VIEWER, USER);
+        expect(mockFind.mock.calls[0][0]).not.toHaveProperty('createdAt');
+      });
+    });
   });
 
   describe('findById', () => {

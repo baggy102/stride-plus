@@ -18,7 +18,4 @@ struct RunActivityAttributes: ActivityAttributes {
     /// 경로 점 구름: 0~1로 맞춘 x0, y0, x1, y1 … (최대 48점)
     var route: [Double]
   }
-
-  /// 「RUN/0427」 — 내 n번째 러닝
-  var runNo: String
 }
