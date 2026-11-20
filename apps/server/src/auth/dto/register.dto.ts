@@ -1,6 +1,7 @@
 import { Equals, IsEmail, IsString, MinLength } from 'class-validator';
 import { NoBannedWords } from '../../common/banned-words';
 import { LEGAL_VERSIONS } from '../legal-versions';
+import { NormalizeEmail } from './normalize-email';
 
 export class RegisterDto {
   @IsString()
@@ -8,6 +9,7 @@ export class RegisterDto {
   @NoBannedWords()
   username: string;
 
+  @NormalizeEmail()
   @IsEmail()
   email: string;
 

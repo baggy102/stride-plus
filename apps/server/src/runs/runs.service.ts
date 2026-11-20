@@ -9,7 +9,7 @@ import { trimHomeEnds } from './home-privacy';
 import { densityCells, type DensityCell } from './density';
 
 const MARKER_SELECT = 'userId distanceKm paceSecPerKm routeImageUrl photoUrls description createdAt route';
-const USER_SELECT = '_id username profileImageUrl';
+const USER_SELECT = '_id username profileImageUrl role';
 const DEFAULT_RADIUS = 5000;
 // 지도를 넓게 축소했을 때 응답 크기 상한. $near라 가까운 순으로 자른다.
 const MAX_NEARBY_RESULTS = 500;

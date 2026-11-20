@@ -82,6 +82,21 @@ describe('RunsService', () => {
       });
     });
 
+    it('러너 정보에 role을 함께 받는다(운영자 표시)', async () => {
+      const populate = jest.fn().mockReturnThis();
+      mockFind.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        populate,
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([]),
+      });
+
+      await service.findNearby(VIEWER, 37.5, 127.1);
+
+      expect(populate).toHaveBeenCalledWith('userId', expect.stringMatching(/\brole\b/));
+    });
+
     it('photoUrls 없으면 thumbnailUrl은 null', async () => {
       const raw = [
         {

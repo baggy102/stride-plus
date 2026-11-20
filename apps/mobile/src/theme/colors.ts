@@ -48,6 +48,10 @@ export interface Palette {
   map: {
     bg: string;
     dot: string;
+    /** 지도 피드 얼굴 링(TOTAL): 사용자별 4색(2026-11-19 시안). 첫 칸 = dot. 초록·청록 계열 없음(NEW 민트와 혼동 방지) */
+    runners: [string, string, string, string];
+    operator: string; // Stride 운영자 링 · S 배지
+    onOperator: string;
     dotBorder: string;
     pulse: string;
     clBg: string;
@@ -104,6 +108,9 @@ export const palettes: Record<Scheme, Palette> = {
     map: {
       bg: '#16202B',
       dot: '#9DBFE0',
+      runners: ['#9DBFE0', '#BDB2E6', '#E3AFC4', '#D8C7A1'],
+      operator: '#7C83F2',
+      onOperator: '#0B1016',
       dotBorder: '#0B1016',
       pulse: 'rgba(157,191,224,0.25)',
       clBg: '#0B1016',
@@ -158,6 +165,9 @@ export const palettes: Record<Scheme, Palette> = {
     map: {
       bg: '#E9EEF3',
       dot: '#24476B',
+      runners: ['#24476B', '#5B4F9A', '#9A4F6E', '#7A6533'],
+      operator: '#3D44C9',
+      onOperator: '#FFFFFF',
       dotBorder: '#FFFFFF',
       pulse: 'rgba(36,71,107,0.25)',
       clBg: '#FFFFFF',

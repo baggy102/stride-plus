@@ -19,8 +19,10 @@ export class PostsService {
     if (!run) throw new NotFoundException('run_not_found');
     if (String(run.userId) !== userId) throw new ForbiddenException('not_run_owner');
 
-    const post = new this.postModel({ runId: dto.runId, userId });
-    return post.save();
+    // 같은 러닝으로 다시 보내면(재시도) 새로 만들지 않고 있던 포스트를 돌려준다
+    return this.postModel
+      .findOneAndUpdate({ runId: dto.runId }, { $setOnInsert: { runId: dto.runId, userId } }, { upsert: true, new: true })
+      .exec();
   }
 
   // 응원 토글. 응원은 러닝 저장 때 만든 포스트의 likes에 쌓인다. 내 러닝은 응원할 수 없다
