@@ -49,6 +49,9 @@ CLAUDE.md
 *.md
 # 약관 문서는 리포에서 버전 관리한다(C3)
 !docs/legal/*.md
+# 프로젝트 서브에이전트와, 에이전트가 참조하는 UI 용어 사전은 리포에서 버전 관리한다
+!.claude/agents/*.md
+!docs/ui-glossary.md
 
 # Server uploads (user-generated files)
 apps/server/uploads/
