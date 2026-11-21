@@ -2,7 +2,8 @@ import type { RunMarker } from '@/types/run';
 
 // 포스터 카드 왼쪽 위 스티커(최대 2개, 이 순서로). 색 키는 팔레트에서 고른다
 export type StickerKind = 'dawn' | 'tenK' | 'new';
-export const STICKER_LABEL: Record<StickerKind, string> = { dawn: '새벽런', tenK: '10K+', new: 'NEW' };
+// 24시간 안 스티커는 「오늘」 — 지도 피드 NEW(이번 주 새 길)와 같은 말이 두 뜻이 되지 않게(2026-11-21)
+export const STICKER_LABEL: Record<StickerKind, string> = { dawn: '새벽런', tenK: '10K+', new: '오늘' };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

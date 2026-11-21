@@ -37,9 +37,9 @@ interface Props {
   onCheered?: (runId: string, cheers: number, cheered: boolean) => void;
 }
 
-/** 카드 높이: 사진 178 + 이름 줄 60 + 수치 줄 50 */
+/** 카드 높이: 사진 136 + 기록 70 + 사람 44 + 행동 38 (A안, 2026-11-21) */
 export const POSTER_HEIGHT = 288;
-const MEDIA_H = 178;
+const MEDIA_H = 136;
 const ENTER_EASE = Easing.bezier(0.16, 1, 0.3, 1);
 const EXIT_EASE = Easing.bezier(0.7, 0, 0.84, 0);
 
@@ -52,7 +52,7 @@ function useRise(v: SharedValue<number>, lift: number) {
 
 /**
  * 고른 러닝의 포스터 카드(2026-11-19 확정, 지도 피드 프로토타입 v8 개선안). 지도 피드·내 피드 공용, WebView 밖 네이티브.
- * 사진(없으면 경로) 위 큰 거리 + 스티커 최대 2개 / 작성자 · 날짜 · 시각 / TIME · PACE · CHEER(응원 버튼).
+ * 사진(없으면 경로, 위에는 스티커 · 닫기만) / 기록 한 묶음(거리 + TIME · PACE) / 사람 / 응원 · 코스 보기 (A안, 2026-11-21).
  * 들어올 때: 카드 0.22초 뒤 올라옴 → 사진 → 거리 → 스티커 → 글자. 닫을 때 0.24초에 내려간다
  */
 export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress, bottom = 24, route, routeColor, mine = false, onCheered, dismissKey = 0 }: Props) {
@@ -60,7 +60,7 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
   const styles = useMemo(() => makeStyles(c), [c]);
   const reduced = useReducedMotion();
   const username = run.userId.username || '알 수 없음';
-  const title = run.description?.trim() || '러닝 기록';
+  const title = run.description?.trim(); // 쓴 경우만 사람 줄 아래에
   const avatar = run.userId.profileImageUrl;
   const photo = run.photoUrls[0] ?? run.thumbnailUrl;
   const resolve = (url: string) => (url.startsWith('/') ? `${baseUrl}${url}` : url);
@@ -166,10 +166,6 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
                 })}
               </View>
             )}
-            <Animated.View style={[styles.kmRow, kmStyle]} accessible accessibilityLabel={`거리 ${run.distanceKm.toFixed(2)} km`}>
-              <Text style={[styles.km, { color: photo ? '#FFFFFF' : c.text }]}>{run.distanceKm.toFixed(2)}</Text>
-              <Text style={[styles.kmUnit, { color: photo ? 'rgba(255,255,255,0.88)' : c.value }]}>KM</Text>
-            </Animated.View>
           </Animated.View>
         </Pressable>
         {/* 닫기: 카드 오른쪽 위(상세 열기와 겹치지 않게 미디어 바깥 형제) */}
@@ -185,7 +181,26 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
           </Pressable>
         </Animated.View>
 
-        <Animated.View style={[styles.metaRow, metaStyle]}>
+        {/* 기록 한 묶음: 거리(잘림 없음) + 오른쪽에 TIME · PACE */}
+        <Animated.View style={[styles.recRow, kmStyle]}>
+          <View style={styles.kmRow} accessible accessibilityLabel={`거리 ${run.distanceKm.toFixed(2)} km`}>
+            <Text style={styles.km}>{run.distanceKm.toFixed(2)}</Text>
+            <Text style={styles.kmUnit}>KM</Text>
+          </View>
+          <View style={styles.statsCol}>
+            <View style={styles.statLine}>
+              <Text style={styles.statValue}>{formatDuration(run.paceSecPerKm * run.distanceKm)}</Text>
+              <Text style={styles.statLabel}>TIME</Text>
+            </View>
+            <View style={styles.statLine}>
+              <Text style={styles.statValue}>{formatRunPace(run.paceSecPerKm, run.distanceKm)}</Text>
+              <Text style={styles.statLabel}>PACE</Text>
+            </View>
+          </View>
+        </Animated.View>
+
+        {/* 사람: 아바타 · 이름 · 날짜·시각 / 제목(쓴 경우만) */}
+        <Animated.View style={[styles.personRow, metaStyle]}>
           <Pressable
             accessibilityRole={onUserPress ? 'button' : undefined}
             accessibilityLabel={`${username} 프로필 보기`}
@@ -200,39 +215,32 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
             )}
           </Pressable>
           <View style={styles.titleCol}>
-            <Text style={styles.title} numberOfLines={1}>{title}</Text>
-            <Text style={styles.sub} numberOfLines={1}>{`${username} · ${formatDay(run.createdAt)} · ${formatClock(run.createdAt)}`}</Text>
+            <Text style={styles.title} numberOfLines={1}>{`${username} · ${formatDay(run.createdAt)} · ${formatClock(run.createdAt)}`}</Text>
+            {!!title && <Text style={styles.sub} numberOfLines={1}>{title}</Text>}
           </View>
-          {onDetailPress && (
-            <Pressable accessibilityRole="button" accessibilityLabel="코스 보기" onPress={() => onDetailPress(run._id)} style={styles.courseBtn} hitSlop={4}>
-              <ChevronIcon size={18} color={c.ink} />
-            </Pressable>
-          )}
         </Animated.View>
 
-        <Animated.View style={[styles.stats, metaStyle]}>
-          <View>
-            <Text style={styles.statLabel}>TIME</Text>
-            <Text style={styles.statValue}>{formatDuration(run.paceSecPerKm * run.distanceKm)}</Text>
-          </View>
-          <View>
-            <Text style={styles.statLabel}>PACE</Text>
-            <Text style={styles.statValue}>{formatRunPace(run.paceSecPerKm, run.distanceKm)}</Text>
-          </View>
+        {/* 행동: 응원(왼쪽) · 코스 보기(오른쪽) */}
+        <Animated.View style={[styles.actionRow, metaStyle]}>
           <Pressable
             accessibilityRole={mine ? undefined : 'button'}
             accessibilityLabel={mine ? `응원 ${cheer.cheers}개` : cheer.cheered ? `응원 취소, 지금 ${cheer.cheers}개` : `응원하기, 지금 ${cheer.cheers}개`}
             accessibilityState={mine ? undefined : { selected: cheer.cheered }}
             disabled={mine}
             onPress={toggleCheer}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 12 }}
+            hitSlop={{ top: 10, bottom: 10, left: 8, right: 12 }}
+            style={styles.cheerValue}
           >
-            <Text style={styles.statLabel}>CHEER</Text>
-            <View style={styles.cheerValue}>
-              <HeartIcon size={14} color={c.hype} filled={cheer.cheered || mine} />
-              <Text style={[styles.statValue, { color: c.hype }]}>{cheer.cheers}</Text>
-            </View>
+            <HeartIcon size={15} color={c.hype} filled={cheer.cheered || mine} />
+            <Text style={[styles.cheerCount, { color: c.hype }]}>{cheer.cheers}</Text>
+            <Text style={styles.cheerLabel}>응원</Text>
           </Pressable>
+          {onDetailPress && (
+            <Pressable accessibilityRole="button" accessibilityLabel="코스 보기" onPress={() => onDetailPress(run._id)} style={styles.courseBtn} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+              <Text style={styles.courseText}>코스 보기</Text>
+              <ChevronIcon size={14} color={c.text2} />
+            </Pressable>
+          )}
         </Animated.View>
       </View>
     </Animated.View>
@@ -255,26 +263,31 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     shadowColor: '#000000', shadowOpacity: 0.28, shadowRadius: 6, shadowOffset: { width: 0, height: 4 }, elevation: 3,
   },
   stickerText: { fontFamily: FONT.bold, fontSize: 11.5, lineHeight: 13 },
-  // 거리: 기울인 콘덴스드 숫자를 사진 아래로 조금 잘리게(포스터)
-  kmRow: { position: 'absolute', left: 14, bottom: -18, flexDirection: 'row', alignItems: 'baseline' },
-  km: { fontFamily: FONT.numCondensedBold, fontSize: 98, lineHeight: 98, letterSpacing: -3.4, transform: [{ skewX: '-8deg' }] },
-  kmUnit: { ...monoLabel(15, 0.08), marginLeft: 6 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 16, paddingHorizontal: 14, paddingBottom: 6 },
+  // 높이 288 = 미디어 136 + 기록 70 + 사람 44 + 행동 38. 모든 글자는 왼쪽 16 한 기준선
+  recRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 16, paddingTop: 10, paddingHorizontal: 16 },
+  kmRow: { flexDirection: 'row', alignItems: 'baseline' },
+  km: { fontFamily: FONT.numCondensedBold, fontSize: 56, lineHeight: 60, letterSpacing: -1.6, color: c.text, transform: [{ skewX: '-8deg' }] },
+  kmUnit: { ...monoLabel(13, 0.08), marginLeft: 5, color: c.value },
+  statsCol: { gap: 2, paddingBottom: 8 },
+  statLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  personRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingTop: 6, paddingHorizontal: 16 },
   avatar: {
-    width: 38, height: 38, borderRadius: 19, overflow: 'hidden', backgroundColor: c.accent,
+    width: 32, height: 32, borderRadius: 16, overflow: 'hidden', backgroundColor: c.accent,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarLetter: { fontFamily: FONT.bold, fontSize: 13, color: c.ink },
+  avatarLetter: { fontFamily: FONT.bold, fontSize: 12, color: c.ink },
   titleCol: { flex: 1, minWidth: 0 },
-  title: { fontFamily: FONT.semibold, fontSize: 15, lineHeight: 20, color: c.text },
-  sub: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 17, color: c.text2 },
-  // 36 + hitSlop 4 → 누르는 영역 44
-  courseBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
+  title: { fontFamily: FONT.semibold, fontSize: 14, lineHeight: 18, color: c.text },
+  sub: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: c.text2 },
+  actionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10, paddingHorizontal: 16 },
+  courseBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  courseText: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
   // 보이는 원 32 + hitSlop 6 → 누르는 영역 44
   closeWrap: { position: 'absolute', top: 12, right: 12 },
   closeBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
-  stats: { flexDirection: 'row', gap: 18, paddingTop: 4, paddingRight: 14, paddingLeft: 62 },
   statLabel: { ...monoLabel(9.5, 0.1), lineHeight: 14, color: c.muted },
   statValue: { fontFamily: FONT.num, fontSize: 15, lineHeight: 18, color: c.text },
-  cheerValue: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  cheerValue: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  cheerCount: { fontFamily: FONT.num, fontSize: 15, lineHeight: 18 },
+  cheerLabel: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: c.text2 },
 });

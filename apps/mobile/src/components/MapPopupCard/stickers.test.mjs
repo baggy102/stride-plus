@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { posterStickers } from './stickers.ts';
+import { posterStickers, STICKER_LABEL } from './stickers.ts';
 
 // 기기 시간대 기준으로 만든 시각(테스트가 어느 시간대에서 돌아도 같다)
 const at = (h, m = 0, dayOffset = 0) => new Date(2026, 10, 19 + dayOffset, h, m).getTime();
@@ -29,4 +29,8 @@ test('출발 기준으로 본다: 7시 50분 출발해 8시 넘어 올려도 새
 test('오래된 낮 러닝은 스티커 없음, 날짜가 잘못되면 거리만 본다', () => {
   assert.deepEqual(posterStickers(run(14, 4, -5), NOW), []);
   assert.deepEqual(posterStickers({ createdAt: 'x', distanceKm: 12, paceSecPerKm: 300 }, NOW), ['tenK']);
+});
+
+test('24시간 안 스티커는 「오늘」이라고 쓴다(지도 피드 NEW와 다른 말)', () => {
+  assert.equal(STICKER_LABEL.new, '오늘');
 });
