@@ -61,14 +61,18 @@ export function routeFxScript(): string {
         el('path',merge(ROUND,{d:D,stroke:'#fff','stroke-opacity':'.38','stroke-width':'1.1',transform:'translate(1.7 -1.4)'})),
         el('path',merge(ROUND,{d:D,stroke:o.col,'stroke-opacity':'.5','stroke-width':'1.1',transform:'translate(-1.6 1.5)'}))];
       cur.lines.forEach(function(l){l.style.strokeDasharray=cur.len;});
-      // 새로 연 구간: 이어진 구간끼리 한 줄로(번짐 16 + 선 4.5). 그리기가 끝난 뒤 나타난다
+      // 새로 연 구간: 이어진 구간끼리 한 줄로(번짐 16 + 선 4.5). 본선과 같은 속도로 처음부터 민트로 그어진다(s0 = 경로 시작부터 거리)
       cur.fresh=null;
-      if(o.fresh&&o.freshCol){var runs=[],run=null;
-        o.fresh.forEach(function(f,i){if(f){if(!run){run=[main[i]];runs.push(run);}run.push(main[i+1]);}else run=null;});
-        if(runs.length){var fgp=el('g',{opacity:0}),fl=[];
-          runs.forEach(function(r){var d=pathD(r);el('path',merge(ROUND,{d:d,stroke:o.freshCol,'stroke-opacity':'.25','stroke-width':'16'}),fgp);
-            fl.push(el('path',merge(ROUND,{d:d,stroke:o.freshCol,'stroke-width':'4.5'}),fgp));});
-          cur.fresh={g:fgp,lines:fl};}}
+      if(o.fresh&&o.freshCol){var runs=[],run=null,cum=[0];
+        for(var k=1;k<main.length;k++)cum.push(cum[k-1]+Math.hypot(main[k][0]-main[k-1][0],main[k][1]-main[k-1][1]));
+        o.fresh.forEach(function(f,i){if(f){if(!run){run={pts:[main[i]],s0:cum[i]};runs.push(run);}run.pts.push(main[i+1]);run.s1=cum[i+1];}else run=null;});
+        if(runs.length){var fgp=el('g',{}),fl=[],fd=[];
+          runs.forEach(function(r){var d=pathD(r.pts),l=r.s1-r.s0+1;
+            var gl=el('path',merge(ROUND,{d:d,stroke:o.freshCol,'stroke-opacity':'.25','stroke-width':'16'}),fgp);
+            var ln=el('path',merge(ROUND,{d:d,stroke:o.freshCol,'stroke-width':'4.5'}),fgp);
+            [gl,ln].forEach(function(q){q.style.strokeDasharray=l;q.style.strokeDashoffset=l;fd.push({el:q,s0:r.s0,l:l});});
+            fl.push(ln);});
+          cur.fresh={lines:fl,draw:fd};}}
       cur.fades=[];var nodes=[];
       g.kms.forEach(function(k,i){
         var p=pts([k.at])[0],grp=el('g',{});cur.fades.push({el:grp,d:0.1+k.t*0.9});nodes.push({t:k.t,p:p});
@@ -99,7 +103,7 @@ export function routeFxScript(): string {
       cur.done=true;
       cur.lines.forEach(function(l){l.style.strokeDashoffset=0;});
       cur.fades.forEach(function(f){f.el.style.opacity=1;});
-      if(cur.fresh){cur.fresh.g.setAttribute('opacity',1);cur.fresh.lines.forEach(function(l){l.setAttribute('stroke-width','4.5');});}
+      if(cur.fresh){cur.fresh.draw.forEach(function(f){f.el.style.strokeDashoffset=0;});cur.fresh.lines.forEach(function(l){l.setAttribute('stroke-width','4.5');});}
     }
     var DRAW=1100,LAP=2000,CYC=1.4,LAPS=2,COMET=1800;
     function step(now){
@@ -110,12 +114,12 @@ export function routeFxScript(): string {
       var p=Math.min(1,Math.max(0,(t-100)/DRAW)),e=p>=1?1:1-Math.pow(2,-10*p);
       cur.lines.forEach(function(l){l.style.strokeDashoffset=cur.len*(1-e);});
       cur.fades.forEach(function(f){f.el.style.opacity=Math.min(1,Math.max(0,(t-f.d*1000)/280));});
-      // 새로 연 구간: 선이 다 그어지면 0.45초 동안 부풀었다 앉는다
-      if(cur.fresh&&p>=1){var fq=Math.min(1,(t-100-DRAW)/450);cur.fresh.g.setAttribute('opacity',Math.min(1,fq*2.5).toFixed(2));
-        cur.fresh.lines.forEach(function(l){l.setAttribute('stroke-width',(4.5+3.5*Math.sin(Math.PI*fq)).toFixed(2));});}
+      // 새로 연 구간: 본선과 함께 민트로 그어지고, 다 그어지면 0.45초 동안 부풀었다 앉는다
+      if(cur.fresh){var drawn=cur.len*e;cur.fresh.draw.forEach(function(f){f.el.style.strokeDashoffset=f.l-Math.min(f.l,Math.max(0,drawn-f.s0));});
+        if(p>=1){var fq=Math.min(1,(t-100-DRAW)/450);cur.fresh.lines.forEach(function(l){l.setAttribute('stroke-width',(4.5+3.5*Math.sin(Math.PI*fq)).toFixed(2));});}}
       var fx=cur.fx;if(!fx){cur.raf=requestAnimationFrame(step);return;}
       var S=cur.S,hp=null;
-      if(p>0&&p<1){hp=S.at(e);place(fx.head,hp);place(fx.glow,hp);fx.head.setAttribute('opacity',0.95);fx.glow.setAttribute('opacity',0.4);}
+      if(p>0&&p<1){hp=S.at(e);cur.hpCol=colAt(e);place(fx.head,hp);place(fx.glow,hp);fx.glow.setAttribute('fill',cur.hpCol);fx.head.setAttribute('opacity',0.95);fx.glow.setAttribute('opacity',0.4);}
       if(p>=1&&!cur.bloomAt)cur.bloomAt=t+250;
       if(cur.bloomAt&&t>=cur.bloomAt){var q=(t-cur.bloomAt)/700;place(fx.bloom,fx.end);
         if(q<=1){fx.bloom.setAttribute('r',(4+q*22).toFixed(1));fx.bloom.setAttribute('opacity',(0.9*(1-q)).toFixed(2));}else fx.bloom.setAttribute('opacity',0);}
