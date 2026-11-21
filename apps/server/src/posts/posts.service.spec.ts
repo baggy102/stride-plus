@@ -14,6 +14,7 @@ const mockPostModel = {
   findOne: jest.fn(),
   findByIdAndUpdate: jest.fn(),
   findOneAndUpdate: jest.fn(() => ({ exec: mockUpsertExec })),
+  aggregate: jest.fn(),
 };
 const chain = (value: unknown) => ({ select: () => ({ lean: () => ({ exec: jest.fn().mockResolvedValue(value) }) }) });
 
@@ -79,6 +80,25 @@ describe('PostsService', () => {
       await service.create(USER_ID, { runId: RUN_ID });
 
       expect(mockRunModel.findById).toHaveBeenCalledWith(RUN_ID);
+    });
+  });
+
+  describe('receivedSince(응원 받은 순간)', () => {
+    it('내 포스트에서 since 이후 응원만 러닝별로 센다', async () => {
+      const RUN = new Types.ObjectId(RUN_ID);
+      mockPostModel.aggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([{ _id: RUN, count: 2 }]) });
+      const since = new Date('2026-11-20T00:00:00Z');
+
+      expect(await service.receivedSince(USER_ID, since)).toEqual([{ runId: RUN_ID, count: 2 }]);
+      const [pipeline] = mockPostModel.aggregate.mock.calls[0];
+      expect(String(pipeline[0].$match.userId)).toBe(USER_ID);
+      expect(pipeline[0].$match['cheerLog.at']).toEqual({ $gt: since });
+      expect(pipeline[2].$match['cheerLog.at']).toEqual({ $gt: since });
+    });
+
+    it('받은 응원이 없으면 빈 배열', async () => {
+      mockPostModel.aggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([]) });
+      expect(await service.receivedSince(USER_ID, new Date())).toEqual([]);
     });
   });
 

@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import * as SecureStorage from '@/utils/secureStorage';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
@@ -64,6 +65,8 @@ const HOME_LABEL = '출발·도착 100m는 다른 사람에게 안 보여요';
 // 저장 직후 「내 흔적」: 카메라가 새 경로로 간 뒤 스며들기 시작
 const TRACE_DELAY_MS = 650;
 const TOAST_MS = 2800;
+// 응원 받은 순간: 마지막으로 본 시각(ISO)
+const CHEER_SEEN_KEY = 'cheerSeenAt';
 
 function traceColors(c: Palette): TraceColors {
   return { base: c.muted, ice: c.map.dot, mint: c.fresh };
@@ -103,6 +106,21 @@ ${traceLayerScript()}
   // 빈 지도 탭 → 열린 카드를 닫는다(마커 click은 지도로 버블링되지 않고, 끌기·핀치는 click이 아니다)
   map.on('click', function() { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapTap' })); });
   var fitted = false;
+
+  // 응원 받은 순간: 응원 받은 내 길이 한 번 빛났다 사라진다(약 2초, 동작 줄이기면 짧게 한 번)
+  window.__glow = function(routes, color) {
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    routes.forEach(function(route) {
+      if (!route || route.length < 2) return;
+      var line = L.polyline(route.map(function(p) { return [p[1], p[0]]; }), { color: color, weight: 7, opacity: 0, interactive: false, lineCap: 'round' }).addTo(map);
+      var t0 = performance.now(), dur = reduce ? 700 : 2000;
+      (function step(now) {
+        var k = Math.min(1, (now - t0) / dur), o = k < 0.3 ? k / 0.3 : (1 - k) / 0.7;
+        line.setStyle({ opacity: 0.9 * o });
+        if (k < 1) requestAnimationFrame(step); else map.removeLayer(line);
+      })(t0);
+    });
+  };
 
   // 처음 받은 러닝에만 화면을 맞춘다(새로고침·다음 페이지로 다시 들어와도 보던 위치 유지)
   var lastRuns = [];
@@ -173,6 +191,8 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const [shareData, setShareData] = useState<ShareCardData | null>(null);
   const [sharing, setSharing] = useState(false);
   const shareRef = useRef<ComponentRef<typeof View>>(null);
+  // 응원 받은 순간: 화면이 열릴 때마다 한 번, 마지막으로 본 뒤 받은 응원이 있으면 그 길이 빛나고 토스트
+  const cheerCheckPending = useRef(true);
   const webViewRef = useRef<WebViewHandle>(null);
   const mapLoaded = useRef(false);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
@@ -301,8 +321,33 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   useFocusEffect(useCallback(() => {
     if (skipFirstFocus.current) skipFirstFocus.current = false;
     else load('quiet');
+    cheerCheckPending.current = true;
     return () => setShareRunId(null);
   }, [load]));
+
+  // 마지막으로 본 시각(기기 저장) 이후 받은 응원. 처음이면 지금을 기록만 한다(쌓인 응원이 한꺼번에 뜨지 않게).
+  // 저장 직후 재생 중이면 그 알림을 우선하고 이번엔 건너뛴다
+  const checkCheers = useCallback(async () => {
+    if (!mine || !mapLoaded.current || listState !== 'ready' || !cheerCheckPending.current) return;
+    cheerCheckPending.current = false;
+    if (pendingTrace.current || playedRef.current) return;
+    try {
+      const seen = await SecureStorage.getItem(CHEER_SEEN_KEY);
+      const now = new Date().toISOString();
+      if (!seen) { await SecureStorage.setItem(CHEER_SEEN_KEY, now); return; }
+      const { data } = await client.get<{ runId: string; count: number }[]>(`/posts/cheers/received?since=${encodeURIComponent(seen)}`);
+      await SecureStorage.setItem(CHEER_SEEN_KEY, now);
+      const total = data.reduce((sum, r) => sum + r.count, 0);
+      if (total === 0) return;
+      const ids = new Set(data.map((r) => r.runId));
+      const routes = runs.filter((r) => ids.has(r._id)).map((r) => r.route);
+      webViewRef.current?.injectJavaScript(`window.__glow(${JSON.stringify(routes)},${JSON.stringify(c.fresh)});true;`);
+      setToast({ title: `지난번 길에 응원이 ${total}개 왔어요`, sub: '내 흔적' });
+    } catch {
+      // 못 받으면 다음에 다시 본다(본 시각을 바꾸지 않음)
+    }
+  }, [mine, listState, runs, c.fresh]);
+  useEffect(() => { checkCheers(); }, [checkCheers]);
 
   // 공유 이미지 재료: 출발·도착 100m를 자른 경로, 불러 둔 내 이전 러닝에 없던 구간, 경로 위 다섯 점 중 가장 많이 나온 동
   const startShare = useCallback(async () => {
@@ -401,6 +446,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                 applyTheme();
                 webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(traceColors(c))});true;`);
                 pushRuns();
+                checkCheers();
               }}
               onMessage={(e) => {
                 try {
