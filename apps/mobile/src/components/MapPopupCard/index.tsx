@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import Animated, {
   Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
@@ -26,8 +26,10 @@ interface Props {
   onDetailPress?: (runId: string) => void;
   /** 화면 아래에서 띄울 거리. 탭 화면은 탭바 위로 올린다 */
   bottom?: number;
-  /** 경로(받았으면): 사진이 없으면 크게, 있으면 오른쪽 위에 작게 */
+  /** 경로(받았으면): 사진이 없을 때 크게 그린다 */
   route?: LngLat[];
+  /** 값이 바뀌면 ×를 누른 것처럼 닫는다(카드 밖 빈 지도 탭) */
+  dismissKey?: number;
   /** 경로 색(지도 위 경로와 같게). 없으면 value */
   routeColor?: string;
   /** 내 러닝이면 응원 버튼 대신 받은 수만 */
@@ -53,7 +55,7 @@ function useRise(v: SharedValue<number>, lift: number) {
  * 사진(없으면 경로) 위 큰 거리 + 스티커 최대 2개 / 작성자 · 날짜 · 시각 / TIME · PACE · CHEER(응원 버튼).
  * 들어올 때: 카드 0.22초 뒤 올라옴 → 사진 → 거리 → 스티커 → 글자. 닫을 때 0.24초에 내려간다
  */
-export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress, bottom = 24, route, routeColor, mine = false, onCheered }: Props) {
+export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress, bottom = 24, route, routeColor, mine = false, onCheered, dismissKey = 0 }: Props) {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const reduced = useReducedMotion();
@@ -90,6 +92,13 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
     if (reduced) { onClose(); return; }
     card.value = withTiming(0, { duration: 240, easing: EXIT_EASE }, (done) => { if (done) runOnJS(onClose)(); });
   };
+
+  // 카드 밖 빈 지도 탭: 카드가 열린 뒤 부모가 dismissKey를 바꾸면 ×와 같이 닫는다(열릴 때의 값은 무시)
+  const openedKey = useRef(dismissKey);
+  useEffect(() => {
+    if (dismissKey !== openedKey.current) close();
+    // close는 매 렌더 새로 만들어지지만 dismissKey가 바뀔 때만 부른다
+  }, [dismissKey]);
 
   const cardStyle = useAnimatedStyle(() => ({
     opacity: reduced ? card.value : 1,
@@ -137,13 +146,6 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
               <>
                 <Image source={{ uri: resolve(photo) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
                 <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)']} locations={[0.35, 1]} style={StyleSheet.absoluteFill} />
-                {route && route.length > 1 && (
-                  <View style={styles.miniRoute}>
-                    <Svg width={72} height={72}>
-                      <Path d={pathD(fitToBox(route, 72, 72, 15))} stroke="#FFFFFF" strokeWidth={2} fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                    </Svg>
-                  </View>
-                )}
               </>
             ) : (
               route && route.length > 1 && (
@@ -170,6 +172,18 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
             </Animated.View>
           </Animated.View>
         </Pressable>
+        {/* 닫기: 카드 오른쪽 위(상세 열기와 겹치지 않게 미디어 바깥 형제) */}
+        <Animated.View style={[styles.closeWrap, mediaStyle]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="닫기"
+            onPress={close}
+            hitSlop={6}
+            style={[styles.closeBtn, { backgroundColor: photo ? 'rgba(11,16,22,0.55)' : c.glass, borderColor: photo ? 'rgba(255,255,255,0.18)' : c.glassBorder }]}
+          >
+            <CloseIcon size={16} color={photo ? '#FFFFFF' : c.text2} />
+          </Pressable>
+        </Animated.View>
 
         <Animated.View style={[styles.metaRow, metaStyle]}>
           <Pressable
@@ -194,9 +208,6 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
               <ChevronIcon size={18} color={c.ink} />
             </Pressable>
           )}
-          <Pressable accessibilityRole="button" accessibilityLabel="닫기" style={styles.closeBtn} onPress={close}>
-            <CloseIcon size={18} color={c.text2} />
-          </Pressable>
         </Animated.View>
 
         <Animated.View style={[styles.stats, metaStyle]}>
@@ -238,7 +249,6 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.glassBorder,
   },
   media: { height: MEDIA_H, overflow: 'hidden', backgroundColor: c.map.bg },
-  miniRoute: { position: 'absolute', right: 12, top: 12, width: 72, height: 72, borderRadius: 16, backgroundColor: 'rgba(11,16,22,0.4)' },
   stickers: { position: 'absolute', left: 12, top: 12, flexDirection: 'row', gap: 6 },
   sticker: {
     paddingVertical: 7, paddingHorizontal: 11, borderRadius: 99,
@@ -260,7 +270,9 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   sub: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 17, color: c.text2 },
   // 36 + hitSlop 4 → 누르는 영역 44
   courseBtn: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accent },
-  closeBtn: { marginRight: -6, width: 40, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // 보이는 원 32 + hitSlop 6 → 누르는 영역 44
+  closeWrap: { position: 'absolute', top: 12, right: 12 },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   stats: { flexDirection: 'row', gap: 18, paddingTop: 4, paddingRight: 14, paddingLeft: 62 },
   statLabel: { ...monoLabel(9.5, 0.1), lineHeight: 14, color: c.muted },
   statValue: { fontFamily: FONT.num, fontSize: 15, lineHeight: 18, color: c.text },

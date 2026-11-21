@@ -95,6 +95,8 @@ ${routeFxScript()}
 ${traceLayerScript()}
   var group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   map.addLayer(group);
+  // 빈 지도 탭 → 열린 카드를 닫는다(마커 click은 지도로 버블링되지 않고, 끌기·핀치는 click이 아니다)
+  map.on('click', function() { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapTap' })); });
   var fitted = false;
 
   // 처음 받은 러닝에만 화면을 맞춘다(새로고침·다음 페이지로 다시 들어와도 보던 위치 유지)
@@ -154,6 +156,8 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [view, setView] = useState<ProfileView>('map');
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
+  // 빈 지도 탭 횟수: 열린 카드는 이 값이 바뀌면 닫힌다(새 카드는 열릴 때의 값을 기준으로 삼는다)
+  const [dismissKey, setDismissKey] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const headerHeightRef = useRef(0);
   headerHeightRef.current = headerHeight;
@@ -342,8 +346,10 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
               }}
               onMessage={(e) => {
                 try {
-                  const message = JSON.parse(e.nativeEvent.data) as RunWithRoute | TraceMessage;
-                  if ('type' in message && message.type === 'trace') {
+                  const message = JSON.parse(e.nativeEvent.data) as RunWithRoute | TraceMessage | { type: 'mapTap' };
+                  if ('type' in message && message.type === 'mapTap') {
+                    setDismissKey((k) => k + 1);
+                  } else if ('type' in message && message.type === 'trace') {
                     setToast(message.fresh > 0
                       ? { title: `새 길 ${message.fresh}칸을 열었어요`, sub: `내 흔적 +${message.total}칸` }
                       : { title: `익숙한 길 ${message.total}칸을 다시 달렸어요`, sub: '내 흔적' });
@@ -496,6 +502,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
           route={selected.route}
           routeColor={c.map.dot}
           mine={mine}
+          dismissKey={dismissKey}
           onClose={() => setSelected(null)}
           onDetailPress={openRun}
           onCheered={(runId, cheers, cheered) => setRuns((prev) => prev.map((run) => (run._id === runId ? { ...run, cheers, cheered } : run)))}

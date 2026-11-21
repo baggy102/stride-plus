@@ -31,6 +31,7 @@ const MAX_RADIUS_M = 300000;
 type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number; cell: number };
 type DensityCell = { lng: number; lat: number; n: number };
 type RunMessage = { type: 'run'; run: RunMarker };
+type MapTapMessage = { type: 'mapTap' };
 type RunDetailResponse = { route?: { coordinates?: [number, number][] } };
 
 // bottomOffset: 탭바에 가리지 않게 Leaflet 출처 표기를 올리는 높이
@@ -137,6 +138,9 @@ ${traceLayerScript()}
     group.addLayers(markers);
   };
 
+  // 빈 지도 탭 → 열린 카드를 닫는다(마커 click은 지도로 버블링되지 않고, 끌기·핀치는 click이 아니다)
+  map.on('click',function(){window.ReactNativeWebView.postMessage(JSON.stringify({type:'mapTap'}));});
+
   // 응원 수가 바뀐 러닝 하나만 다시 그린다(전체 다시 그리기 없음)
   window.__updateRun=function(next){
     lastRuns=lastRuns.map(function(run){return run._id===next._id?next:run;});
@@ -237,6 +241,8 @@ export function MapFeed() {
     [center, initialTheme, tabClearance],
   );
   const [selected, setSelected] = useState<RunMarker | null>(null);
+  // 빈 지도 탭 횟수: 열린 카드는 이 값이 바뀌면 닫힌다(새 카드는 열릴 때의 값을 기준으로 삼는다)
+  const [dismissKey, setDismissKey] = useState(0);
   const [feedState, setFeedState] = useState<FeedState>('normal');
   const [filter, setFilter] = useState<FeedFilter>('total');
   const [noMatch, setNoMatch] = useState(false);
@@ -400,11 +406,13 @@ export function MapFeed() {
         }}
         onMessage={(e) => {
           try {
-            const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage;
+            const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage | MapTapMessage;
             if (message.type === 'viewport') {
               lastViewport.current = message;
               setRadius(message.radius);
               fetchRuns(message);
+            } else if (message.type === 'mapTap') {
+              setDismissKey((k) => k + 1);
             } else {
               setSelected(message.run);
             }
@@ -506,6 +514,7 @@ export function MapFeed() {
           routeColor={routeColor}
           mine={mine}
           onCheered={onCheered}
+          dismissKey={dismissKey}
           onClose={() => setSelected(null)}
           onUserPress={(userId) => {
             setSelected(null);
