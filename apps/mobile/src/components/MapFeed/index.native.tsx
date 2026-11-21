@@ -20,7 +20,7 @@ import { useColors, useScheme } from '@/theme/useColors';
 import { elevationStyle, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import type { RunMarker } from '@/types/run';
-import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
+import { FEED_FILTERS, HYPE_MIN_CHEERS, freshSegments, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 
@@ -74,17 +74,10 @@ ${markerIconsScript(p)}
   // 얼굴 링 마커(TOTAL·HYPE·NEW). run에는 앱이 붙인 hype·fresh·cheers·avatar(검사한 주소)·initial·t·tone(사용자 색 칸)·operator가 있다
   var mode='total';
   var HEART='<svg width="9" height="9" viewBox="0 0 24 24" style="display:block"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.1 4.2 2.4h2c.6-1.3 2.1-2.4 4.2-2.4 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z"/></svg>';
-  function esc(s){return String(s).replace(/[&<>"']/g,function(ch){return '&#'+ch.charCodeAt(0)+';';});}
   function matches(run){return mode==='total'||(mode==='hype'&&run.hype)||(mode==='new'&&run.fresh);}
   function ringOf(run,base){var c=iconColors;return mode==='hype'&&run.hype?c.hype:(mode==='new'&&run.fresh?c.fresh:base);}
   // TOTAL 링 바탕: 운영자는 Indigo, 나머지는 사용자별 4색
   function toneOf(run){var c=iconColors;return run.operator?c.operator:c.runners[run.tone];}
-  // 이니셜을 깔고 사진을 덮는다(사진을 못 받아도 이니셜이 보인다)
-  function face(run,size,ring,ringW){
-    var c=iconColors;
-    var img=run.avatar?'<div style="position:absolute;inset:0;background:url('+run.avatar+') center/cover"></div>':'';
-    return '<div style="position:relative;width:'+size+'px;height:'+size+'px;box-sizing:border-box;border-radius:50%;border:'+ringW+'px solid '+ring+';background:'+c.face+';overflow:hidden;display:flex;align-items:center;justify-content:center;font:600 '+Math.round(size*0.38)+'px/1 -apple-system,system-ui,sans-serif;color:'+c.faceText+'">'+esc(run.initial)+img+'</div>';
-  }
   // HYPE에서 해당 러닝: Pearl 링 · 1.16배 · 번짐 · Pearl 응원 배지. NEW에서 해당 러닝: 민트 링. TOTAL에서 NEW 러닝엔 민트 점(오른쪽 위). 나머지는 흐리게
   // 응원 수: 보이는 러닝에 1개 이상이면 유리 칩(오른쪽 아래). 운영자: 왼쪽 아래 S 배지
   function faceIcon(run){
@@ -104,8 +97,7 @@ ${markerIconsScript(p)}
     var faces=top.map(function(run,i){
       return '<div style="margin-left:'+(i?-10:0)+'px;position:relative;z-index:'+(3-i)+';opacity:'+(matches(run)?1:0.5)+'">'+face(run,28,ringOf(run,toneOf(run)),2)+'</div>';
     }).join('');
-    var w=Math.round(8+28+18*(top.length-1)+14+n.length*7.5);
-    return L.divIcon({html:'<div class="face-in"><div style="display:inline-flex;align-items:center;padding:3px;border-radius:99px;background:'+c.glass+';border:1px solid '+c.glassBorder+';-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 8px 24px rgba(0,0,0,'+(c.dark?0.45:0.12)+');opacity:'+(anyOn?1:0.45)+';filter:'+(anyOn?'none':'grayscale(1)')+'">'+faces+'<div style="padding:0 8px 0 6px;font:500 12px/1 ui-monospace,Menlo,monospace;color:'+c.text+'">'+n+'</div></div></div>',className:'',iconSize:[w,36],iconAnchor:[w/2,18]});
+    return stackPill(faces,top.length,n,anyOn);
   }
 
   var group=L.markerClusterGroup({iconCreateFunction:stackIcon,showCoverageOnHover:false,maxClusterRadius:60});
@@ -259,6 +251,7 @@ export function MapFeed() {
   const requestSeq = useRef(0);
   // NEW(이번 주 새 길): 서버가 준 칸과 칸을 연 러닝별 km
   const newCellsRef = useRef<NewCellsResponse['cells']>([]);
+  const newMetersRef = useRef(50);
   const [openerKm, setOpenerKm] = useState<Map<string, number>>(() => new Map());
   const openersRef = useRef<ReadonlySet<string>>(new Set());
 
@@ -291,9 +284,10 @@ export function MapFeed() {
       .then((data) => {
         if (seq !== requestSeq.current) return;
         newCellsRef.current = data.cells;
+        if (data.cellMeters) newMetersRef.current = data.cellMeters;
         openersRef.current = new Set(data.runs.map((r) => r.runId));
         setOpenerKm(new Map(data.runs.map((r) => [r.runId, r.km])));
-        webViewRef.current?.injectJavaScript(`window.__trace.setNew(${JSON.stringify(data.cells)},${filterRef.current === 'new'});true;`);
+        webViewRef.current?.injectJavaScript(`window.__trace.setNew(${JSON.stringify(data.cells)},${filterRef.current === 'new'},${data.cellMeters});true;`);
         showRuns();
       });
     try {
@@ -362,7 +356,7 @@ export function MapFeed() {
   // 경로 연출 A+: 처음엔 그리며 재생, 필터·테마만 바뀌면 끝 상태로 색만 바꾼다
   const drawnId = useRef<string | null>(null);
   const routeColor = selected
-    // NEW: 경로는 Ice로 두고 그 아래 민트 칸이 「새로 연 구간」을 보여 준다
+    // NEW: 바탕은 Ice, 이 러닝이 연 구간만 민트(아래 fresh)
     ? filter === 'hype' && isHype(selected) ? c.hype : c.map.dot
     : c.map.dot;
   const mine = !!selected && selected.userId._id === myId;
@@ -375,10 +369,13 @@ export function MapFeed() {
       delay: ROUTE_DELAY_MS,
       keep: drawnId.current === selectedRoute.id,
       seed: seedOf(selectedRoute.id),
+      // NEW 렌즈: 이 러닝이 연 「이번 주 새 길」 구간만 민트(HYPE 렌즈의 Pearl처럼 렌즈일 때만)
+      fresh: filter === 'new' ? freshSegments(geometry.main, newCellsRef.current, selectedRoute.id, newMetersRef.current) : null,
+      freshCol: c.fresh,
     };
     drawnId.current = selectedRoute.id;
     webViewRef.current?.injectJavaScript(`window.__routeFx.show(${JSON.stringify(geometry)},${JSON.stringify(options)});true;`);
-  }, [selectedRoute, routeColor, mine, c]);
+  }, [selectedRoute, routeColor, mine, c, filter]);
 
   // D3 바탕 색은 테마를 따른다
   useEffect(() => {

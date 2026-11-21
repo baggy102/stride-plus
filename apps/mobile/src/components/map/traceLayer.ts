@@ -28,7 +28,24 @@ export function traceLayerScript(): string {
     var ctx=cv.getContext('2d');
     var col={base:'#8E9BA8',ice:'#9DBFE0',mint:'#5CF0C2'},runs=[],cells=null,play=null,raf=0;
     // 지도 피드 NEW: 서버가 준 「이번 주 새 길」 칸(고정 지리 칸 중심 lng·lat). on이면 데이터 칸을 흐리게 하고 이 칸만 민트로
-    var newList=[],dim=false;
+    var newList=[],dim=false,newM=50,newKeys=null;
+    // NEW 칸 → 화면 칸: 서버 칸(newM 미터, 기준 위도 37.5 — 서버 new-cells와 같다)이 서로 붙어 있으면(같은 러닝) 두 중심을 이어
+    // 지나는 화면 칸을 모두 켠다. 줌을 당겨도 내 흔적처럼 끊기지 않는 점 줄이 된다. 대각선은 사이 칸이 없을 때만 잇는다
+    function buildNew(){
+      newKeys=new Map();
+      var dLat=newM/111320,dLng=newM/(111320*Math.cos(37.5*Math.PI/180)),geo=new Map();
+      newList.forEach(function(c){geo.set(Math.floor(c.lng/dLng)+','+Math.floor(c.lat/dLat),c);});
+      function mark(x,y){var k=key(x,y);if(!newKeys.has(k))newKeys.set(k,{i:Math.floor(x/CELL),j:Math.floor(y/CELL)});}
+      function link(a,b){var p=map.latLngToLayerPoint([a.lat,a.lng]),q=map.latLngToLayerPoint([b.lat,b.lng]),steps=Math.max(1,Math.ceil(Math.hypot(q.x-p.x,q.y-p.y)/4));
+        for(var s=0;s<=steps;s++)mark(p.x+(q.x-p.x)*s/steps,p.y+(q.y-p.y)*s/steps);}
+      geo.forEach(function(c,k){
+        var ij=k.split(','),i=+ij[0],j=+ij[1];
+        var p=map.latLngToLayerPoint([c.lat,c.lng]);mark(p.x,p.y);
+        function at(di,dj){var n=geo.get((i+di)+','+(j+dj));return n&&n.runId===c.runId?n:null;}
+        [[1,0],[0,1]].forEach(function(d){var n=at(d[0],d[1]);if(n)link(c,n);});
+        [[1,1],[1,-1]].forEach(function(d){var n=at(d[0],d[1]);if(n&&!at(d[0],0)&&!at(0,d[1]))link(c,n);});
+      });
+    }
     // 수 → 점 반지름(px). 1~2는 작게, 3 · 10 · 30부터 한 단계씩
     function radius(n){return n>=30?4.4:n>=10?3.6:n>=3?2.7:1.7;}
     function key(x,y){return Math.floor(x/CELL)+','+Math.floor(y/CELL);}
@@ -80,10 +97,12 @@ export function traceLayerScript(): string {
         ctx.globalAlpha=(fresh?0.85:0.6)*k*fade;ctx.fillStyle=fresh?col.mint:col.ice;
         ctx.beginPath();ctx.arc(x,y,radius(c.n)*(0.6+0.4*k),0,6.2832);ctx.fill();
       });
-      if(dim&&newList.length){
-        ctx.globalAlpha=0.9;ctx.fillStyle=col.fresh||col.mint;ctx.beginPath();
-        newList.forEach(function(c){var p=map.latLngToLayerPoint([c.lat,c.lng]),x=p.x-origin.x,y=p.y-origin.y;
-          if(x<-CELL||y<-CELL||x>pw+CELL||y>ph+CELL)return;ctx.moveTo(x+3.2,y);ctx.arc(x,y,3.2,0,6.2832);});
+      // NEW 칸도 내 흔적과 같은 화면 칸에 같은 크기로(칸 중심 · radius(그 칸의 수) · 0.85)
+      if(dim&&newKeys&&newKeys.size){
+        ctx.globalAlpha=0.85;ctx.fillStyle=col.fresh||col.mint;ctx.beginPath();
+        newKeys.forEach(function(c,k){var x=(c.i+0.5)*CELL-origin.x,y=(c.j+0.5)*CELL-origin.y;
+          if(x<-CELL||y<-CELL||x>pw+CELL||y>ph+CELL)return;
+          var d=cells&&cells.get(k),r=radius(d?d.n:1);ctx.moveTo(x+r,y);ctx.arc(x,y,r,0,6.2832);});
         ctx.fill();
       }
       ctx.globalAlpha=1;
@@ -95,7 +114,7 @@ export function traceLayerScript(): string {
         window.ReactNativeWebView.postMessage(JSON.stringify({type:'trace',fresh:fresh,total:total}));}
     }
     function redraw(){cancelAnimationFrame(raf);raf=requestAnimationFrame(frame);}
-    map.on('zoomend',function(){build();redraw();});
+    map.on('zoomend',function(){build();buildNew();redraw();});
     map.on('moveend resize',redraw);
     map.on('zoomstart',function(){cv.style.visibility='hidden';});
     map.on('zoomend',function(){cv.style.visibility='';});
@@ -105,8 +124,15 @@ export function traceLayerScript(): string {
       // 지도 피드: 서버가 센 칸(서로 다른 러너 3명 이상)
       setCells:function(next){served=next;build();redraw();},
       setColors:function(next){col=next;redraw();},
-      // 지도 피드 NEW: 「이번 주 새 길」 칸과 표시 여부(NEW 칸이 골라졌을 때만 on)
-      setNew:function(list,on){newList=list||[];dim=!!on;redraw();},
+      // 고른 러닝 경로의 「새로 연 구간」: 구간(i-1→i) 가운데 점의 칸을 이 러닝이 처음 지났고 7일 안이면 true. 없으면 null
+      mask:function(route,id){var r=runs.find(function(q){return q._id===id;});
+        if(!r||!cells||Date.now()-r.t>=NEW_MS)return null;
+        var any=false,m=[];
+        for(var i=1;i<route.length;i++){var a=route[i-1],b=route[i],p=map.latLngToLayerPoint([(a[1]+b[1])/2,(a[0]+b[0])/2]),c=cells.get(key(p.x,p.y));
+          var f=!!c&&c.first===r.t;m.push(f);if(f)any=true;}
+        return any?m:null;},
+      // 지도 피드 NEW: 「이번 주 새 길」 칸과 표시 여부(NEW 칸이 골라졌을 때만 on), 칸 한 변(미터, 바뀔 때만)
+      setNew:function(list,on,m){newList=list||[];dim=!!on;if(m)newM=m;buildNew();redraw();},
       // 방금 저장한 러닝이 지도에 스며든다(동작 줄이기면 바로 끝 상태로)
       play:function(id){var r=runs.find(function(q){return q._id===id;});if(!r)return;
         var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;

@@ -42,3 +42,20 @@ export function safeImageUrl(url: string | null | undefined, baseUrl: string): s
   if (!/^https?:\/\//.test(full) || /['"()\s<>\\]/.test(full)) return null;
   return full;
 }
+
+// NEW에서 고른 러닝 경로의 「새로 연 구간」(민트): 구간(i-1→i) 가운데 점의 서버 칸(cellMeters, 기준 위도 37.5 — 서버 new-cells와 같다)을
+// 이 러닝이 열었으면 true. 연 구간이 없으면 null
+export function freshSegments(
+  main: [number, number][],
+  cells: { lng: number; lat: number; runId: string }[],
+  runId: string,
+  cellMeters: number,
+): boolean[] | null {
+  const dLat = cellMeters / 111320;
+  const dLng = cellMeters / (111320 * Math.cos((37.5 * Math.PI) / 180));
+  const keyOf = (lng: number, lat: number) => `${Math.floor(lng / dLng)},${Math.floor(lat / dLat)}`;
+  const opened = new Set(cells.filter((c) => c.runId === runId).map((c) => keyOf(c.lng, c.lat)));
+  if (opened.size === 0) return null;
+  const mask = main.slice(1).map((b, i) => opened.has(keyOf((main[i][0] + b[0]) / 2, (main[i][1] + b[1]) / 2)));
+  return mask.some(Boolean) ? mask : null;
+}
