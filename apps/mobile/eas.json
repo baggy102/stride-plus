@@ -10,6 +10,7 @@
     },
     "preview": {
       "extends": "base",
+      "channel": "preview",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -17,6 +18,7 @@
     },
     "production": {
       "extends": "base",
+      "channel": "production",
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://stride-api.tadfz60t1pncc.ap-southeast-2.cs.amazonlightsail.com"
