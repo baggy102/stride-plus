@@ -198,14 +198,14 @@ export function RunList(props: Props) {
         <View style={styles.stateIcon}>
           {isError ? <AlertIcon size={28} color={c.text2} /> : <RouteIcon size={28} color={c.text2} />}
         </View>
-        <Text style={styles.stateTitle}>{isError ? '불러오지 못했어요' : '아직 러닝 기록이 없어요'}</Text>
+        <Text style={styles.stateTitle}>{isError ? '불러오지 못했어요' : mine ? '내 지도에 아직 길이 없어요' : '아직 러닝 기록이 없어요'}</Text>
         {isError ? (
           <Pressable accessibilityRole="button" onPress={props.onRetry} style={styles.ghostBtn}>
             <Text style={styles.ghostText}>다시 시도</Text>
           </Pressable>
         ) : mine ? (
           <Pressable accessibilityRole="button" onPress={props.onStartRun} style={styles.accentBtn}>
-            <Text style={styles.accentText}>첫 러닝 시작하기</Text>
+            <Text style={styles.accentText}>달리러 가기</Text>
           </Pressable>
         ) : null}
       </View>

@@ -14,6 +14,13 @@ export class Post {
 
   @Prop({ type: [MongooseSchema.Types.ObjectId], default: [] })
   likes: Types.ObjectId[];
+
+  // 응원한 시각(기준 지표 N1 = 주간 응원 받은 러닝 수). 취소하면 그 사람 기록을 뺀다. 2026-11-21 전 응원에는 없다
+  @Prop({
+    type: [{ _id: false, userId: { type: MongooseSchema.Types.ObjectId, ref: 'User', required: true }, at: { type: Date, required: true } }],
+    default: [],
+  })
+  cheerLog: { userId: Types.ObjectId; at: Date }[];
 }
 
 export const PostSchema = SchemaFactory.createForClass(Post);

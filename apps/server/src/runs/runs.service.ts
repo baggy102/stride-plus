@@ -7,6 +7,7 @@ import { Post, PostDocument } from '../posts/posts.schema';
 import { CreateRunDto } from './dto/create-run.dto';
 import { trimHomeEnds } from './home-privacy';
 import { densityCells, type DensityCell } from './density';
+import { newCells, NEW_LOOKBACK_MS, NEW_WINDOW_MS, type NewCellsResult } from './new-cells';
 
 const MARKER_SELECT = 'userId distanceKm paceSecPerKm routeImageUrl photoUrls description createdAt route';
 const USER_SELECT = '_id username profileImageUrl role';
@@ -109,6 +110,31 @@ export class RunsService {
       }),
       cellMeters,
       lat,
+    );
+  }
+
+  // 지도 피드 NEW: 「이번 주 새 길」 칸(최근 7일 통과 중 직전 28일 아무도 안 지난 칸)과 그 칸을 연 러닝.
+  // 내 러닝까지 모두 출발·도착 100m를 잘라 센다 — 잘린 구간이 민트 점으로 다시 드러나지 않게(R10, 법적 확인 범위)
+  async newCells(viewerId: string, lat: number, lng: number, radius: number): Promise<NewCellsResult> {
+    const hidden = await this.hiddenUserIds(viewerId);
+    const now = Date.now();
+    const runs = await this.runModel
+      .find({
+        userId: { $nin: hidden },
+        createdAt: { $gte: new Date(now - NEW_WINDOW_MS - NEW_LOOKBACK_MS) },
+        route: { $near: { $geometry: { type: 'Point', coordinates: [lng, lat] }, $maxDistance: radius } },
+      })
+      .select('route createdAt')
+      .limit(MAX_NEARBY_RESULTS)
+      .lean()
+      .exec();
+    return newCells(
+      runs.map((run) => ({
+        id: String(run._id),
+        at: new Date((run as { createdAt?: Date }).createdAt ?? 0).getTime(),
+        route: trimHomeEnds((run.route as { coordinates: [number, number][] } | undefined)?.coordinates ?? []).coordinates,
+      })),
+      now,
     );
   }
 

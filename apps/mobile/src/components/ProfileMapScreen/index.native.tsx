@@ -1,9 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, Image, Pressable, type LayoutChangeEvent } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import * as SecureStorage from '@/utils/secureStorage';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
@@ -11,7 +14,9 @@ import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
 import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
 import { traceLayerScript, type TraceColors, type TraceMessage } from '@/components/map/traceLayer';
 import { routeGeometry } from '@/utils/route';
-import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
+import { evenPoints, firstRunFlags, FIRST_RUN_MIN_KM, mostFrequent } from '@/utils/shareRun';
+import { ShareCard, type ShareCardData } from '@/components/ShareCard';
+import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon, ShareIcon } from '@/components/icons';
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
 import { useColors, useScheme } from '@/theme/useColors';
@@ -55,10 +60,13 @@ function CalendarDotsIcon({ color }: { color: string }) {
 const PAGE_SIZE = 20;
 // 고른 경로는 카메라가 먼저 움직이고 0.38초 뒤 그린다(지도 피드와 같다)
 const ROUTE_DELAY_MS = 380;
-const HOME_LABEL = '집 근처 100m 가림 · 기본 ON';
+// 실제 처리(서버 home-privacy: 남에게는 출발·도착 100m를 자른다)만 말한다. 「집」·「기본 ON」은 끄는 화면·법적 확인 전이라 쓰지 않음
+const HOME_LABEL = '출발·도착 100m는 다른 사람에게 안 보여요';
 // 저장 직후 「내 흔적」: 카메라가 새 경로로 간 뒤 스며들기 시작
 const TRACE_DELAY_MS = 650;
 const TOAST_MS = 2800;
+// 응원 받은 순간: 마지막으로 본 시각(ISO)
+const CHEER_SEEN_KEY = 'cheerSeenAt';
 
 function traceColors(c: Palette): TraceColors {
   return { base: c.muted, ice: c.map.dot, mint: c.fresh };
@@ -95,7 +103,24 @@ ${routeFxScript()}
 ${traceLayerScript()}
   var group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   map.addLayer(group);
+  // 빈 지도 탭 → 열린 카드를 닫는다(마커 click은 지도로 버블링되지 않고, 끌기·핀치는 click이 아니다)
+  map.on('click', function() { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapTap' })); });
   var fitted = false;
+
+  // 응원 받은 순간: 응원 받은 내 길이 한 번 빛났다 사라진다(약 2초, 동작 줄이기면 짧게 한 번)
+  window.__glow = function(routes, color) {
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    routes.forEach(function(route) {
+      if (!route || route.length < 2) return;
+      var line = L.polyline(route.map(function(p) { return [p[1], p[0]]; }), { color: color, weight: 7, opacity: 0, interactive: false, lineCap: 'round' }).addTo(map);
+      var t0 = performance.now(), dur = reduce ? 700 : 2000;
+      (function step(now) {
+        var k = Math.min(1, (now - t0) / dur), o = k < 0.3 ? k / 0.3 : (1 - k) / 0.7;
+        line.setStyle({ opacity: 0.9 * o });
+        if (k < 1) requestAnimationFrame(step); else map.removeLayer(line);
+      })(t0);
+    });
+  };
 
   // 처음 받은 러닝에만 화면을 맞춘다(새로고침·다음 페이지로 다시 들어와도 보던 위치 유지)
   var lastRuns = [];
@@ -154,10 +179,20 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [view, setView] = useState<ProfileView>('map');
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
+  // 빈 지도 탭 횟수: 열린 카드는 이 값이 바뀌면 닫힌다(새 카드는 열릴 때의 값을 기준으로 삼는다)
+  const [dismissKey, setDismissKey] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const headerHeightRef = useRef(0);
   headerHeightRef.current = headerHeight;
   const [toast, setToast] = useState<{ title: string; sub: string } | null>(null);
+  // 저장 직후 공유: 재생한 러닝 → 공유 버튼(시간으로 사라지지 않음) → 공유 이미지 캡처 → 공유 시트
+  const playedRef = useRef<string | null>(null);
+  const [shareRunId, setShareRunId] = useState<string | null>(null);
+  const [shareData, setShareData] = useState<ShareCardData | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const shareRef = useRef<ComponentRef<typeof View>>(null);
+  // 응원 받은 순간: 화면이 열릴 때마다 한 번, 마지막으로 본 뒤 받은 응원이 있으면 그 길이 빛나고 토스트
+  const cheerCheckPending = useRef(true);
   const webViewRef = useRef<WebViewHandle>(null);
   const mapLoaded = useRef(false);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
@@ -172,6 +207,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     const filed = runs.find((run) => run._id === pendingTrace.current);
     if (!filed) return;
     pendingTrace.current = null;
+    playedRef.current = filed._id;
     const pad = [headerHeightRef.current + 16, bottomBase + 96];
     webViewRef.current?.injectJavaScript(
       `window.__fitRoute(${JSON.stringify(filed.route)},${JSON.stringify(pad)});setTimeout(function(){window.__trace.play(${JSON.stringify(filed._id)});},${TRACE_DELAY_MS});true;`,
@@ -280,12 +316,83 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     );
   }, [selected, mine, c, bottomBase]);
 
-  // 탭 재진입 시 화면을 유지한 채 다시 불러온다
+  // 탭 재진입 시 화면을 유지한 채 다시 불러온다. 다른 탭으로 가면 저장 직후 공유 버튼은 사라진다
   const skipFirstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
-    if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
-    load('quiet');
+    if (skipFirstFocus.current) skipFirstFocus.current = false;
+    else load('quiet');
+    cheerCheckPending.current = true;
+    return () => setShareRunId(null);
   }, [load]));
+
+  // 마지막으로 본 시각(기기 저장) 이후 받은 응원. 처음이면 지금을 기록만 한다(쌓인 응원이 한꺼번에 뜨지 않게).
+  // 저장 직후 재생 중이면 그 알림을 우선하고 이번엔 건너뛴다
+  const checkCheers = useCallback(async () => {
+    if (!mine || !mapLoaded.current || listState !== 'ready' || !cheerCheckPending.current) return;
+    cheerCheckPending.current = false;
+    if (pendingTrace.current || playedRef.current) return;
+    try {
+      const seen = await SecureStorage.getItem(CHEER_SEEN_KEY);
+      const now = new Date().toISOString();
+      if (!seen) { await SecureStorage.setItem(CHEER_SEEN_KEY, now); return; }
+      const { data } = await client.get<{ runId: string; count: number }[]>(`/posts/cheers/received?since=${encodeURIComponent(seen)}`);
+      await SecureStorage.setItem(CHEER_SEEN_KEY, now);
+      const total = data.reduce((sum, r) => sum + r.count, 0);
+      if (total === 0) return;
+      const ids = new Set(data.map((r) => r.runId));
+      const routes = runs.filter((r) => ids.has(r._id)).map((r) => r.route);
+      webViewRef.current?.injectJavaScript(`window.__glow(${JSON.stringify(routes)},${JSON.stringify(c.fresh)});true;`);
+      setToast({ title: `지난번 길에 응원이 ${total}개 왔어요`, sub: '내 흔적' });
+    } catch {
+      // 못 받으면 다음에 다시 본다(본 시각을 바꾸지 않음)
+    }
+  }, [mine, listState, runs, c.fresh]);
+  useEffect(() => { checkCheers(); }, [checkCheers]);
+
+  // 공유 이미지 재료: 출발·도착 100m를 자른 경로, 불러 둔 내 이전 러닝에 없던 구간, 경로 위 다섯 점 중 가장 많이 나온 동
+  const startShare = useCallback(async () => {
+    const run = runs.find((r) => r._id === shareRunId);
+    if (!run || sharing) return;
+    setSharing(true);
+    try {
+      const main = routeGeometry(run.route, true).main;
+      const created = Date.parse(run.createdAt);
+      const previous = runs.filter((r) => r._id !== run._id && Date.parse(r.createdAt) < created).map((r) => r.route);
+      const { first, km } = firstRunFlags(main, previous);
+      const names = await Promise.all(evenPoints(main, 5).map(async ([lng, lat]) => {
+        try {
+          const [place] = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lng });
+          return place?.district ?? null;
+        } catch {
+          return null;
+        }
+      }));
+      setShareData({
+        route: main, first, firstKm: km >= FIRST_RUN_MIN_KM ? km : 0, place: mostFrequent(names),
+        distanceKm: run.distanceKm, paceSecPerKm: run.paceSecPerKm, createdAt: run.createdAt,
+      });
+    } catch {
+      setSharing(false);
+    }
+  }, [runs, shareRunId, sharing]);
+
+  // 화면 밖에 그린 공유 이미지를 다음 프레임에 캡처해 공유 시트로. 공유를 마치면(취소 포함) 버튼도 사라진다
+  useEffect(() => {
+    if (!shareData) return;
+    const frame = requestAnimationFrame(async () => {
+      try {
+        const uri = await captureRef(shareRef, { format: 'png', width: 1080, height: 1920, result: 'tmpfile' });
+        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png' });
+        setShareRunId(null);
+      } catch {
+        // 캡처·공유 실패: 버튼은 남겨 두고 다시 누를 수 있게 한다
+      } finally {
+        setShareData(null);
+        setSharing(false);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [shareData]);
 
   const handleMyLocation = useCallback(async () => {
     try {
@@ -339,11 +446,16 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                 applyTheme();
                 webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(traceColors(c))});true;`);
                 pushRuns();
+                checkCheers();
               }}
               onMessage={(e) => {
                 try {
-                  const message = JSON.parse(e.nativeEvent.data) as RunWithRoute | TraceMessage;
-                  if ('type' in message && message.type === 'trace') {
+                  const message = JSON.parse(e.nativeEvent.data) as RunWithRoute | TraceMessage | { type: 'mapTap' };
+                  if ('type' in message && message.type === 'mapTap') {
+                    setDismissKey((k) => k + 1);
+                    setShareRunId(null);
+                  } else if ('type' in message && message.type === 'trace') {
+                    if (playedRef.current) { setShareRunId(playedRef.current); playedRef.current = null; }
                     setToast(message.fresh > 0
                       ? { title: `새 길 ${message.fresh}칸을 열었어요`, sub: `내 흔적 +${message.total}칸` }
                       : { title: `익숙한 길 ${message.total}칸을 다시 달렸어요`, sub: '내 흔적' });
@@ -496,6 +608,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
           route={selected.route}
           routeColor={c.map.dot}
           mine={mine}
+          dismissKey={dismissKey}
           onClose={() => setSelected(null)}
           onDetailPress={openRun}
           onCheered={(runId, cheers, cheered) => setRuns((prev) => prev.map((run) => (run._id === runId ? { ...run, cheers, cheered } : run)))}
@@ -509,6 +622,29 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
             <Text style={styles.toastTitle}>{toast.title}</Text>
             <Text style={styles.toastSub}>{toast.sub}</Text>
           </Glass>
+        </View>
+      )}
+
+      {/* 저장 직후 공유 버튼(토스트 아래). 빈 지도 탭 · 다른 탭 · 공유를 마치면 사라진다 */}
+      {showMap && shareRunId && !selected && (
+        <View style={[styles.shareShadow, { bottom: bottomBase + 4 }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="이번 러닝 공유"
+            accessibilityState={{ busy: sharing }}
+            disabled={sharing}
+            onPress={startShare}
+            style={styles.shareBtn}
+          >
+            {sharing ? <ActivityIndicator size="small" color={c.ink} /> : <ShareIcon size={16} color={c.ink} />}
+            <Text style={styles.shareText}>공유</Text>
+          </Pressable>
+        </View>
+      )}
+      {/* 공유 이미지: 화면 밖에 그려 캡처만 한다 */}
+      {shareData && (
+        <View style={styles.offscreen} pointerEvents="none">
+          <ShareCard ref={shareRef} data={shareData} />
         </View>
       )}
     </View>
@@ -563,6 +699,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   myLocGlass: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   toastShadow: { position: 'absolute', alignSelf: 'center', borderRadius: 16, ...elevationStyle(c) },
+  shareShadow: { position: 'absolute', alignSelf: 'center', borderRadius: 22, ...elevationStyle(c) },
+  shareBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 44, paddingHorizontal: 22, borderRadius: 22, backgroundColor: c.accent },
+  shareText: { fontFamily: FONT.semibold, fontSize: 15, lineHeight: 20, color: c.ink },
+  offscreen: { position: 'absolute', left: -10000, top: 0 },
   toast: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center' },
   toastTitle: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text },
   toastSub: { ...monoLabel(10, 0.08), lineHeight: 14, color: c.muted },
