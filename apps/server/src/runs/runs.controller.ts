@@ -8,6 +8,7 @@ import { RunsService } from './runs.service';
 import { StorageService } from '../storage/storage.service';
 import { FindRunsDto } from './dto/find-runs.dto';
 import { FindDensityDto } from './dto/find-density.dto';
+import { FindNewCellsDto } from './dto/find-new-cells.dto';
 import { CreateRunDto } from './dto/create-run.dto';
 
 // 메모리로 받아 StorageService가 S3(운영) 또는 uploads 폴더(로컬)에 쓴다. 사진 한 장 10MB까지
@@ -37,6 +38,12 @@ export class RunsController {
   @Get('density')
   density(@Req() req: { user: { sub: string } }, @Query() dto: FindDensityDto) {
     return this.runsService.density(req.user.sub, dto.lat, dto.lng, dto.radius, dto.cell);
+  }
+
+  // 지도 피드 NEW(이번 주 새 길). ':id'보다 먼저 선언한다
+  @Get('new-cells')
+  newCells(@Req() req: { user: { sub: string } }, @Query() dto: FindNewCellsDto) {
+    return this.runsService.newCells(req.user.sub, dto.lat, dto.lng, dto.radius);
   }
 
   // ':id'보다 먼저 선언해야 'stats'가 러닝 ID로 잡히지 않는다
