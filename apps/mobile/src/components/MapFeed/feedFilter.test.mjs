@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { HYPE_MIN_CHEERS, RUNNER_TONES, isHype, isNew, matchesFilter, runnerTone, safeImageUrl } from './feedFilter.ts';
+import { HYPE_MIN_CHEERS, RUNNER_TONES, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl } from './feedFilter.ts';
 
 test('사용자 색 칸: 같은 id는 늘 같은 칸, 0~3, 여러 사람이면 여러 칸', () => {
   const ids = Array.from({ length: 40 }, (_, i) => `6af57af9b13cd774468bc5${i.toString(16).padStart(2, '0')}`);
@@ -11,8 +11,6 @@ test('사용자 색 칸: 같은 id는 늘 같은 칸, 0~3, 여러 사람이면 �
   assert.equal(new Set(ids.map(runnerTone)).size, RUNNER_TONES);
 });
 
-const NOW = Date.parse('2026-11-19T12:00:00Z');
-const hoursAgo = (h) => new Date(NOW - h * 3600 * 1000).toISOString();
 
 test('HYPE는 응원 수가 기준 이상일 때만, 응원 수가 없으면 아니다', () => {
   assert.equal(isHype({ cheers: HYPE_MIN_CHEERS }), true);
@@ -20,17 +18,20 @@ test('HYPE는 응원 수가 기준 이상일 때만, 응원 수가 없으면 아
   assert.equal(isHype({}), false);
 });
 
-test('NEW는 24시간 안, 경계(정확히 24시간)와 잘못된 날짜는 아니다', () => {
-  assert.equal(isNew({ createdAt: hoursAgo(23.9) }, NOW), true);
-  assert.equal(isNew({ createdAt: hoursAgo(24) }, NOW), false);
-  assert.equal(isNew({ createdAt: 'nope' }, NOW), false);
+test('NEW는 이번 주 새 길을 연 러닝만(서버가 준 openers)', () => {
+  const openers = new Set(['a']);
+  assert.equal(isOpener({ _id: 'a' }, openers), true);
+  assert.equal(isOpener({ _id: 'b' }, openers), false);
+  assert.equal(isOpener({ _id: 'a' }, new Set()), false);
 });
 
 test('필터: TOTAL은 모두, HYPE·NEW는 각 기준', () => {
-  const run = { cheers: 5, createdAt: hoursAgo(48) };
-  assert.equal(matchesFilter(run, 'total', NOW), true);
-  assert.equal(matchesFilter(run, 'hype', NOW), true);
-  assert.equal(matchesFilter(run, 'new', NOW), false);
+  const run = { _id: 'b', cheers: 5 };
+  const openers = new Set(['a']);
+  assert.equal(matchesFilter(run, 'total', openers), true);
+  assert.equal(matchesFilter(run, 'hype', openers), true);
+  assert.equal(matchesFilter(run, 'new', openers), false);
+  assert.equal(matchesFilter({ _id: 'a', cheers: 0 }, 'new', openers), true);
 });
 
 test('이미지 주소: 상대 경로는 서버 주소를 붙이고, 위험한 문자는 버린다', () => {

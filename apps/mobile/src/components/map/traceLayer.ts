@@ -3,11 +3,12 @@
 // 내 피드 「내 흔적」(내 러닝이 지난 칸, 앱이 센다)이 같이 쓴다. 마커·경로 아래(pane z 350)에 캔버스로 그린다.
 // 전역 map이 먼저 있어야 한다.
 
-/** 칸 색. base는 바탕 점, ice는 데이터 칸, mint는 「새 길」(7일 안에 처음 지난 칸) */
+/** 칸 색. base는 바탕 점, ice는 데이터 칸, mint는 「새 길」(7일 안에 처음 지난 칸), fresh는 지도 피드 NEW의 「이번 주 새 길」 칸 */
 export interface TraceColors {
   base: string;
   ice: string;
   mint: string;
+  fresh?: string;
 }
 
 /** 「내 흔적」 재생이 끝나면 앱으로 보내는 메시지 */
@@ -26,6 +27,8 @@ export function traceLayerScript(): string {
     var cv=document.createElement('canvas');cv.style.position='absolute';pane.appendChild(cv);
     var ctx=cv.getContext('2d');
     var col={base:'#8E9BA8',ice:'#9DBFE0',mint:'#5CF0C2'},runs=[],cells=null,play=null,raf=0;
+    // 지도 피드 NEW: 서버가 준 「이번 주 새 길」 칸(고정 지리 칸 중심 lng·lat). on이면 데이터 칸을 흐리게 하고 이 칸만 민트로
+    var newList=[],dim=false;
     // 수 → 점 반지름(px). 1~2는 작게, 3 · 10 · 30부터 한 단계씩
     function radius(n){return n>=30?4.4:n>=10?3.6:n>=3?2.7:1.7;}
     function key(x,y){return Math.floor(x/CELL)+','+Math.floor(y/CELL);}
@@ -64,9 +67,8 @@ export function traceLayerScript(): string {
       ctx.beginPath();
       for(var i=i0;i<=i1;i++)for(var j=j0;j<=j1;j++){var x=(i+0.5)*CELL-origin.x,y=(j+0.5)*CELL-origin.y;ctx.moveTo(x+0.85,y);ctx.arc(x,y,0.85,0,6.2832);}
       ctx.fill();
-      if(!cells)return;
-      var t=play?now-play.t0:0,today=Date.now();
-      cells.forEach(function(c){
+      var t=play?now-play.t0:0,today=Date.now(),fade=dim?0.3:1;
+      if(cells)cells.forEach(function(c){
         var x=(c.i+0.5)*CELL-origin.x,y=(c.j+0.5)*CELL-origin.y;
         if(x<-CELL||y<-CELL||x>pw+CELL||y>ph+CELL)return;
         var fresh=today-c.first<NEW_MS,k=1;
@@ -75,9 +77,15 @@ export function traceLayerScript(): string {
           if(c.n===1&&q<=0)return;
           k=c.n===1?q:1;
           if(c.first===play.t&&q>0&&q<1){ctx.globalAlpha=0.35*(1-q);ctx.fillStyle=col.mint;ctx.beginPath();ctx.arc(x,y,radius(c.n)+6*q,0,6.2832);ctx.fill();}}
-        ctx.globalAlpha=(fresh?0.85:0.6)*k;ctx.fillStyle=fresh?col.mint:col.ice;
+        ctx.globalAlpha=(fresh?0.85:0.6)*k*fade;ctx.fillStyle=fresh?col.mint:col.ice;
         ctx.beginPath();ctx.arc(x,y,radius(c.n)*(0.6+0.4*k),0,6.2832);ctx.fill();
       });
+      if(dim&&newList.length){
+        ctx.globalAlpha=0.9;ctx.fillStyle=col.fresh||col.mint;ctx.beginPath();
+        newList.forEach(function(c){var p=map.latLngToLayerPoint([c.lat,c.lng]),x=p.x-origin.x,y=p.y-origin.y;
+          if(x<-CELL||y<-CELL||x>pw+CELL||y>ph+CELL)return;ctx.moveTo(x+3.2,y);ctx.arc(x,y,3.2,0,6.2832);});
+        ctx.fill();
+      }
       ctx.globalAlpha=1;
     }
     function frame(now){
@@ -97,6 +105,8 @@ export function traceLayerScript(): string {
       // 지도 피드: 서버가 센 칸(서로 다른 러너 3명 이상)
       setCells:function(next){served=next;build();redraw();},
       setColors:function(next){col=next;redraw();},
+      // 지도 피드 NEW: 「이번 주 새 길」 칸과 표시 여부(NEW 칸이 골라졌을 때만 on)
+      setNew:function(list,on){newList=list||[];dim=!!on;redraw();},
       // 방금 저장한 러닝이 지도에 스며든다(동작 줄이기면 바로 끝 상태로)
       play:function(id){var r=runs.find(function(q){return q._id===id;});if(!r)return;
         var reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;

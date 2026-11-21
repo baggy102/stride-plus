@@ -20,7 +20,7 @@ import { useColors, useScheme } from '@/theme/useColors';
 import { elevationStyle, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import type { RunMarker } from '@/types/run';
-import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isNew, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
+import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 
@@ -32,6 +32,8 @@ type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: num
 type DensityCell = { lng: number; lat: number; n: number };
 type RunMessage = { type: 'run'; run: RunMarker };
 type MapTapMessage = { type: 'mapTap' };
+// GET /runs/new-cells: 「이번 주 새 길」 칸(고정 50m 지리 칸)과 칸을 연 러닝별 km
+type NewCellsResponse = { cellMeters: number; cells: { lng: number; lat: number; runId: string }[]; runs: { runId: string; km: number }[] };
 type RunDetailResponse = { route?: { coordinates?: [number, number][] } };
 
 // bottomOffset: 탭바에 가리지 않게 Leaflet 출처 표기를 올리는 높이
@@ -186,15 +188,16 @@ type FeedState = 'normal' | 'empty' | 'error';
 // 필터에 맞는 러닝이 없을 때 안내(지도에는 흐린 마커가 그대로 있다)
 const NO_MATCH: Record<Exclude<FeedFilter, 'total'>, { title: string; sub: string }> = {
   hype: { title: '이 근처에 HYPE 러닝이 아직 없어요', sub: `응원을 ${HYPE_MIN_CHEERS}개 이상 받은 러닝이 여기에 떠요` },
-  new: { title: '이 근처에 새로 올라온 러닝이 없어요', sub: '24시간 안에 올라온 러닝이 여기에 떠요' },
+  new: { title: '이 근처엔 이번 주 새 길이 아직 없어요', sub: '한동안 아무도 안 뛴 길을 달리면 여기 떠요' },
 };
 
 // 지도 WebView에 넘기는 러닝: 마커가 쓸 표시를 미리 붙인다(사진 주소는 검사한 것만)
-function toMapRun(run: RunMarker, now: number) {
+function toMapRun(run: RunMarker, openers: ReadonlySet<string>) {
   return {
     ...run,
     hype: isHype(run),
-    fresh: isNew(run, now),
+    // 이번 주 새 길을 연 러닝(NEW에서 켜지고, TOTAL에서는 오른쪽 위 민트 점)
+    fresh: isOpener(run, openers),
     cheers: run.cheers ?? 0,
     avatar: safeImageUrl(run.userId.profileImageUrl, BASE_URL),
     initial: (run.userId.username?.[0] ?? '?').toUpperCase(),
@@ -216,7 +219,7 @@ const ROUTE_DELAY_MS = 380;
 const HOME_LABEL = '출발·도착 100m는 다른 사람에게 안 보여요';
 
 function feedTraceColors(p: Palette): TraceColors {
-  return { base: p.muted, ice: p.map.dot, mint: p.map.dot };
+  return { base: p.muted, ice: p.map.dot, mint: p.map.dot, fresh: p.fresh };
 }
 
 // 러닝마다 같은 가루 무늬(연출 시드)
@@ -254,22 +257,24 @@ export function MapFeed() {
   const lastRuns = useRef<RunMarker[] | null>(null);
   const filterRef = useRef(filter);
   const requestSeq = useRef(0);
+  // NEW(이번 주 새 길): 서버가 준 칸과 칸을 연 러닝별 km
+  const newCellsRef = useRef<NewCellsResponse['cells']>([]);
+  const [openerKm, setOpenerKm] = useState<Map<string, number>>(() => new Map());
+  const openersRef = useRef<ReadonlySet<string>>(new Set());
 
   // 지금 필터에 맞는 러닝이 하나도 없는지(TOTAL은 언제나 false)
   const checkNoMatch = useCallback(() => {
     const runs = lastRuns.current ?? [];
-    const now = Date.now();
-    setNoMatch(runs.length > 0 && !runs.some((run) => matchesFilter(run, filterRef.current, now)));
+    setNoMatch(runs.length > 0 && !runs.some((run) => matchesFilter(run, filterRef.current, openersRef.current)));
   }, []);
 
   // 받은 러닝을 모두 지도에 올린다. 필터는 거르지 않고 마커 강조만 바꾼다(WebView는 다시 로드하지 않는다)
   const showRuns = useCallback(() => {
     const runs = lastRuns.current;
     if (!runs) return;
-    const now = Date.now();
     setFeedState(runs.length > 0 ? 'normal' : 'empty');
     checkNoMatch();
-    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs.map((run) => toMapRun(run, now)))});true;`);
+    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs.map((run) => toMapRun(run, openersRef.current)))});true;`);
   }, [checkNoMatch]);
 
   const fetchRuns = useCallback(async ({ lat, lng, radius, cell }: ViewportMessage) => {
@@ -280,6 +285,17 @@ export function MapFeed() {
         if (seq === requestSeq.current) webViewRef.current?.injectJavaScript(`window.__trace.setCells(${JSON.stringify(res.data)});true;`);
       })
       .catch(() => {});
+    // NEW: 이번 주 새 길 칸. 실패하면 지난 값을 비운다(NEW에 아무것도 안 켜짐)
+    client.get<NewCellsResponse>(`/runs/new-cells?lat=${lat}&lng=${lng}&radius=${radius}`)
+      .then((res) => res.data, () => ({ cellMeters: 0, cells: [], runs: [] }))
+      .then((data) => {
+        if (seq !== requestSeq.current) return;
+        newCellsRef.current = data.cells;
+        openersRef.current = new Set(data.runs.map((r) => r.runId));
+        setOpenerKm(new Map(data.runs.map((r) => [r.runId, r.km])));
+        webViewRef.current?.injectJavaScript(`window.__trace.setNew(${JSON.stringify(data.cells)},${filterRef.current === 'new'});true;`);
+        showRuns();
+      });
     try {
       const res = await client.get<RunMarker[]>(`/runs?lat=${lat}&lng=${lng}&radius=${radius}`);
       // 늦게 도착한 이전 요청의 응답은 버린다
@@ -294,7 +310,7 @@ export function MapFeed() {
   useEffect(() => {
     filterRef.current = filter;
     checkNoMatch();
-    webViewRef.current?.injectJavaScript(`window.__setMode&&window.__setMode(${JSON.stringify(filter)});true;`);
+    webViewRef.current?.injectJavaScript(`window.__setMode&&window.__setMode(${JSON.stringify(filter)});window.__trace&&window.__trace.setNew(${JSON.stringify(newCellsRef.current)},${filter === 'new'});true;`);
   }, [filter, checkNoMatch]);
 
   useEffect(() => {
@@ -346,7 +362,8 @@ export function MapFeed() {
   // 경로 연출 A+: 처음엔 그리며 재생, 필터·테마만 바뀌면 끝 상태로 색만 바꾼다
   const drawnId = useRef<string | null>(null);
   const routeColor = selected
-    ? filter === 'hype' && isHype(selected) ? c.hype : filter === 'new' && isNew(selected, Date.now()) ? c.fresh : c.map.dot
+    // NEW: 경로는 Ice로 두고 그 아래 민트 칸이 「새로 연 구간」을 보여 준다
+    ? filter === 'hype' && isHype(selected) ? c.hype : c.map.dot
     : c.map.dot;
   const mine = !!selected && selected.userId._id === myId;
   useEffect(() => {
@@ -376,7 +393,7 @@ export function MapFeed() {
     const next = { ...run, cheers, cheered };
     lastRuns.current = runs.map((r) => (r._id === runId ? next : r));
     checkNoMatch();
-    webViewRef.current?.injectJavaScript(`window.__updateRun(${JSON.stringify(toMapRun(next, Date.now()))});true;`);
+    webViewRef.current?.injectJavaScript(`window.__updateRun(${JSON.stringify(toMapRun(next, openersRef.current))});true;`);
   }, [checkNoMatch]);
 
   const retry = useCallback(() => {
@@ -520,6 +537,7 @@ export function MapFeed() {
           mine={mine}
           onCheered={onCheered}
           dismissKey={dismissKey}
+          newKm={filter === 'new' ? openerKm.get(selected._id) : undefined}
           onClose={() => setSelected(null)}
           onUserPress={(userId) => {
             setSelected(null);

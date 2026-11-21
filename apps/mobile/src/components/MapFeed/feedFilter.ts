@@ -6,26 +6,24 @@ export type FeedFilter = 'total' | 'hype' | 'new';
 export const FEED_FILTERS: { key: FeedFilter; label: string; a11y: string }[] = [
   { key: 'total', label: 'TOTAL', a11y: '전체 러닝' },
   { key: 'hype', label: 'HYPE', a11y: '응원 많이 받은 러닝' },
-  { key: 'new', label: 'NEW', a11y: '24시간 안에 올라온 러닝' },
+  { key: 'new', label: 'NEW', a11y: '이번 주 새 길' },
 ];
 
 // HYPE: 응원을 이만큼 이상 받은 러닝
 export const HYPE_MIN_CHEERS = 3;
-// NEW: 올라온 지 이 시간 안(ms)
-export const NEW_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 export function isHype(run: Pick<RunMarker, 'cheers'>): boolean {
   return (run.cheers ?? 0) >= HYPE_MIN_CHEERS;
 }
 
-export function isNew(run: Pick<RunMarker, 'createdAt'>, now: number): boolean {
-  const at = Date.parse(run.createdAt);
-  return Number.isFinite(at) && now - at < NEW_WINDOW_MS;
+// NEW(2026-11-21 칸 중심): 이번 주 「새 길」 칸을 연 러닝. openers는 서버 GET /runs/new-cells의 runs[].runId
+export function isOpener(run: Pick<RunMarker, '_id'>, openers: ReadonlySet<string>): boolean {
+  return openers.has(run._id);
 }
 
-export function matchesFilter(run: Pick<RunMarker, 'cheers' | 'createdAt'>, filter: FeedFilter, now: number): boolean {
+export function matchesFilter(run: Pick<RunMarker, '_id' | 'cheers'>, filter: FeedFilter, openers: ReadonlySet<string>): boolean {
   if (filter === 'hype') return isHype(run);
-  if (filter === 'new') return isNew(run, now);
+  if (filter === 'new') return isOpener(run, openers);
   return true;
 }
 

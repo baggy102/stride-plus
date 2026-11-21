@@ -30,6 +30,8 @@ interface Props {
   route?: LngLat[];
   /** 값이 바뀌면 ×를 누른 것처럼 닫는다(카드 밖 빈 지도 탭) */
   dismissKey?: number;
+  /** 지도 피드 NEW에서 연 카드: 이 러닝이 연 「이번 주 새 길」(km). 있으면 기록 아래 한 줄 */
+  newKm?: number;
   /** 경로 색(지도 위 경로와 같게). 없으면 value */
   routeColor?: string;
   /** 내 러닝이면 응원 버튼 대신 받은 수만 */
@@ -40,6 +42,7 @@ interface Props {
 /** 카드 높이: 사진 136 + 기록 70 + 사람 44 + 행동 38 (A안, 2026-11-21) */
 export const POSTER_HEIGHT = 288;
 const MEDIA_H = 136;
+const NEW_LINE_H = 20;
 const ENTER_EASE = Easing.bezier(0.16, 1, 0.3, 1);
 const EXIT_EASE = Easing.bezier(0.7, 0, 0.84, 0);
 
@@ -55,7 +58,7 @@ function useRise(v: SharedValue<number>, lift: number) {
  * 사진(없으면 경로, 위에는 스티커 · 닫기만) / 기록 한 묶음(거리 + TIME · PACE) / 사람 / 응원 · 코스 보기 (A안, 2026-11-21).
  * 들어올 때: 카드 0.22초 뒤 올라옴 → 사진 → 거리 → 스티커 → 글자. 닫을 때 0.24초에 내려간다
  */
-export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress, bottom = 24, route, routeColor, mine = false, onCheered, dismissKey = 0 }: Props) {
+export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress, bottom = 24, route, routeColor, mine = false, onCheered, dismissKey = 0, newKm }: Props) {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const reduced = useReducedMotion();
@@ -66,6 +69,9 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
   const resolve = (url: string) => (url.startsWith('/') ? `${baseUrl}${url}` : url);
   const stickers = useMemo(() => posterStickers(run, Date.now()), [run]);
   const lineColor = routeColor ?? c.value;
+  // NEW 한 줄이 들어가면 사진을 그만큼 줄여 카드 높이(288)를 지킨다. 0.2 km 미만은 숫자 없이
+  const newLine = newKm === undefined ? null : newKm >= 0.2 ? `이번 주 새 길 ${newKm.toFixed(1)} km` : '이번 주 새 길';
+  const mediaH = newLine ? MEDIA_H - NEW_LINE_H : MEDIA_H;
   const [cheer, setCheer] = useState({ cheers: run.cheers ?? 0, cheered: run.cheered ?? false });
   const [sending, setSending] = useState(false);
 
@@ -141,7 +147,7 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
           disabled={!onDetailPress}
           onPress={() => onDetailPress?.(run._id)}
         >
-          <Animated.View style={[styles.media, mediaStyle]}>
+          <Animated.View style={[styles.media, { height: mediaH }, mediaStyle]}>
             {photo ? (
               <>
                 <Image source={{ uri: resolve(photo) }} style={StyleSheet.absoluteFill} resizeMode="cover" />
@@ -149,8 +155,8 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
               </>
             ) : (
               route && route.length > 1 && (
-                <Svg width="100%" height={MEDIA_H} viewBox={`0 0 362 ${MEDIA_H}`} preserveAspectRatio="xMidYMid meet" style={StyleSheet.absoluteFill}>
-                  <Path d={pathD(fitToBox(route, 362, MEDIA_H, 30))} stroke={lineColor} strokeWidth={3.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                <Svg width="100%" height={mediaH} viewBox={`0 0 362 ${mediaH}`} preserveAspectRatio="xMidYMid meet" style={StyleSheet.absoluteFill}>
+                  <Path d={pathD(fitToBox(route, 362, mediaH, 30))} stroke={lineColor} strokeWidth={3.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
                 </Svg>
               )
             )}
@@ -198,6 +204,13 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
             </View>
           </View>
         </Animated.View>
+
+        {newLine && (
+          <Animated.View style={[styles.newRow, metaStyle]}>
+            <View style={[styles.newDot, { backgroundColor: c.fresh }]} />
+            <Text style={[styles.newText, { color: c.fresh }]}>{newLine}</Text>
+          </Animated.View>
+        )}
 
         {/* 사람: 아바타 · 이름 · 날짜·시각 / 제목(쓴 경우만) */}
         <Animated.View style={[styles.personRow, metaStyle]}>
@@ -256,7 +269,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     flex: 1, borderRadius: 26, overflow: 'hidden',
     backgroundColor: c.surface, borderWidth: 1, borderColor: c.glassBorder,
   },
-  media: { height: MEDIA_H, overflow: 'hidden', backgroundColor: c.map.bg },
+  media: { overflow: 'hidden', backgroundColor: c.map.bg },
+  newRow: { height: NEW_LINE_H, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16 },
+  newDot: { width: 7, height: 7, borderRadius: 4 },
+  newText: { fontFamily: FONT.semibold, fontSize: 12.5, lineHeight: 16 },
   stickers: { position: 'absolute', left: 12, top: 12, flexDirection: 'row', gap: 6 },
   sticker: {
     paddingVertical: 7, paddingHorizontal: 11, borderRadius: 99,
