@@ -3,6 +3,12 @@
     "name": "Stride+",
     "slug": "stride-plus",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/40f9cf01-ed4a-4ed3-9928-642ef3195a42"
+    },
     "orientation": "portrait",
     "scheme": "strideplus",
     "userInterfaceStyle": "automatic",

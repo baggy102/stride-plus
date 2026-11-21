@@ -8,6 +8,7 @@
     "ios": "expo start --ios",
     "css:build": "tailwindcss -i ./global.css -o ./tailwind.output.css --content './app/**/*.{js,jsx,ts,tsx}' --content './src/**/*.{js,jsx,ts,tsx}'",
     "gen:map-assets": "node scripts/gen-map-assets.js",
+    "update:production": "node scripts/eas-update-production.js",
     "test": "node --test --experimental-strip-types 'src/**/*.test.mjs'"
   },
   "dependencies": {
@@ -34,6 +35,7 @@
     "expo-status-bar": "~58.0.4",
     "expo-system-ui": "~58.0.7",
     "expo-task-manager": "~58.0.13",
+    "expo-updates": "~58.0.22",
     "leaflet": "^1.9.4",
     "nativewind": "4.2.7",
     "react": "19.3.0",
