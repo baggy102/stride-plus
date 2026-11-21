@@ -40,8 +40,8 @@ export function newCells(
   const dLng = cellMeters / (METERS_PER_DEG_LAT * Math.cos((REF_LAT * Math.PI) / 180));
   const keyOf = (lng: number, lat: number) => `${Math.floor(lng / dLng)},${Math.floor(lat / dLat)}`;
 
-  // 칸마다 지난 러닝(같은 러닝은 한 번)
-  const visits = new Map<string, { at: number; id: string }[]>();
+  // 칸마다 지난 러닝(같은 러닝은 한 번)과 그 러닝이 칸 안에서 처음 지난 점
+  const visits = new Map<string, { at: number; id: string; point: LngLat }[]>();
   for (const run of runs) {
     const seen = new Set<string>();
     const visit = (lng: number, lat: number) => {
@@ -50,7 +50,7 @@ export function newCells(
       seen.add(key);
       let list = visits.get(key);
       if (!list) { list = []; visits.set(key, list); }
-      list.push({ at: run.at, id: run.id });
+      list.push({ at: run.at, id: run.id, point: [lng, lat] });
     };
     const { route } = run;
     if (route.length === 1) visit(route[0][0], route[0][1]);
@@ -64,33 +64,31 @@ export function newCells(
 
   // 칸을 연 러닝: 이번 주 통과 중, 직전 lookback 동안 다른 통과가 없었던 가장 이른 것
   const weekStart = now - windowMs;
-  const opener = new Map<string, string>();
+  const opener = new Map<string, { id: string; point: LngLat }>();
   visits.forEach((list, key) => {
     list.sort((a, b) => a.at - b.at);
     for (let k = 0; k < list.length; k++) {
       const v = list[k];
       if (v.at < weekStart || v.at > now) continue;
       const prev = k > 0 ? list[k - 1].at : -Infinity;
-      if (prev < v.at - lookbackMs) { opener.set(key, v.id); break; }
+      if (prev < v.at - lookbackMs) { opener.set(key, v); break; }
     }
   });
 
   const cells: NewCellsResult['cells'] = [];
-  opener.forEach((runId, key) => {
-    const [i, j] = key.split(',').map(Number);
-    cells.push({ lng: (i + 0.5) * dLng, lat: (j + 0.5) * dLat, runId });
-  });
+  // 점은 칸 중심이 아니라 연 러닝이 그 칸에서 처음 지난 점(실제 길 위). 칸은 점의 floor로 다시 구할 수 있다
+  opener.forEach(({ id, point }) => cells.push({ lng: point[0], lat: point[1], runId: id }));
 
   // 연 러닝마다 연 칸을 지나는 구간 길이(구간 가운데 점의 칸으로 판정)
   const openedKm = new Map<string, number>();
   for (const run of runs) {
     for (let i = 1; i < run.route.length; i++) {
       const [a, b] = [run.route[i - 1], run.route[i]];
-      if (opener.get(keyOf((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)) !== run.id) continue;
+      if (opener.get(keyOf((a[0] + b[0]) / 2, (a[1] + b[1]) / 2))?.id !== run.id) continue;
       openedKm.set(run.id, (openedKm.get(run.id) ?? 0) + km(a, b));
     }
   }
-  const openers = new Set(opener.values());
+  const openers = new Set([...opener.values()].map((v) => v.id));
   return {
     cellMeters,
     cells,

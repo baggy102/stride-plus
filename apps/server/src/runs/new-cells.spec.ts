@@ -48,4 +48,20 @@ describe('newCells', () => {
     const b = newCells([run('a', 1)], NOW + 1000).cells.map((c) => `${c.lng},${c.lat}`).sort();
     expect(a).toEqual(b);
   });
+
+  it('돌려주는 점은 칸 중심이 아니라 그 칸 안에서 연 러닝이 실제로 지난 점이다', () => {
+    const lat = 37.5003; // 50 m 칸 중심(위도)과 어긋난 동서 직선
+    const r = newCells([run('a', 1, line(lat))], NOW);
+    const dLat = 50 / 111320;
+    const dLng = 50 / (111320 * Math.cos((37.5 * Math.PI) / 180));
+    expect(r.cells.length).toBeGreaterThan(0);
+    for (const c of r.cells) {
+      expect(c.lat).toBeCloseTo(lat, 9);
+      // 점이 들어 있는 칸 = 같은 칸이라 앱이 칸을 다시 구해도 같다
+      expect(c.lng).toBeGreaterThanOrEqual(127.0);
+      expect(c.lng).toBeLessThanOrEqual(127.0 + 4 * 0.00113);
+      expect(Math.floor(c.lat / dLat)).toBe(Math.floor(lat / dLat));
+      expect(Number.isFinite(Math.floor(c.lng / dLng))).toBe(true);
+    }
+  });
 });
