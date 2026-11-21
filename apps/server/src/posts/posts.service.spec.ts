@@ -96,6 +96,26 @@ describe('PostsService', () => {
       expect(update).toHaveProperty('$addToSet');
     });
 
+    it('응원하면 누른 사람과 시각을 cheerLog에 남긴다(N1 집계)', async () => {
+      mockPostModel.findOne.mockReturnValue(chain(post([])));
+      mockPostModel.findByIdAndUpdate.mockReturnValue(chain({ likes: [USER_ID] }));
+
+      await service.cheer(USER_ID, RUN_ID);
+      const entry = mockPostModel.findByIdAndUpdate.mock.calls[0][1].$push.cheerLog;
+      expect(String(entry.userId)).toBe(USER_ID);
+      expect(entry.at).toBeInstanceOf(Date);
+    });
+
+    it('응원을 취소하면 그 사람의 cheerLog도 뺀다', async () => {
+      mockPostModel.findOne.mockReturnValue(chain(post([USER_ID])));
+      mockPostModel.findByIdAndUpdate.mockReturnValue(chain({ likes: [] }));
+
+      await service.cheer(USER_ID, RUN_ID);
+      const pull = mockPostModel.findByIdAndUpdate.mock.calls[0][1].$pull;
+      expect(String(pull.cheerLog.userId)).toBe(USER_ID);
+      expect(String(pull.likes)).toBe(USER_ID);
+    });
+
     it('이미 눌렀으면 likes에서 빼고 cheered false', async () => {
       mockPostModel.findOne.mockReturnValue(chain(post([USER_ID])));
       mockPostModel.findByIdAndUpdate.mockReturnValue(chain({ likes: [] }));
