@@ -20,7 +20,7 @@ import { useColors, useScheme } from '@/theme/useColors';
 import { elevationStyle, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import type { RunMarker } from '@/types/run';
-import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
+import { FEED_FILTERS, HYPE_MIN_CHEERS, freshSegments, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 
@@ -251,6 +251,7 @@ export function MapFeed() {
   const requestSeq = useRef(0);
   // NEW(이번 주 새 길): 서버가 준 칸과 칸을 연 러닝별 km
   const newCellsRef = useRef<NewCellsResponse['cells']>([]);
+  const newMetersRef = useRef(50);
   const [openerKm, setOpenerKm] = useState<Map<string, number>>(() => new Map());
   const openersRef = useRef<ReadonlySet<string>>(new Set());
 
@@ -283,6 +284,7 @@ export function MapFeed() {
       .then((data) => {
         if (seq !== requestSeq.current) return;
         newCellsRef.current = data.cells;
+        if (data.cellMeters) newMetersRef.current = data.cellMeters;
         openersRef.current = new Set(data.runs.map((r) => r.runId));
         setOpenerKm(new Map(data.runs.map((r) => [r.runId, r.km])));
         webViewRef.current?.injectJavaScript(`window.__trace.setNew(${JSON.stringify(data.cells)},${filterRef.current === 'new'},${data.cellMeters});true;`);
@@ -354,7 +356,7 @@ export function MapFeed() {
   // 경로 연출 A+: 처음엔 그리며 재생, 필터·테마만 바뀌면 끝 상태로 색만 바꾼다
   const drawnId = useRef<string | null>(null);
   const routeColor = selected
-    // NEW: 경로는 Ice로 두고 그 아래 민트 칸이 「새로 연 구간」을 보여 준다
+    // NEW: 바탕은 Ice, 이 러닝이 연 구간만 민트(아래 fresh)
     ? filter === 'hype' && isHype(selected) ? c.hype : c.map.dot
     : c.map.dot;
   const mine = !!selected && selected.userId._id === myId;
@@ -367,10 +369,13 @@ export function MapFeed() {
       delay: ROUTE_DELAY_MS,
       keep: drawnId.current === selectedRoute.id,
       seed: seedOf(selectedRoute.id),
+      // NEW 렌즈: 이 러닝이 연 「이번 주 새 길」 구간만 민트(HYPE 렌즈의 Pearl처럼 렌즈일 때만)
+      fresh: filter === 'new' ? freshSegments(geometry.main, newCellsRef.current, selectedRoute.id, newMetersRef.current) : null,
+      freshCol: c.fresh,
     };
     drawnId.current = selectedRoute.id;
     webViewRef.current?.injectJavaScript(`window.__routeFx.show(${JSON.stringify(geometry)},${JSON.stringify(options)});true;`);
-  }, [selectedRoute, routeColor, mine, c]);
+  }, [selectedRoute, routeColor, mine, c, filter]);
 
   // D3 바탕 색은 테마를 따른다
   useEffect(() => {
