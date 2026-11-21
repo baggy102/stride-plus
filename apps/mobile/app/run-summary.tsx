@@ -17,7 +17,9 @@ import client from '@/api/client';
 import { RouteMap } from '@/components/RouteMap';
 import { Wordmark } from '@/components/Wordmark';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
-import { TrashIcon } from '@/components/icons';
+import { ShareIcon, TrashIcon } from '@/components/icons';
+import { useRunShare } from '@/components/useRunShare';
+import { useAuthStore } from '@/store/auth';
 import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
@@ -218,8 +220,29 @@ export default function RunSummaryScreen() {
     return { opacity: 1, transform: [{ translateY: rootH * (1 - inOut(seg(clock.value * DUST_SCALE, TL.sheet[0], TL.sheet[1]))) }] };
   });
 
+  // 결과를 보면서 바로 공유(2026-11-21 — 저장 후 내 흔적에서 옮김). 저장하지 않고 공유만 해도 된다
+  const { sharing, share, node: shareNode } = useRunShare();
+  const myId = useAuthStore((s) => s.user?._id);
+
   if (!pendingSummary) return null;
   const summary = pendingSummary;
+
+  const handleShare = async () => {
+    // 「처음 달린 길」: 내 러닝 첫 페이지(최근 20개)와 비교. 못 불러오면 비교할 기록 없이 계산한다(그때는 전부 처음 달린 길로 나온다)
+    let previous: [number, number][][] = [];
+    try {
+      if (myId) {
+        const { data } = await client.get<{ route?: [number, number][] }[]>(`/runs?userId=${myId}&page=1&limit=20`);
+        previous = data.map((r) => r.route ?? []).filter((r) => r.length > 0);
+      }
+    } catch {
+      // 비교할 기록 없이 진행
+    }
+    await share({
+      route: summary.coordinates, previous,
+      distanceKm: summary.distanceKm, paceSecPerKm: summary.paceSecPerKm, createdAt: finishedAt.toISOString(),
+    });
+  };
   const boxWidth = width - 48;
 
   const handleDiscard = () => {
@@ -357,17 +380,30 @@ export default function RunSummaryScreen() {
           </Animated.View>
         </ScrollView>
 
-        <Animated.View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }, sheetStyle]}>
+        <Animated.View style={[styles.footer, styles.footerRow, { paddingBottom: Math.max(insets.bottom, 16) }, sheetStyle]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="이번 러닝 공유"
+            accessibilityState={{ busy: sharing, disabled: saving }}
+            onPress={handleShare}
+            disabled={sharing || saving}
+            style={[styles.shareBtn, { opacity: saving ? 0.5 : 1 }]}
+          >
+            {sharing ? <ActivityIndicator color={c.text} /> : <ShareIcon size={18} color={c.text} />}
+            <Text style={styles.shareText}>공유</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             onPress={handleSave}
-            disabled={saving}
-            style={[styles.saveBtn, { opacity: saving ? 0.8 : 1 }]}
+            disabled={saving || sharing}
+            style={[styles.saveBtn, styles.saveFlex, { opacity: saving ? 0.8 : 1 }]}
           >
             {saving ? <ActivityIndicator color={c.ink} /> : <Text style={styles.saveText}>저장하기</Text>}
           </Pressable>
         </Animated.View>
       </KeyboardAvoidingView>
+
+      {shareNode}
 
       {dust && !dustDone && !reduced && (
         <DustTransition dust={dust} clock={clock} head={head} width={width} height={rootH} c={c} />
@@ -511,6 +547,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   footer: { paddingHorizontal: 24, paddingTop: 8, backgroundColor: c.surface },
   saveBtn: { height: 54, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  footerRow: { flexDirection: 'row', gap: 10 },
+  saveFlex: { flex: 1 },
+  shareBtn: {
+    height: 54, paddingHorizontal: 18, borderRadius: 14, borderWidth: 1.5, borderColor: c.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  shareText: { fontFamily: FONT.semibold, fontSize: 16, color: c.text },
   saveText: { fontFamily: FONT.semibold, fontSize: 16, color: c.ink },
   scrim: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 35 },
   dialog: {
