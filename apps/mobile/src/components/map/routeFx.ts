@@ -5,7 +5,7 @@
 
 /** WebView에 넘기는 색과 시각 */
 export interface RouteFxOptions {
-  col: string; // 경로 색(Ice · HYPE 렌즈의 HYPE 러닝은 Pearl). 새로 연 구간 민트는 fresh로
+  col: string; // 경로 색(TOTAL Ice · HYPE Pearl · NEW 민트)
   bg: string; // 경로 테두리 · km 점 속
   glass: string;
   glassBorder: string;
@@ -18,9 +18,6 @@ export interface RouteFxOptions {
   /** true면 연출 없이 끝 상태로(테마만 바뀐 경우) */
   keep: boolean;
   seed: number;
-  /** 새로 연 구간(민트): main의 구간(i-1→i)마다 true/false. 선이 다 그어진 뒤 이 구간만 민트로 한 번 부풀었다 앉는다 */
-  fresh?: boolean[] | null;
-  freshCol?: string;
 }
 
 export function routeFxScript(): string {
@@ -35,11 +32,7 @@ export function routeFxScript(): string {
     function pts(list){return list.map(function(c){var p=map.latLngToLayerPoint([c[1],c[0]]);return [p.x,p.y];});}
     function pathD(ps){return ps.map(function(p,i){return (i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);}).join('');}
     function sample(ps){var seg=[],L=0;for(var i=1;i<ps.length;i++){var l=Math.hypot(ps[i][0]-ps[i-1][0],ps[i][1]-ps[i-1][1]);seg.push(l);L+=l;}
-      return {L:L,at:function(t){var x=t*L;for(var i=0;i<seg.length;i++){if(x<=seg[i]||i===seg.length-1){var f=seg[i]?Math.min(1,x/seg[i]):0;return [ps[i][0]+(ps[i+1][0]-ps[i][0])*f,ps[i][1]+(ps[i+1][1]-ps[i][1])*f];}x-=seg[i];}return ps[0];},
-        // t가 놓인 구간 번호(0부터)
-        seg:function(t){var x=t*L;for(var i=0;i<seg.length;i++){if(x<=seg[i])return i;x-=seg[i];}return seg.length-1;}};}
-    // t 위치의 색: 새로 연 구간이면 민트
-    function colAt(t){var o=cur.o;return o.fresh&&cur.S&&o.fresh[cur.S.seg(t)]?o.freshCol:o.col;}
+      return {L:L,at:function(t){var x=t*L;for(var i=0;i<seg.length;i++){if(x<=seg[i]||i===seg.length-1){var f=seg[i]?Math.min(1,x/seg[i]):0;return [ps[i][0]+(ps[i+1][0]-ps[i][0])*f,ps[i][1]+(ps[i+1][1]-ps[i][1])*f];}x-=seg[i];}return ps[0];}};}
     function rng(seed){var s=(seed>>>0)||1;return function(){s=(s*1664525+1013904223)>>>0;return s/4294967296;};}
     function place(e,p){e.setAttribute('cx',p[0].toFixed(1));e.setAttribute('cy',p[1].toFixed(1));}
     var ROUND={fill:'none','stroke-linecap':'round','stroke-linejoin':'round'};
@@ -61,18 +54,6 @@ export function routeFxScript(): string {
         el('path',merge(ROUND,{d:D,stroke:'#fff','stroke-opacity':'.38','stroke-width':'1.1',transform:'translate(1.7 -1.4)'})),
         el('path',merge(ROUND,{d:D,stroke:o.col,'stroke-opacity':'.5','stroke-width':'1.1',transform:'translate(-1.6 1.5)'}))];
       cur.lines.forEach(function(l){l.style.strokeDasharray=cur.len;});
-      // 새로 연 구간: 이어진 구간끼리 한 줄로(번짐 16 + 선 4.5). 본선과 같은 속도로 처음부터 민트로 그어진다(s0 = 경로 시작부터 거리)
-      cur.fresh=null;
-      if(o.fresh&&o.freshCol){var runs=[],run=null,cum=[0];
-        for(var k=1;k<main.length;k++)cum.push(cum[k-1]+Math.hypot(main[k][0]-main[k-1][0],main[k][1]-main[k-1][1]));
-        o.fresh.forEach(function(f,i){if(f){if(!run){run={pts:[main[i]],s0:cum[i]};runs.push(run);}run.pts.push(main[i+1]);run.s1=cum[i+1];}else run=null;});
-        if(runs.length){var fgp=el('g',{}),fl=[],fd=[];
-          runs.forEach(function(r){var d=pathD(r.pts),l=r.s1-r.s0+1;
-            var gl=el('path',merge(ROUND,{d:d,stroke:o.freshCol,'stroke-opacity':'.25','stroke-width':'16'}),fgp);
-            var ln=el('path',merge(ROUND,{d:d,stroke:o.freshCol,'stroke-width':'4.5'}),fgp);
-            [gl,ln].forEach(function(q){q.style.strokeDasharray=l;q.style.strokeDashoffset=l;fd.push({el:q,s0:r.s0,l:l});});
-            fl.push(ln);});
-          cur.fresh={lines:fl,draw:fd};}}
       cur.fades=[];var nodes=[];
       g.kms.forEach(function(k,i){
         var p=pts([k.at])[0],grp=el('g',{});cur.fades.push({el:grp,d:0.1+k.t*0.9});nodes.push({t:k.t,p:p});
@@ -103,7 +84,6 @@ export function routeFxScript(): string {
       cur.done=true;
       cur.lines.forEach(function(l){l.style.strokeDashoffset=0;});
       cur.fades.forEach(function(f){f.el.style.opacity=1;});
-      if(cur.fresh){cur.fresh.draw.forEach(function(f){f.el.style.strokeDashoffset=0;});cur.fresh.lines.forEach(function(l){l.setAttribute('stroke-width','4.5');});}
     }
     var DRAW=1100,LAP=2000,CYC=1.4,LAPS=2,COMET=1800;
     function step(now){
@@ -114,25 +94,22 @@ export function routeFxScript(): string {
       var p=Math.min(1,Math.max(0,(t-100)/DRAW)),e=p>=1?1:1-Math.pow(2,-10*p);
       cur.lines.forEach(function(l){l.style.strokeDashoffset=cur.len*(1-e);});
       cur.fades.forEach(function(f){f.el.style.opacity=Math.min(1,Math.max(0,(t-f.d*1000)/280));});
-      // 새로 연 구간: 본선과 함께 민트로 그어지고, 다 그어지면 0.45초 동안 부풀었다 앉는다
-      if(cur.fresh){var drawn=cur.len*e;cur.fresh.draw.forEach(function(f){f.el.style.strokeDashoffset=f.l-Math.min(f.l,Math.max(0,drawn-f.s0));});
-        if(p>=1){var fq=Math.min(1,(t-100-DRAW)/450);cur.fresh.lines.forEach(function(l){l.setAttribute('stroke-width',(4.5+3.5*Math.sin(Math.PI*fq)).toFixed(2));});}}
       var fx=cur.fx;if(!fx){cur.raf=requestAnimationFrame(step);return;}
       var S=cur.S,hp=null;
-      if(p>0&&p<1){hp=S.at(e);cur.hpCol=colAt(e);place(fx.head,hp);place(fx.glow,hp);fx.glow.setAttribute('fill',cur.hpCol);fx.head.setAttribute('opacity',0.95);fx.glow.setAttribute('opacity',0.4);}
+      if(p>0&&p<1){hp=S.at(e);place(fx.head,hp);place(fx.glow,hp);fx.head.setAttribute('opacity',0.95);fx.glow.setAttribute('opacity',0.4);}
       if(p>=1&&!cur.bloomAt)cur.bloomAt=t+250;
       if(cur.bloomAt&&t>=cur.bloomAt){var q=(t-cur.bloomAt)/700;place(fx.bloom,fx.end);
         if(q<=1){fx.bloom.setAttribute('r',(4+q*22).toFixed(1));fx.bloom.setAttribute('opacity',(0.9*(1-q)).toFixed(2));}else fx.bloom.setAttribute('opacity',0);}
       var lap=t>=COMET?Math.floor((t-COMET)/LAP/CYC):0;
       if(t>=COMET&&lap<LAPS){var tt=((t-COMET)/LAP)%CYC;
-        if(tt<=1){hp=S.at(tt);cur.hpCol=colAt(tt);var fade=tt<0.06?tt/0.06:tt>0.94?(1-tt)/0.06:1;place(fx.head,hp);place(fx.glow,hp);fx.glow.setAttribute('fill',cur.hpCol);
+        if(tt<=1){hp=S.at(tt);var fade=tt<0.06?tt/0.06:tt>0.94?(1-tt)/0.06:1;place(fx.head,hp);place(fx.glow,hp);
           fx.head.setAttribute('opacity',(0.95*fade).toFixed(2));fx.glow.setAttribute('opacity',(0.38*fade).toFixed(2));
-          fx.trail.forEach(function(c,i){var ti=tt-i*0.011;if(ti<0){c.setAttribute('opacity',0);return;}place(c,S.at(ti));if(i>=3)c.setAttribute('fill',colAt(ti));c.setAttribute('opacity',(fade*0.8*(1-i/24)).toFixed(2));});
+          fx.trail.forEach(function(c,i){var ti=tt-i*0.011;if(ti<0){c.setAttribute('opacity',0);return;}place(c,S.at(ti));c.setAttribute('opacity',(fade*0.8*(1-i/24)).toFixed(2));});
           fx.rip.forEach(function(r){if(cur.prevTT>=0&&cur.prevTT<r.t&&tt>=r.t)r.start=t;});
         }else{fx.trail.forEach(function(c){c.setAttribute('opacity',0);});fx.head.setAttribute('opacity',0);fx.glow.setAttribute('opacity',0);hp=null;}
         cur.prevTT=tt;
       }else if(p>=1){fx.trail.forEach(function(c){c.setAttribute('opacity',0);});fx.head.setAttribute('opacity',0);fx.glow.setAttribute('opacity',0);}
-      if(hp&&t>=COMET&&cur.rnd()<0.5){var di=cur.di++%fx.dust.length,d=fx.dust[di],a=cur.rnd()*6.28,s=0.15+cur.rnd()*0.45;d.x=hp[0];d.y=hp[1];d.vx=Math.cos(a)*s;d.vy=Math.sin(a)*s+0.12;d.life=1;if(di%3)d.el.setAttribute('fill',cur.hpCol||cur.o.col);}
+      if(hp&&t>=COMET&&cur.rnd()<0.5){var d=fx.dust[cur.di++%fx.dust.length],a=cur.rnd()*6.28,s=0.15+cur.rnd()*0.45;d.x=hp[0];d.y=hp[1];d.vx=Math.cos(a)*s;d.vy=Math.sin(a)*s+0.12;d.life=1;}
       fx.dust.forEach(function(d){if(d.life<=0){d.el.setAttribute('opacity',0);return;}d.life-=dt/700;d.x+=d.vx*dt/16;d.y+=d.vy*dt/16;place(d.el,[d.x,d.y]);d.el.setAttribute('r',(0.5+d.life*1.3).toFixed(2));d.el.setAttribute('opacity',Math.max(0,d.life*0.85).toFixed(2));});
       fx.rip.forEach(function(r){if(r.start<0){r.el.setAttribute('opacity',0);return;}var k=(t-r.start)/650;if(k>1){r.el.setAttribute('opacity',0);r.start=-1;return;}place(r.el,r.p);r.el.setAttribute('r',(3.4+k*13).toFixed(1));r.el.setAttribute('opacity',(0.9*(1-k)).toFixed(2));});
       var over=t>=COMET&&lap>=LAPS&&fx.dust.every(function(d){return d.life<=0;});

@@ -321,14 +321,13 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
       delay: ROUTE_DELAY_MS,
       keep: drawnId.current === selected._id,
       seed: selected._id.length,
-      freshCol: c.fresh,
     };
     const first = drawnId.current !== selected._id;
     drawnId.current = selected._id;
     const pad = [headerHeightRef.current + 16, bottomBase + POSTER_HEIGHT + 24];
     webViewRef.current?.injectJavaScript(
       // 새로 연 구간(민트)은 지도 안 「내 흔적」 칸으로 판정한다 — 민트 점과 같은 기준
-      `${first ? `window.__fitRoute(${JSON.stringify(selected.route)},${JSON.stringify(pad)});` : ''}(function(){var g=${JSON.stringify(geometry)},o=${JSON.stringify(options)};o.fresh=window.__trace.mask(g.main,${JSON.stringify(selected._id)});window.__routeFx.show(g,o);})();true;`,
+      `${first ? `window.__fitRoute(${JSON.stringify(selected.route)},${JSON.stringify(pad)});` : ''}(function(){var g=${JSON.stringify(geometry)},o=${JSON.stringify(options)};if(window.__trace.opened(${JSON.stringify(selected._id)}))o.col=${JSON.stringify(c.fresh)};window.__routeFx.show(g,o);})();true;`,
     );
   }, [selected, mine, c, bottomBase]);
 

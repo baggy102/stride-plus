@@ -124,13 +124,10 @@ export function traceLayerScript(): string {
       // 지도 피드: 서버가 센 칸(서로 다른 러너 3명 이상)
       setCells:function(next){served=next;build();redraw();},
       setColors:function(next){col=next;redraw();},
-      // 고른 러닝 경로의 「새로 연 구간」: 구간(i-1→i) 가운데 점의 칸을 이 러닝이 처음 지났고 7일 안이면 true. 없으면 null
-      mask:function(route,id){var r=runs.find(function(q){return q._id===id;});
-        if(!r||!cells||Date.now()-r.t>=NEW_MS)return null;
-        var any=false,m=[];
-        for(var i=1;i<route.length;i++){var a=route[i-1],b=route[i],p=map.latLngToLayerPoint([(a[1]+b[1])/2,(a[0]+b[0])/2]),c=cells.get(key(p.x,p.y));
-          var f=!!c&&c.first===r.t;m.push(f);if(f)any=true;}
-        return any?m:null;},
+      // 새 러닝: 7일 안에 이 러닝이 처음 지난 칸(민트 점)이 하나라도 있으면 true — 고른 경로를 처음부터 민트로 그린다
+      opened:function(id){var r=runs.find(function(q){return q._id===id;});
+        if(!r||!cells||Date.now()-r.t>=NEW_MS)return false;
+        var hit=false;cells.forEach(function(c){if(c.first===r.t)hit=true;});return hit;},
       // 지도 피드 NEW: 「이번 주 새 길」 칸과 표시 여부(NEW 칸이 골라졌을 때만 on), 칸 한 변(미터, 바뀔 때만)
       setNew:function(list,on,m){newList=list||[];dim=!!on;if(m)newM=m;buildNew();redraw();},
       // 방금 저장한 러닝이 지도에 스며든다(동작 줄이기면 바로 끝 상태로)
