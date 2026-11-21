@@ -55,7 +55,8 @@ function CalendarDotsIcon({ color }: { color: string }) {
 const PAGE_SIZE = 20;
 // 고른 경로는 카메라가 먼저 움직이고 0.38초 뒤 그린다(지도 피드와 같다)
 const ROUTE_DELAY_MS = 380;
-const HOME_LABEL = '집 근처 100m 가림 · 기본 ON';
+// 실제 처리(서버 home-privacy: 남에게는 출발·도착 100m를 자른다)만 말한다. 「집」·「기본 ON」은 끄는 화면·법적 확인 전이라 쓰지 않음
+const HOME_LABEL = '출발·도착 100m는 다른 사람에게 안 보여요';
 // 저장 직후 「내 흔적」: 카메라가 새 경로로 간 뒤 스며들기 시작
 const TRACE_DELAY_MS = 650;
 const TOAST_MS = 2800;

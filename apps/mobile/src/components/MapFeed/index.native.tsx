@@ -212,7 +212,8 @@ function nearbyLabel(radiusM: number | null) {
 
 // 경로 그리기 시작(카메라가 먼저 움직이고, 카드는 0.22초 뒤 올라온다)
 const ROUTE_DELAY_MS = 380;
-const HOME_LABEL = '집 근처 100m 가림 · 기본 ON';
+// 실제 처리(서버 home-privacy: 남에게는 출발·도착 100m를 자른다)만 말한다. 「집」·「기본 ON」은 끄는 화면·법적 확인 전이라 쓰지 않음
+const HOME_LABEL = '출발·도착 100m는 다른 사람에게 안 보여요';
 
 function feedTraceColors(p: Palette): TraceColors {
   return { base: p.muted, ice: p.map.dot, mint: p.map.dot };
@@ -480,13 +481,17 @@ export function MapFeed() {
           </View>
           <View style={styles.noticeBody}>
             <Text style={styles.noticeTitle}>
-              {feedState === 'error' ? '불러오지 못했어요' : '이 근처에는 아직 러닝 기록이 없어요'}
+              {feedState === 'error' ? '불러오지 못했어요' : '아직 아무도 안 뛴 동네예요'}
             </Text>
-            {feedState === 'empty' && <Text style={styles.noticeSub}>지도를 옮기거나 첫 러닝을 기록해 보세요</Text>}
+            {feedState === 'empty' && <Text style={styles.noticeSub}>제일 먼저 달려 보세요</Text>}
           </View>
-          {feedState === 'error' && (
+          {feedState === 'error' ? (
             <Pressable accessibilityRole="button" onPress={retry} style={styles.retryBtn}>
               <Text style={styles.retryText}>다시 시도</Text>
+            </Pressable>
+          ) : (
+            <Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/record')} style={styles.retryBtn}>
+              <Text style={styles.retryText}>달리러 가기</Text>
             </Pressable>
           )}
           </Glass>
