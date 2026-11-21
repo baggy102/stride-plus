@@ -22,6 +22,7 @@ import { fetchRunStats, type RunStats } from '@/api/stats';
 import { elevationStyle, withAlpha, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import Svg, { Circle } from 'react-native-svg';
+import { runnerTone, safeImageUrl } from '@/components/MapFeed/feedFilter';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
 import { CalendarView } from './CalendarView';
 
@@ -94,10 +95,10 @@ ${MARKER_PULSE_CSS}
 <script>
   var map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
 ${baseMapScript(p, dark)}
-${markerIconsScript(p, 'profile')}
+${markerIconsScript(p)}
 ${routeFxScript()}
 ${traceLayerScript()}
-  var group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
+  var group = L.markerClusterGroup({ iconCreateFunction: stackIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   map.addLayer(group);
   // 빈 지도 탭 → 열린 카드를 닫는다(마커 click은 지도로 버블링되지 않고, 끌기·핀치는 click이 아니다)
   map.on('click', function() { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapTap' })); });
@@ -125,8 +126,22 @@ ${traceLayerScript()}
     window.__setRuns(lastRuns);
   };
 
-  window.__setRuns = function(runs) {
+  // 마커: 지도 피드 TOTAL과 같은 얼굴 링(이니셜·사진 + 사용자 색 링). who = {initial, avatar, tone}
+  var lastWho = null;
+  function faceIcon(who) {
+    var c = iconColors;
+    return L.divIcon({ html: '<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center"><div style="border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,' + (c.dark ? 0.45 : 0.16) + ')">' + face(who, 34, c.runners[who.tone], 2.5) + '</div></div>', className: '', iconSize: [44, 44], iconAnchor: [22, 22] });
+  }
+
+  // 묶음: 지도 피드와 같은 유리 알약(얼굴 하나 + 수)
+  function stackIcon(cl) {
+    return stackPill(face(lastWho, 28, iconColors.runners[lastWho.tone], 2), 1, String(cl.getChildCount()), true);
+  }
+
+  window.__setRuns = function(runs, who) {
     lastRuns = runs;
+    if (who) lastWho = who;
+    var icon = lastWho && faceIcon(lastWho);
     // 내 흔적: 러닝이 지난 칸(D3 격자)
     window.__trace.setRuns(runs.map(function(r) { return { _id: r._id, t: Date.parse(r.createdAt) || 0, route: r.route || [] }; }));
     group.clearLayers();
@@ -135,7 +150,8 @@ ${traceLayerScript()}
       if (!run.startPoint) return;
       var latLng = [run.startPoint[1], run.startPoint[0]];
       all.push(latLng);
-      var marker = L.marker(latLng, { icon: glassDotIcon });
+      if (!icon) return;
+      var marker = L.marker(latLng, { icon: icon });
       marker.on('click', function() {
         window.ReactNativeWebView.postMessage(JSON.stringify(run));
       });
@@ -195,7 +211,13 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const pendingTrace = useRef<string | null>(null);
   const pushRuns = useCallback(() => {
     if (!mapLoaded.current) return;
-    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs)});true;`);
+    // 마커 얼굴: 지도 피드와 같은 이니셜·사진·사용자 색
+    const who = profile && {
+      initial: (profile.username?.[0] ?? '?').toUpperCase(),
+      avatar: safeImageUrl(profile.profileImageUrl, BASE_URL),
+      tone: runnerTone(profile._id),
+    };
+    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs)},${JSON.stringify(who)});true;`);
     const filed = runs.find((run) => run._id === pendingTrace.current);
     if (!filed) return;
     pendingTrace.current = null;
@@ -204,7 +226,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     webViewRef.current?.injectJavaScript(
       `window.__fitRoute(${JSON.stringify(filed.route)},${JSON.stringify(pad)});setTimeout(function(){window.__trace.play(${JSON.stringify(filed._id)});},${TRACE_DELAY_MS});true;`,
     );
-  }, [runs, bottomBase]);
+  }, [runs, profile, bottomBase]);
 
   useEffect(pushRuns, [pushRuns]);
 

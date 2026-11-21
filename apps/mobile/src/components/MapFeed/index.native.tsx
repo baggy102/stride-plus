@@ -74,17 +74,10 @@ ${markerIconsScript(p)}
   // 얼굴 링 마커(TOTAL·HYPE·NEW). run에는 앱이 붙인 hype·fresh·cheers·avatar(검사한 주소)·initial·t·tone(사용자 색 칸)·operator가 있다
   var mode='total';
   var HEART='<svg width="9" height="9" viewBox="0 0 24 24" style="display:block"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.1 4.2 2.4h2c.6-1.3 2.1-2.4 4.2-2.4 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z"/></svg>';
-  function esc(s){return String(s).replace(/[&<>"']/g,function(ch){return '&#'+ch.charCodeAt(0)+';';});}
   function matches(run){return mode==='total'||(mode==='hype'&&run.hype)||(mode==='new'&&run.fresh);}
   function ringOf(run,base){var c=iconColors;return mode==='hype'&&run.hype?c.hype:(mode==='new'&&run.fresh?c.fresh:base);}
   // TOTAL 링 바탕: 운영자는 Indigo, 나머지는 사용자별 4색
   function toneOf(run){var c=iconColors;return run.operator?c.operator:c.runners[run.tone];}
-  // 이니셜을 깔고 사진을 덮는다(사진을 못 받아도 이니셜이 보인다)
-  function face(run,size,ring,ringW){
-    var c=iconColors;
-    var img=run.avatar?'<div style="position:absolute;inset:0;background:url('+run.avatar+') center/cover"></div>':'';
-    return '<div style="position:relative;width:'+size+'px;height:'+size+'px;box-sizing:border-box;border-radius:50%;border:'+ringW+'px solid '+ring+';background:'+c.face+';overflow:hidden;display:flex;align-items:center;justify-content:center;font:600 '+Math.round(size*0.38)+'px/1 -apple-system,system-ui,sans-serif;color:'+c.faceText+'">'+esc(run.initial)+img+'</div>';
-  }
   // HYPE에서 해당 러닝: Pearl 링 · 1.16배 · 번짐 · Pearl 응원 배지. NEW에서 해당 러닝: 민트 링. TOTAL에서 NEW 러닝엔 민트 점(오른쪽 위). 나머지는 흐리게
   // 응원 수: 보이는 러닝에 1개 이상이면 유리 칩(오른쪽 아래). 운영자: 왼쪽 아래 S 배지
   function faceIcon(run){
@@ -104,8 +97,7 @@ ${markerIconsScript(p)}
     var faces=top.map(function(run,i){
       return '<div style="margin-left:'+(i?-10:0)+'px;position:relative;z-index:'+(3-i)+';opacity:'+(matches(run)?1:0.5)+'">'+face(run,28,ringOf(run,toneOf(run)),2)+'</div>';
     }).join('');
-    var w=Math.round(8+28+18*(top.length-1)+14+n.length*7.5);
-    return L.divIcon({html:'<div class="face-in"><div style="display:inline-flex;align-items:center;padding:3px;border-radius:99px;background:'+c.glass+';border:1px solid '+c.glassBorder+';-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 8px 24px rgba(0,0,0,'+(c.dark?0.45:0.12)+');opacity:'+(anyOn?1:0.45)+';filter:'+(anyOn?'none':'grayscale(1)')+'">'+faces+'<div style="padding:0 8px 0 6px;font:500 12px/1 ui-monospace,Menlo,monospace;color:'+c.text+'">'+n+'</div></div></div>',className:'',iconSize:[w,36],iconAnchor:[w/2,18]});
+    return stackPill(faces,top.length,n,anyOn);
   }
 
   var group=L.markerClusterGroup({iconCreateFunction:stackIcon,showCoverageOnHover:false,maxClusterRadius:60});
@@ -293,7 +285,7 @@ export function MapFeed() {
         newCellsRef.current = data.cells;
         openersRef.current = new Set(data.runs.map((r) => r.runId));
         setOpenerKm(new Map(data.runs.map((r) => [r.runId, r.km])));
-        webViewRef.current?.injectJavaScript(`window.__trace.setNew(${JSON.stringify(data.cells)},${filterRef.current === 'new'});true;`);
+        webViewRef.current?.injectJavaScript(`window.__trace.setNew(${JSON.stringify(data.cells)},${filterRef.current === 'new'},${data.cellMeters});true;`);
         showRuns();
       });
     try {
