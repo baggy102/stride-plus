@@ -4,6 +4,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { isAxiosError } from 'axios';
+import { isNetworkError } from '@/api/errors';
 import * as Location from 'expo-location';
 import client, { BASE_URL } from '@/api/client';
 import { RouteMap } from '@/components/RouteMap';
@@ -11,9 +12,10 @@ import { Wordmark } from '@/components/Wordmark';
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { CARD_FULL, CARD_RADIUS, ExpandedCard, titleOf, type FeedRun } from '@/components/FeedCard';
 import { useAuthStore } from '@/store/auth';
-import { BackIcon, RouteIcon } from '@/components/icons';
+import { BackIcon, HeartIcon, RouteIcon } from '@/components/icons';
+import { useCheer } from '@/components/useCheer';
 import { useColors } from '@/theme/useColors';
-import { FONT } from '@/theme/fonts';
+import { FONT, monoLabel } from '@/theme/fonts';
 import type { Palette } from '@/theme/colors';
 import { formatDuration, formatRunPace } from '@/utils/pace';
 import { MOTION, useReducedMotion } from '@/utils/motion';
@@ -27,6 +29,9 @@ interface RunDetail {
   photoUrls: string[];
   description?: string;
   createdAt: string;
+  /** 받은 응원 수 · 내가 응원했는지(지도 피드 마커와 같은 계산). 없으면 0 · false. 내 러닝이면 cheered는 늘 false */
+  cheers?: number;
+  cheered?: boolean;
 }
 
 type LoadState = 'loading' | 'ready' | 'notfound' | 'error';
@@ -174,7 +179,7 @@ export default function RunDetailScreen() {
           <View style={styles.stateIcon}>
             <RouteIcon color={c.text2} size={28} />
           </View>
-          <Text style={styles.stateTitle}>러닝을 찾을 수 없습니다</Text>
+          <Text style={styles.stateTitle}>러닝을 찾을 수 없어요</Text>
           <Text style={styles.stateBody}>삭제되었거나 볼 수 없는 러닝이에요.</Text>
           <Pressable accessibilityRole="button" onPress={close} style={styles.stateBtnGhost}>
             <Text style={styles.stateBtnGhostText}>뒤로 가기</Text>
@@ -199,20 +204,20 @@ export default function RunDetailScreen() {
           </Animated.View>
 
           <Animated.View style={[styles.rest, restStyle]}>
+            {/* 수치 3칸: 라벨은 요약 화면과 같은 모노 TIME · PACE, 장소는 라벨 없이 동네 이름만(Q4) */}
             <View accessibilityLabel="러닝 기록" style={styles.stats}>
               <View style={styles.stat}>
-                <Text style={styles.statLabel}>시간</Text>
+                <Text style={styles.statLabel}>TIME</Text>
                 <Text style={styles.statValue}>{time}</Text>
               </View>
               <View style={[styles.stat, styles.statWide, styles.statDivider]}>
-                <Text style={styles.statLabel}>페이스</Text>
-                <Text style={styles.statValue}>
-                  {formatRunPace(run.paceSecPerKm, run.distanceKm)}
-                  <Text style={styles.statUnit}>/km</Text>
-                </Text>
+                <Text style={styles.statLabel}>PACE</Text>
+                <View style={styles.paceRow}>
+                  <Text style={styles.statValue}>{formatRunPace(run.paceSecPerKm, run.distanceKm)}</Text>
+                  <Text style={styles.statUnit}>/KM</Text>
+                </View>
               </View>
-              <View style={[styles.stat, styles.statDivider]}>
-                <Text style={styles.statLabel}>장소</Text>
+              <View accessible accessibilityLabel={`장소 ${placeName ?? '모름'}`} style={[styles.stat, styles.statDivider, styles.statCenter]}>
                 <Text style={styles.statText} numberOfLines={1}>{placeName ?? '—'}</Text>
               </View>
             </View>
@@ -230,9 +235,44 @@ export default function RunDetailScreen() {
                 <Text style={styles.introText}>{run.description}</Text>
               </View>
             )}
+
+            {/* 다 본 뒤 응원(코스 소개 아래). 내 러닝은 버튼 대신 받은 수만(포스터 카드와 같게) */}
+            <CheerButton runId={run._id} initial={{ cheers: run.cheers ?? 0, cheered: run.cheered ?? false }} mine={run.userId._id === me} c={c} styles={styles} />
           </Animated.View>
         </ScrollView>
       )}
+    </View>
+  );
+}
+
+// 러닝 상세의 응원 버튼. 실패하면(네트워크 · 공개 안 된 러닝 404) 되돌리고 표준 문구를 아래에 한 줄
+function CheerButton({ runId, initial, mine, c, styles }: {
+  runId: string; initial: { cheers: number; cheered: boolean }; mine: boolean; c: Palette; styles: ReturnType<typeof makeStyles>;
+}) {
+  const [failText, setFailText] = useState<string | null>(null);
+  const { cheer, toggle } = useCheer(runId, initial, {
+    disabled: mine,
+    onError: (e) => setFailText(`응원하지 못했어요. ${isNetworkError(e) ? '네트워크 연결을 확인하고 ' : ''}다시 시도해 주세요.`),
+  });
+  const press = () => {
+    setFailText(null);
+    toggle();
+  };
+  return (
+    <View style={styles.cheerWrap}>
+      <Pressable
+        accessibilityRole={mine ? undefined : 'button'}
+        accessibilityLabel={mine ? `응원 ${cheer.cheers}개` : cheer.cheered ? `응원 취소, 지금 ${cheer.cheers}개` : `응원하기, 지금 ${cheer.cheers}개`}
+        accessibilityState={mine ? undefined : { selected: cheer.cheered }}
+        disabled={mine}
+        onPress={press}
+        style={styles.cheerBtn}
+      >
+        <HeartIcon size={18} color={c.hype} filled={cheer.cheered || mine} />
+        <Text style={styles.cheerLabel}>{mine ? '응원' : '응원하기'}</Text>
+        <Text style={[styles.cheerCount, { color: c.hype }]}>{cheer.cheers}</Text>
+      </Pressable>
+      {failText && <Text accessibilityLiveRegion="polite" style={styles.cheerFail}>{failText}</Text>}
     </View>
   );
 }
@@ -267,12 +307,23 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   stat: { flex: 1, minWidth: 0, paddingHorizontal: 16, gap: 6 },
   statWide: { flex: 1.2 },
   statDivider: { borderLeftWidth: 1, borderLeftColor: c.border },
-  statLabel: { fontFamily: FONT.regular, fontSize: 12, lineHeight: 16, color: c.text2 },
+  statCenter: { justifyContent: 'center' },
+  // 요약 화면 TIME · PACE와 같은 모노 라벨
+  statLabel: { ...monoLabel(11), lineHeight: 16, color: c.text2 },
   statValue: { fontFamily: FONT.num, fontSize: 22, lineHeight: 26, color: c.text, fontVariant: ['tabular-nums'] },
-  statUnit: { fontSize: 12, color: c.text2 },
+  paceRow: { flexDirection: 'row', alignItems: 'baseline' },
+  statUnit: { ...monoLabel(12, 0.07), marginLeft: 2, color: c.text2 },
   statText: { fontFamily: FONT.semibold, fontSize: 16, lineHeight: 26, color: c.text },
   mapCard: { height: 224, borderRadius: 22, overflow: 'hidden', backgroundColor: c.map.bg },
   intro: { marginTop: 8, paddingHorizontal: 10, gap: 4 },
   introLabel: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
   introText: { fontFamily: FONT.regular, fontSize: 15, lineHeight: 23, color: c.text },
+  cheerWrap: { gap: 8 },
+  cheerBtn: {
+    height: 52, borderRadius: 22, backgroundColor: c.surface,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  cheerLabel: { fontFamily: FONT.semibold, fontSize: 15, color: c.text },
+  cheerCount: { fontFamily: FONT.num, fontSize: 15, lineHeight: 18 },
+  cheerFail: { paddingHorizontal: 10, fontFamily: FONT.regular, fontSize: 13, lineHeight: 18, color: c.danger, textAlign: 'center' },
 });

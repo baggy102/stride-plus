@@ -26,6 +26,12 @@ export interface Palette {
   onSocial: string; // hype·fresh 위 글자
   /** 캘린더 거리 단계 색(5 km 미만 · 5~10 km · 10 km 이상). 2단계 = point. 라이트는 길수록 진하게, 다크는 길수록 밝게 */
   level: [string, string, string];
+  /**
+   * 포스터 카드 스티커(2026-11-22 사용자 피드백, SPEC_v2 A): 러너 링 색(map.runners)을 면으로. 색은 러너가 아니라 스티커 종류에 고정.
+   * 민트(NEW)·Pearl(HYPE)·Signal Blue(선택)는 쓰지 않는다. Phase 2에서 한쪽만 바꿀 수 있게 map.runners를 참조하지 않고 값을 따로 적는다.
+   * 코드 키 new(「오늘」)는 토큰 today로 잇는다(지도 피드 NEW와 헷갈리지 않게)
+   */
+  sticker: Record<'dawn' | 'tenK' | 'today', { bg: string; fg: string }>;
   danger: string;
   shadow: string;
   /** 떠 있는 요소(탭바·시트·카드·버튼)의 그림자. 캔버스 CSS box-shadow 값을 RN으로 옮긴 것(radius = blur ÷ 2) */
@@ -86,6 +92,12 @@ export const palettes: Record<Scheme, Palette> = {
     fresh: '#5CF0C2',
     onSocial: '#0B1016',
     level: ['#1E5AA8', '#2E8BFF', '#9CCBFF'],
+    // 새벽 러닝 Rose · 10K+ Sand · 오늘 Lilac
+    sticker: {
+      dawn: { bg: '#E3AFC4', fg: '#0B1016' },
+      tenK: { bg: '#D8C7A1', fg: '#0B1016' },
+      today: { bg: '#BDB2E6', fg: '#0B1016' },
+    },
     danger: '#E5484D',
     shadow: '#000000',
     // 0 10px 30px rgba(0,0,0,0.45)
@@ -143,6 +155,12 @@ export const palettes: Record<Scheme, Palette> = {
     fresh: '#0A7D60',
     onSocial: '#FFFFFF',
     level: ['#6AABFF', '#2E8BFF', '#0A56C2'],
+    // 러너 링처럼 라이트에서는 같은 색의 진한 값에 흰 글자
+    sticker: {
+      dawn: { bg: '#9A4F6E', fg: '#FFFFFF' },
+      tenK: { bg: '#7A6533', fg: '#FFFFFF' },
+      today: { bg: '#5B4F9A', fg: '#FFFFFF' },
+    },
     danger: '#E5484D',
     shadow: '#0B1016',
     // 0 8px 24px rgba(17,19,22,0.10)

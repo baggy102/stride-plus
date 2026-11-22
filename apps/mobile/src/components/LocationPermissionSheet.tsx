@@ -4,7 +4,8 @@ import { LocateIcon } from './icons';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 
-// 확정 UI S15 위치 권한 설명(추가 화면 ①): 시스템 권한 팝업 전에 「항상 허용」이 왜 필요한지 알려 준다.
+// 확정 UI S15 위치 권한 설명(추가 화면 ①): 시스템 권한 창 전에 화면이 꺼져도 기록이 이어진다는 것을 알려 준다.
+// 「사용하는 동안」 권한만으로도 기록이 이어져서(src/store/run.ts startBackgroundUpdates) 「항상 허용」은 안내하지 않는다(Q3 제안안, 2026-11-22)
 interface Props {
   visible: boolean;
   onContinue: () => void;
@@ -28,14 +29,11 @@ export function LocationPermissionSheet({ visible, onContinue, onLater }: Props)
           </View>
           <Text style={[styles.title, { color: c.text }]}>화면이 꺼져도 경로가 이어지게</Text>
           <Text style={[styles.body, { color: c.text2 }]}>
-            달리는 동안 휴대폰 화면이 꺼져도 경로를 기록하려면 위치 권한을 &apos;항상 허용&apos;으로 설정해야 해요.
+            달리는 동안 화면이 꺼져도 경로를 이어서 기록해요. 다음 창에서 위치 권한을 허용해 주세요.
           </Text>
           <View style={[styles.steps, { backgroundColor: c.surface2 }]}>
             <Text style={[styles.step, { color: c.text }]}>
-              1. 다음 팝업에서 <Text style={styles.strong}>앱을 사용하는 동안 허용</Text>을 고릅니다.
-            </Text>
-            <Text style={[styles.step, { color: c.text }]}>
-              2. 이어서 <Text style={styles.strong}>항상 허용으로 변경</Text>을 고릅니다.
+              1. 다음 창에서 <Text style={styles.strong}>앱을 사용하는 동안 허용</Text>을 골라 주세요.
             </Text>
           </View>
           <Pressable accessibilityRole="button" onPress={onContinue} style={[styles.primary, { backgroundColor: c.accent }]}>

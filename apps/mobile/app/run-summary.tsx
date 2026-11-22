@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   View, Text, Pressable, TextInput, Modal,
-  ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Dimensions,
+  ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, Dimensions,
   type LayoutChangeEvent, type LayoutRectangle, type TextInputProps,
 } from 'react-native';
 import Animated, {
@@ -14,6 +14,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Location from 'expo-location';
 import { useRunStore } from '@/store/run';
 import client from '@/api/client';
+import { extractMessage, serverMessage } from '@/api/errors';
 import { RouteMap } from '@/components/RouteMap';
 import { Wordmark } from '@/components/Wordmark';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
@@ -103,6 +104,9 @@ export default function RunSummaryScreen() {
   const [description, setDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // 저장 실패 안내(앱 모달). 문구는 닫히는 동안에도 남겨 둔다(페이드 중 본문이 비지 않게)
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [saveErrorText, setSaveErrorText] = useState('');
   const [finishedAt] = useState(() => new Date());
   const [place, setPlace] = useState<string | null>(null);
 
@@ -285,7 +289,9 @@ export default function RunSummaryScreen() {
       // File(520ms): 요약이 앨범(내 기록 목록)의 맨 위 히어로로 접혀 들어간다
       router.replace({ pathname: '/(tabs)/profile', params: { filed: run._id } });
     } catch (e) {
-      Alert.alert('저장 실패', e instanceof Error ? e.message : '다시 시도해주세요.');
+      // 영문 e.message는 보이지 않는다. 코스 소개 금칙어만 따로 알려 주고 나머지는 표준 문구(TERMS #22)
+      setSaveErrorText(serverMessage(e) === 'banned_word' ? '코스 소개에 사용할 수 없는 단어가 있어요.' : extractMessage(e));
+      setSaveFailed(true);
     } finally {
       setSaving(false);
     }
@@ -383,14 +389,14 @@ export default function RunSummaryScreen() {
         <Animated.View style={[styles.footer, styles.footerRow, { paddingBottom: Math.max(insets.bottom, 16) }, sheetStyle]}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="이번 러닝 공유"
+            accessibilityLabel="공유 이미지 만들기"
             accessibilityState={{ busy: sharing, disabled: saving }}
             onPress={handleShare}
             disabled={sharing || saving}
             style={[styles.shareBtn, { opacity: saving ? 0.5 : 1 }]}
           >
             {sharing ? <ActivityIndicator color={c.text} /> : <ShareIcon size={18} color={c.text} />}
-            <Text style={styles.shareText}>공유</Text>
+            <Text style={styles.shareText}>이미지 공유</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -424,12 +430,25 @@ export default function RunSummaryScreen() {
             <Text style={styles.dialogBody}>삭제한 기록은 되돌릴 수 없어요.</Text>
             <View style={styles.dialogActions}>
               <Pressable accessibilityRole="button" onPress={() => setConfirmDelete(false)} style={styles.dialogKeep}>
-                <Text style={styles.dialogKeepText}>계속 편집</Text>
+                <Text style={styles.dialogKeepText}>취소</Text>
               </Pressable>
               <Pressable accessibilityRole="button" onPress={handleDiscard} style={styles.dialogDelete}>
                 <Text style={styles.dialogDeleteText}>삭제</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 저장 실패: 삭제 확인과 같은 앱 모달, 버튼은 설정 약관 안내의 한 버튼 알약 모양 */}
+      <Modal visible={saveFailed} transparent animationType="fade" onRequestClose={() => setSaveFailed(false)}>
+        <View style={[styles.scrim, { backgroundColor: c.scrim }]}>
+          <View accessibilityViewIsModal accessibilityRole="alert" style={styles.dialog}>
+            <Text style={styles.dialogTitle}>저장하지 못했어요</Text>
+            <Text style={styles.dialogBody}>{saveErrorText}</Text>
+            <Pressable accessibilityRole="button" onPress={() => setSaveFailed(false)} style={styles.dialogOk}>
+              <Text style={styles.saveText}>확인</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -567,4 +586,5 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   dialogKeepText: { fontFamily: FONT.semibold, fontSize: 15, color: c.text },
   dialogDelete: { flex: 1, height: 48, borderRadius: 12, backgroundColor: c.danger, alignItems: 'center', justifyContent: 'center' },
   dialogDeleteText: { fontFamily: FONT.semibold, fontSize: 15, color: '#FFFFFF' },
+  dialogOk: { marginTop: 10, height: 52, borderRadius: 26, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
 });

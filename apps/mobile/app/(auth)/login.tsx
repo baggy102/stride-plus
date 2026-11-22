@@ -77,7 +77,7 @@ export default function LoginScreen() {
 
         <Text style={styles.footer}>
           계정이 없으신가요?{' '}
-          <Link href="/(auth)/register" style={styles.link}>회원가입</Link>
+          <Link href="/(auth)/register" style={styles.link}>계정 만들기</Link>
         </Text>
       </View>
     </KeyboardAvoidingView>

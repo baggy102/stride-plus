@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
@@ -8,6 +8,8 @@ import { Glass } from '@/components/Glass';
 
 // Frost S06 「종료 A」: 서리 유리 원형 버튼(달리는 중 ‖, 일시정지 중 ▶). 길게 누르면 진행 링이 차고, 다 차면 종료.
 // 손을 떼면 취소된다(실수로 한 번 눌러서는 끝나지 않게). 짧게 탭하면 일시정지/재개(B7). 링만 강조색.
+// 안내 문구는 누르고 있는 동안에만 보인다(2026-11-22 사용자 피드백). 줄 높이는 늘 잡아 두고 투명도만 바꿔 버튼이 움직이지 않는다
+const HINT_FADE_MS = 120;
 const HOLD_MS = 1500;
 const TAP_MS = 300;
 const SIZE = 104;
@@ -26,12 +28,18 @@ interface Props {
 export function HoldToStopButton({ onComplete, onTap, paused }: Props) {
   const c = useColors();
   const progress = useRef(new Animated.Value(0)).current;
+  const hint = useRef(new Animated.Value(0)).current;
   const [holding, setHolding] = useState(false);
   const pressedAt = useRef(0);
+
+  const showHint = (on: boolean) => {
+    Animated.timing(hint, { toValue: on ? 1 : 0, duration: HINT_FADE_MS, useNativeDriver: true }).start();
+  };
 
   const begin = () => {
     pressedAt.current = Date.now();
     setHolding(true);
+    showHint(true);
     Animated.timing(progress, {
       toValue: 1,
       duration: HOLD_MS,
@@ -40,6 +48,7 @@ export function HoldToStopButton({ onComplete, onTap, paused }: Props) {
     }).start(({ finished }) => {
       if (finished) {
         setHolding(false);
+        showHint(false);
         progress.setValue(0);
         onComplete();
       }
@@ -51,6 +60,7 @@ export function HoldToStopButton({ onComplete, onTap, paused }: Props) {
     progress.stopAnimation();
     Animated.timing(progress, { toValue: 0, duration: 150, useNativeDriver: false }).start();
     setHolding(false);
+    showHint(false);
   };
 
   const dashOffset = progress.interpolate({ inputRange: [0, 1], outputRange: [CIRCUMFERENCE, 0] });
@@ -76,7 +86,7 @@ export function HoldToStopButton({ onComplete, onTap, paused }: Props) {
         )}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={paused ? '탭해서 다시 시작, 길게 눌러 러닝 종료' : '탭해서 일시정지, 길게 눌러 러닝 종료'}
+          accessibilityLabel={paused ? '탭해서 이어 달리기, 길게 눌러 러닝 종료' : '탭해서 일시정지, 길게 눌러 러닝 종료'}
           onPressIn={begin}
           onPressOut={cancel}
           style={[
@@ -96,9 +106,13 @@ export function HoldToStopButton({ onComplete, onTap, paused }: Props) {
           </Glass>
         </Pressable>
       </View>
-      <Text style={[styles.hint, { color: holding ? c.text : c.text2 }]}>
-        {holding ? '계속 누르고 있으면 종료돼요' : '길게 누르면 종료'}
-      </Text>
+      <Animated.Text
+        accessibilityElementsHidden={!holding}
+        importantForAccessibility={holding ? 'auto' : 'no-hide-descendants'}
+        style={[styles.hint, { color: c.text, opacity: hint }]}
+      >
+        계속 누르고 있으면 종료돼요
+      </Animated.Text>
     </View>
   );
 }

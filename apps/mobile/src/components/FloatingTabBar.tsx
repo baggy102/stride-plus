@@ -13,7 +13,8 @@ type TabBarProps = Parameters<NonNullable<ComponentProps<typeof Tabs>['tabBar']>
 // Frost 「주 메뉴」: 화면 아래 24px 위에 뜬 유리 알약, 아이콘 3개(글자 없음). 활성 탭은 point로 채우고 아이콘은 onPoint
 const ICONS: Record<string, { label: string; draw: (color: string) => ReactElement }> = {
   feed: {
-    label: '피드',
+    // 아이콘과 화면이 지도라 접근성 이름도 「동네 지도」(Q8)
+    label: '동네 지도',
     draw: (color) => (
       <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round">
         <Path d="M9 4 3 6.5V20l6-2.5 6 2.5 6-2.5V4l-6 2.5L9 4Z" />

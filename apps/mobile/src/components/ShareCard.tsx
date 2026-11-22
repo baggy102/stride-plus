@@ -6,6 +6,7 @@ import { FONT, monoLabel } from '@/theme/fonts';
 import { fitToBox, type LngLat } from '@/utils/route';
 import { formatDuration, formatRunPace } from '@/utils/pace';
 import { formatClock, formatDay } from '@/utils/date';
+import { Wordmark } from './Wordmark';
 
 /** 공유 이미지 크기(뷰 360×640, 캡처는 3배 1080×1920 — 9:16 스토리) */
 export const SHARE_W = 360;
@@ -36,7 +37,8 @@ export interface ShareCardData {
 /**
  * 저장 직후 공유 이미지(9:16, 2026-11-21 브랜딩 4차 · 사용자 「내 코스와 기록이 나와야」).
  * 점 격자 도면 위 내 코스(Ice, 처음 달린 구간만 민트) — 출발·도착 100m는 잘려 오고, 잘린 끝은 흐려지며 출발·도착 표시는 없다.
- * 아래: 「● ○○동 · 처음 달린 길 x km」(없으면 「늘 뛰던 길」) / 거리 / TIME · PACE
+ * 위: 워드마크 그림(로고색, 앱 머리와 같은 폭 71) + 「11.22 일 · 07:05」
+ * 아래: 「● ○○동 · 처음 달린 길 x km」(없으면 「늘 달리던 길」) / 거리 / TIME · PACE
  */
 export const ShareCard = forwardRef<ComponentRef<typeof View>, { data: ShareCardData }>(function ShareCard({ data }, ref) {
   const pts = data.route.length > 1 ? fitToBox(data.route, SHARE_W, MAP_H, 44) : [];
@@ -49,7 +51,7 @@ export const ShareCard = forwardRef<ComponentRef<typeof View>, { data: ShareCard
     return edge >= fadeN ? 1 : 0.2 + 0.8 * (edge / fadeN);
   };
   const showFirst = data.firstKm > 0;
-  const line = showFirst ? `처음 달린 길 ${data.firstKm.toFixed(1)} km` : '늘 뛰던 길';
+  const line = showFirst ? `처음 달린 길 ${data.firstKm.toFixed(1)} km` : '늘 달리던 길';
 
   return (
     <View ref={ref} collapsable={false} style={styles.card}>
@@ -69,7 +71,11 @@ export const ShareCard = forwardRef<ComponentRef<typeof View>, { data: ShareCard
         ) : null))}
       </Svg>
 
-      <Text style={styles.head}>{`STRIDE+ · ${formatDay(data.createdAt)} · ${formatClock(data.createdAt)}`}</Text>
+      {/* 로고 자리는 글자 「STRIDE+」가 아니라 워드마크 그림(TERMS #53) */}
+      <View style={styles.head}>
+        <Wordmark width={71} color={p.logo} />
+        <Text style={styles.headText}>{`${formatDay(data.createdAt)} · ${formatClock(data.createdAt)}`}</Text>
+      </View>
 
       <View style={styles.bottom}>
         <View style={styles.placeRow}>
@@ -92,7 +98,8 @@ export const ShareCard = forwardRef<ComponentRef<typeof View>, { data: ShareCard
 const styles = StyleSheet.create({
   card: { width: SHARE_W, height: SHARE_H, backgroundColor: p.bg, overflow: 'hidden' },
   // 스토리 앱 UI가 위 약 14%를 가리므로 그 아래에서 시작
-  head: { position: 'absolute', top: 92 - 28, left: 28, right: 28, ...monoLabel(10, 0.12), color: p.muted },
+  head: { position: 'absolute', top: 92 - 28, left: 28, right: 28, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headText: { ...monoLabel(10, 0.12), lineHeight: 14, color: p.muted },
   bottom: { position: 'absolute', left: 28, right: 28, top: MAP_TOP + MAP_H + 4, gap: 6 },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dot: { width: 9, height: 9, borderRadius: 5 },

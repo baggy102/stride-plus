@@ -18,8 +18,8 @@ export function PhotoPicker({ photos, onChange }: Props) {
     if (status !== 'granted') {
       // 거부해도 기록 저장은 계속할 수 있다. 사진만 못 붙인다
       Alert.alert(
-        '사진 접근이 꺼져 있어요',
-        '러닝 기록에 사진을 붙이려면 설정에서 사진 접근을 허용해 주세요.',
+        '사진 권한이 꺼져 있어요',
+        '러닝 기록에 사진을 붙이려면 설정에서 사진 권한을 허용해 주세요.',
         [
           { text: '나중에', style: 'cancel' },
           { text: '설정 열기', onPress: () => { Linking.openSettings(); } },

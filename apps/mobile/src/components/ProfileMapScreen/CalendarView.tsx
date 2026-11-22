@@ -21,8 +21,9 @@ interface Props {
   onRunPress: (runId: string, top: number) => void;
 }
 
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-const WEEK = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+// 달은 「2026.11」, 요일은 한글 한 글자(영문 약자는 T·S가 두 번씩 나와 헷갈림, Q8). 모노 글꼴에 한글이 없어 요일은 기기 글꼴로 대체된다
+const monthLabel = (y: number, m: number) => `${y}.${String(m + 1).padStart(2, '0')}`;
+const WEEK = ['월', '화', '수', '목', '금', '토', '일'];
 const PAGE = 50; // 서버 limit 최대
 const SWIPE = 40; // 이만큼 넘게 밀면 달이 바뀐다
 const GAP = 6;
@@ -174,10 +175,10 @@ export function CalendarView({ userId, topInset, bottomInset, reloadKey, onRunPr
           style={styles.hero}
         >
           <Text style={styles.heroNum}>{state === 'loading' || state === undefined ? '–' : totalKm.toFixed(1)}</Text>
-          <Text style={styles.heroUnit}>km</Text>
+          <Text style={styles.heroUnit}>KM</Text>
         </View>
         <View style={styles.meta}>
-          <Text style={styles.metaText}>{`${MONTHS[month.m]} ${month.y}`}</Text>
+          <Text style={styles.metaText}>{monthLabel(month.y, month.m)}</Text>
           {state === 'error' ? (
             <Pressable accessibilityRole="button" onPress={() => fetchMonth(month.y, month.m)} hitSlop={12}>
               <Text style={[styles.metaText, styles.retry]}>다시 시도</Text>
@@ -233,7 +234,7 @@ export function CalendarView({ userId, topInset, bottomInset, reloadKey, onRunPr
             <Pressable
               key={run._id}
               accessibilityRole="button"
-              accessibilityLabel={`${titleOf(run)} 상세 열기`}
+              accessibilityLabel={`${titleOf(run)} 코스 보기`}
               onLayout={onPickLayout(run._id)}
               onPress={() => onRunPress(run._id, picksY + (pickTops[run._id] ?? 0))}
               style={styles.pick}

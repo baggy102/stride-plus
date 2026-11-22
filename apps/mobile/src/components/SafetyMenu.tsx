@@ -75,7 +75,7 @@ export function SafetyMenu({ targetType, targetId, author, onBlocked, label }: P
     }
   };
 
-  const failedText = failed ? <Text style={styles.failed}>요청하지 못했어요. 다시 시도해 주세요.</Text> : null;
+  const failedText = failed ? <Text style={styles.failed}>보내지 못했어요. 네트워크 연결을 확인하고 다시 시도해 주세요.</Text> : null;
 
   return (
     <>
@@ -102,7 +102,7 @@ export function SafetyMenu({ targetType, targetId, author, onBlocked, label }: P
               <Text style={styles.menuText}>신고하기</Text>
             </Pressable>
             <Pressable accessibilityRole="menuitem" onPress={() => open('block')} style={styles.menuItem}>
-              <Text style={styles.menuDanger}>사용자 차단</Text>
+              <Text style={styles.menuDanger}>차단하기</Text>
             </Pressable>
           </View>
         )}
@@ -110,7 +110,7 @@ export function SafetyMenu({ targetType, targetId, author, onBlocked, label }: P
         {sheet === 'report' && (
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 20 }]}>
             <View style={styles.handle} />
-            <Text style={styles.sheetTitle}>신고 사유를 선택해 주세요</Text>
+            <Text style={styles.sheetTitle}>신고 사유를 골라 주세요</Text>
             <View accessibilityRole="radiogroup">
               {REPORT_REASONS.map((item) => {
                 const on = reason === item.value;
@@ -161,7 +161,7 @@ export function SafetyMenu({ targetType, targetId, author, onBlocked, label }: P
           <View style={styles.dialogWrap} pointerEvents="box-none">
             <View accessibilityRole="alert" style={styles.dialog}>
               <Text style={styles.sheetTitle}>{author.username || '이 사용자'} 님을 차단할까요?</Text>
-              <Text style={styles.bodyStrong}>이 사용자의 러닝이 더 이상 보이지 않습니다.</Text>
+              <Text style={styles.bodyStrong}>이 사용자의 러닝이 더 이상 보이지 않아요.</Text>
               {failedText}
               <View style={styles.dialogButtons}>
                 <Pressable accessibilityRole="button" disabled={busy} onPress={close} style={[styles.pill, { backgroundColor: c.surface2 }]}>

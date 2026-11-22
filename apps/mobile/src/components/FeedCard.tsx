@@ -4,7 +4,7 @@ import Svg, { Circle, Polyline } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RouteMap } from '@/components/RouteMap';
 import { useColors } from '@/theme/useColors';
-import { FONT } from '@/theme/fonts';
+import { FONT, monoLabel } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
 import { fitToBox } from '@/utils/route';
 import { formatDate } from '@/utils/date';
@@ -128,12 +128,13 @@ function PhotoMedia({ run, baseUrl, pager, width, s }: {
   );
 }
 
+// 큰 거리 숫자 + 모노 KM(포스터 카드 · 요약과 같은 라벨)
 function Distance({ km, s, onMap = false }: { km: number; s: ReturnType<typeof makeStyles>; onMap?: boolean }) {
   return (
-    <Text style={[s.km, onMap && s.kmOnMap]} accessibilityLabel={`${km.toFixed(2)} km`}>
-      {km.toFixed(2)}
-      <Text style={[s.kmUnit, onMap && s.kmUnitOnMap]}>km</Text>
-    </Text>
+    <View style={s.kmBox} accessible accessibilityLabel={`${km.toFixed(2)} km`}>
+      <Text style={[s.km, onMap && s.kmOnMap]}>{km.toFixed(2)}</Text>
+      <Text style={[s.kmUnit, onMap && s.kmUnitOnMap]}>KM</Text>
+    </View>
   );
 }
 
@@ -148,10 +149,10 @@ export function CollapsedRow({ run }: { run: FeedRun }) {
         <Text style={s.badgeMonth}>{`${d.getMonth() + 1}월`}</Text>
       </View>
       <Text style={s.rowName} numberOfLines={1}>{titleOf(run)}</Text>
-      <Text style={s.rowDist}>
-        {run.distanceKm.toFixed(2)}
-        <Text style={s.rowUnit}>km</Text>
-      </Text>
+      <View style={s.rowDist}>
+        <Text style={s.rowKm}>{run.distanceKm.toFixed(2)}</Text>
+        <Text style={s.rowUnit}>KM</Text>
+      </View>
     </View>
   );
 }
@@ -168,9 +169,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   mapBg: { backgroundColor: c.map.bg },
   shade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 120 },
   fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 96 },
-  km: { position: 'absolute', left: 20, bottom: 14, fontFamily: FONT.num, fontSize: 56, lineHeight: 60, letterSpacing: -1.5, color: WHITE, fontVariant: ['tabular-nums'] },
+  kmBox: { position: 'absolute', left: 20, bottom: 14, flexDirection: 'row', alignItems: 'baseline' },
+  km: { fontFamily: FONT.num, fontSize: 56, lineHeight: 60, letterSpacing: -1.5, color: WHITE, fontVariant: ['tabular-nums'] },
   kmOnMap: { color: c.text },
-  kmUnit: { fontFamily: FONT.num, fontSize: 16, letterSpacing: 0, color: 'rgba(255,255,255,0.82)' },
+  kmUnit: { ...monoLabel(13, 0.08), marginLeft: 5, color: 'rgba(255,255,255,0.82)' },
   kmUnitOnMap: { color: c.text2 },
   dots: { position: 'absolute', right: 20, bottom: 30, flexDirection: 'row', gap: 6 },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.5)' },
@@ -180,6 +182,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   badgeDay: { fontFamily: FONT.num, fontSize: 17, lineHeight: 18, color: c.text },
   badgeMonth: { fontFamily: FONT.regular, fontSize: 10, lineHeight: 12, color: c.text2 },
   rowName: { flex: 1, minWidth: 0, fontFamily: FONT.semibold, fontSize: 15, color: c.text },
-  rowDist: { fontFamily: FONT.num, fontSize: 19, color: c.text, fontVariant: ['tabular-nums'] },
-  rowUnit: { fontSize: 12, color: c.text2 },
+  rowDist: { flexDirection: 'row', alignItems: 'baseline' },
+  rowKm: { fontFamily: FONT.num, fontSize: 19, color: c.text, fontVariant: ['tabular-nums'] },
+  rowUnit: { ...monoLabel(11, 0.08), marginLeft: 3, color: c.text2 },
 });
