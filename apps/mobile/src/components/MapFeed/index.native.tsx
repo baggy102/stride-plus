@@ -10,20 +10,30 @@ import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { MapPopupCard } from '@/components/MapPopupCard';
+import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
+import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { traceLayerScript, type TraceColors } from '@/components/map/traceLayer';
+import { routeGeometry, type LngLat } from '@/utils/route';
+import { useAuthStore } from '@/store/auth';
 import client, { BASE_URL } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
 import { elevationStyle, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import type { RunMarker } from '@/types/run';
+import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 
 // 서버 FindRunsDto의 radius 상한과 같다.
 const MAX_RADIUS_M = 300000;
 
-type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number };
+// cell: 지금 줌에서 화면 11px에 해당하는 미터(D3 칸, 서버 FindDensityDto 범위 5~5000)
+type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number; cell: number };
+type DensityCell = { lng: number; lat: number; n: number };
 type RunMessage = { type: 'run'; run: RunMarker };
+type MapTapMessage = { type: 'mapTap' };
+// GET /runs/new-cells: 「이번 주 새 길」 칸(고정 50m 지리 칸)과 칸을 연 러닝별 km
+type NewCellsResponse = { cellMeters: number; cells: { lng: number; lat: number; runId: string }[]; runs: { runId: string; km: number }[] };
 type RunDetailResponse = { route?: { coordinates?: [number, number][] } };
 
 // bottomOffset: 탭바에 가리지 않게 Leaflet 출처 표기를 올리는 높이
@@ -44,6 +54,9 @@ function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOf
     .leaflet-control-scale-line { background: transparent !important; border: 1.5px solid ${p.text} !important; border-top: 0 !important;
       color: ${p.text}; font: 500 10px/12px ui-monospace, Menlo, monospace; letter-spacing: 0.08em; padding: 0 4px; text-transform: uppercase; }
 ${MARKER_PULSE_CSS}
+    @keyframes faceIn { from { transform: scale(0.86); opacity: 0.5; } to { transform: scale(1); opacity: 1; } }
+    .face-in { animation: faceIn 220ms cubic-bezier(0.2,0.8,0.2,1); }
+    @media (prefers-reduced-motion: reduce) { .face-in { animation: none; } }
   </style>
 </head>
 <body>
@@ -58,58 +71,98 @@ ${baseMapScript(p, dark)}
 
 ${markerIconsScript(p)}
 
-  var group=L.markerClusterGroup({iconCreateFunction:clusterIcon,showCoverageOnHover:false,maxClusterRadius:60});
+  // 얼굴 링 마커(TOTAL·HYPE·NEW). run에는 앱이 붙인 hype·fresh·cheers·avatar(검사한 주소)·initial·t·tone(사용자 색 칸)·operator가 있다
+  var mode='total';
+  var HEART='<svg width="9" height="9" viewBox="0 0 24 24" style="display:block"><path fill="currentColor" d="M12 21s-7.5-4.6-9.6-9.2C.9 8.4 3 4.5 6.8 4.5c2.1 0 3.6 1.1 4.2 2.4h2c.6-1.3 2.1-2.4 4.2-2.4 3.8 0 5.9 3.9 4.4 7.3C19.5 16.4 12 21 12 21z"/></svg>';
+  function matches(run){return mode==='total'||(mode==='hype'&&run.hype)||(mode==='new'&&run.fresh);}
+  function ringOf(run,base){var c=iconColors;return mode==='hype'&&run.hype?c.hype:(mode==='new'&&run.fresh?c.fresh:base);}
+  // TOTAL 링 바탕: 운영자는 Indigo, 나머지는 사용자별 4색
+  function toneOf(run){var c=iconColors;return run.operator?c.operator:c.runners[run.tone];}
+  // HYPE에서 해당 러닝: Pearl 링 · 1.16배 · 번짐 · Pearl 응원 배지. NEW에서 해당 러닝: 민트 링. TOTAL에서 NEW 러닝엔 민트 점(오른쪽 위). 나머지는 흐리게
+  // 응원 수: 보이는 러닝에 1개 이상이면 유리 칩(오른쪽 아래). 운영자: 왼쪽 아래 S 배지
+  function faceIcon(run){
+    var c=iconColors,on=matches(run),hot=mode==='hype'&&run.hype;
+    var shadow=hot?'0 0 0 4px '+c.hypeSoft+',0 0 22px '+c.hypeGlow:'0 4px 12px rgba(0,0,0,'+(c.dark?0.45:0.16)+')';
+    var badge=hot?'<div style="position:absolute;top:-2px;left:28px;display:flex;align-items:center;gap:3px;padding:3px 7px 3px 6px;border-radius:99px;background:'+c.hype+';color:'+c.onSocial+';font:600 11px/1 ui-monospace,Menlo,monospace;white-space:nowrap">'+HEART+run.cheers+'</div>'
+      :(on&&run.cheers>0?'<div style="position:absolute;bottom:-1px;left:27px;display:flex;align-items:center;gap:2px;padding:2px 5px 2px 4px;border-radius:99px;background:'+c.glass+';border:1px solid '+c.glassBorder+';-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:'+c.text+';font:600 11px/1 ui-monospace,Menlo,monospace;white-space:nowrap">'+HEART+run.cheers+'</div>':'');
+    var dot=mode==='total'&&run.fresh?'<div style="position:absolute;top:4px;right:4px;width:10px;height:10px;box-sizing:border-box;border-radius:50%;background:'+c.fresh+';border:2px solid '+c.ring+'"></div>':'';
+    var op=run.operator?'<div style="position:absolute;bottom:1px;left:1px;width:14px;height:14px;box-sizing:border-box;border-radius:50%;background:'+c.operator+';border:2px solid '+c.ring+';display:flex;align-items:center;justify-content:center;color:'+c.onOperator+';font:700 8px/1 -apple-system,system-ui,sans-serif">S</div>':'';
+    return L.divIcon({html:'<div class="face-in"><div style="position:relative;width:44px;height:44px;display:flex;align-items:center;justify-content:center;transform:scale('+(hot?1.16:1)+');opacity:'+(on?1:0.38)+';filter:'+(on?'none':'grayscale(1)')+'"><div style="border-radius:50%;box-shadow:'+shadow+'">'+face(run,34,ringOf(run,toneOf(run)),2.5)+'</div>'+dot+op+badge+'</div></div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});
+  }
+  // 묶음: 얼굴 최대 3개 겹침 + 수. 얼굴 순서 HYPE(응원 수) → NEW → 최근
+  function rank(a,b){return (b.hype-a.hype)||(b.cheers-a.cheers)||(b.fresh-a.fresh)||(b.t-a.t);}
+  function stackIcon(cl){
+    var c=iconColors,runs=cl.getAllChildMarkers().map(function(m){return m.options.run;}).sort(rank);
+    var top=runs.slice(0,3),anyOn=runs.some(matches),n=String(runs.length);
+    var faces=top.map(function(run,i){
+      return '<div style="margin-left:'+(i?-10:0)+'px;position:relative;z-index:'+(3-i)+';opacity:'+(matches(run)?1:0.5)+'">'+face(run,28,ringOf(run,toneOf(run)),2)+'</div>';
+    }).join('');
+    return stackPill(faces,top.length,n,anyOn);
+  }
+
+  var group=L.markerClusterGroup({iconCreateFunction:stackIcon,showCoverageOnHover:false,maxClusterRadius:60});
   map.addLayer(group);
 
-  var lastRuns=[];
-  // 선택한 기록(S05)의 경로만 그린다: 다크는 옅은 번짐 + 바탕색 테두리(8) + 경로(4) + 시작점
-  var selGlow=L.polyline([],{weight:12,opacity:0,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-  var selEdge=L.polyline([],{weight:8,opacity:0.9,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-  var selLine=L.polyline([],{weight:4,lineCap:'round',lineJoin:'round',interactive:false}).addTo(map);
-  var selStart=L.circleMarker([0,0],{radius:5,weight:2.5,fillOpacity:1,interactive:false});
-  function styleSelected(c){
-    selGlow.setStyle({color:c.dot,opacity:c.dark?0.25:0});
-    selEdge.setStyle({color:c.ring});
-    selLine.setStyle({color:c.dot});
-    selStart.setStyle({color:c.dot,fillColor:c.ring});
-  }
-  styleSelected(iconColors);
-  // coords: [lng,lat][] (없으면 지운다). pad: 헤더·카드에 가리지 않게 둘 여백 [위, 아래]
-  window.__setSelected=function(coords,pad){
-    var pts=(coords||[]).map(function(c){return [c[1],c[0]];});
-    selGlow.setLatLngs(pts);selEdge.setLatLngs(pts);selLine.setLatLngs(pts);
-    if(pts.length>0){
-      selStart.setLatLng(pts[0]).addTo(map);
-      if(pts.length>1)map.fitBounds(L.latLngBounds(pts),{paddingTopLeft:[32,pad[0]],paddingBottomRight:[32,pad[1]],maxZoom:16});
-    }else{map.removeLayer(selStart);}
-  };
+  var lastRuns=[],markers=[];
+${routeFxScript()}
+${traceLayerScript()}
+  // D3 바탕 색: 데이터 칸은 TOTAL 링과 같은 Ice(지도 피드에는 「새 길」 민트가 없다)
+  window.__trace.setColors(${JSON.stringify(feedTraceColors(p))});
 
-  // 테마 전환: 마커 아이콘과 내 위치·선택 경로 색을 바꾸고 지금 러닝을 다시 그린다
+  // 테마 전환: 마커 아이콘과 내 위치 색을 바꾸고 지금 러닝을 다시 그린다(고른 경로는 앱이 다시 그린다)
   window.__onTheme=function(c){
     makeIcons(c);
     me.setStyle({color:c.meRing,fillColor:c.meFill});
     meHalo.setStyle({fillColor:c.meHalo});
-    styleSelected(c);
     window.__setRuns(lastRuns);
   };
 
   window.__setRuns=function(runs){
     lastRuns=runs;
     group.clearLayers();
+    markers=[];
     runs.forEach(function(run){
       if(!run.startPoint)return;
-      var m=L.marker([run.startPoint[1],run.startPoint[0]],{icon:ringIcon});
+      var m=L.marker([run.startPoint[1],run.startPoint[0]],{icon:faceIcon(run),run:run});
       m.on('click',function(){
         window.ReactNativeWebView.postMessage(JSON.stringify({type:'run',run:run}));
       });
-      group.addLayer(m);
+      markers.push(m);
     });
+    group.addLayers(markers);
+  };
+
+  // 빈 지도 탭 → 열린 카드를 닫는다(마커 click은 지도로 버블링되지 않고, 끌기·핀치는 click이 아니다)
+  map.on('click',function(){window.ReactNativeWebView.postMessage(JSON.stringify({type:'mapTap'}));});
+
+  // 응원 수가 바뀐 러닝 하나만 다시 그린다(전체 다시 그리기 없음)
+  window.__updateRun=function(next){
+    lastRuns=lastRuns.map(function(run){return run._id===next._id?next:run;});
+    markers.forEach(function(m){
+      if(m.options.run._id!==next._id)return;
+      m.options.run=next;
+      m.setIcon(faceIcon(next));
+      group.refreshClusters(m);
+    });
+  };
+
+  // 필터 바꿈: 지도 가운데에서 바깥으로 0~260ms 물결처럼 아이콘을 바꾼다(묶음은 중간에 한 번)
+  window.__setMode=function(next){
+    mode=next;
+    var center=map.latLngToContainerPoint(map.getCenter()),size=map.getSize(),far=Math.sqrt(size.x*size.x+size.y*size.y)/2;
+    markers.forEach(function(m){
+      var d=Math.min(1,map.latLngToContainerPoint(m.getLatLng()).distanceTo(center)/far);
+      setTimeout(function(){m.setIcon(faceIcon(m.options.run));},Math.round(d*260));
+    });
+    setTimeout(function(){group.refreshClusters();},130);
   };
 
   function reportViewport(){
     var c=map.getCenter();
     var r=Math.min(Math.ceil(c.distanceTo(map.getBounds().getNorthEast())),${MAX_RADIUS_M});
-    window.ReactNativeWebView.postMessage(JSON.stringify({type:'viewport',lat:c.lat,lng:c.lng,radius:r}));
+    var mpp=40075016.686*Math.cos(c.lat*Math.PI/180)/Math.pow(2,map.getZoom()+8);
+    var cell=Math.min(5000,Math.max(5,Math.round(mpp*11)));
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'viewport',lat:c.lat,lng:c.lng,radius:r,cell:cell}));
   }
   var moveTimer;
   map.on('moveend',function(){
@@ -124,14 +177,27 @@ ${markerIconsScript(p)}
 
 type FeedState = 'normal' | 'empty' | 'error';
 
-// 피드 필터 칩: 러닝 거리 구간(겹치지 않음) — 5km 이하 / 5~10km / 10km 초과 (2026-10-18 결정).
-// Frost: 거리 칩 라벨은 모노(5K·10K·10K+)
-const CHIPS = [
-  { label: '전체', a11y: '전체', overKm: -1, upToKm: Infinity },
-  { label: '5K', a11y: '5킬로미터 이하', overKm: -1, upToKm: 5 },
-  { label: '10K', a11y: '5에서 10킬로미터', overKm: 5, upToKm: 10 },
-  { label: '10K+', a11y: '10킬로미터 초과', overKm: 10, upToKm: Infinity },
-] as const;
+// 필터에 맞는 러닝이 없을 때 안내(지도에는 흐린 마커가 그대로 있다)
+const NO_MATCH: Record<Exclude<FeedFilter, 'total'>, { title: string; sub: string }> = {
+  hype: { title: '이 근처에 HYPE 러닝이 아직 없어요', sub: `응원을 ${HYPE_MIN_CHEERS}개 이상 받은 러닝이 여기에 떠요` },
+  new: { title: '이 근처엔 이번 주 새 길이 아직 없어요', sub: '한동안 아무도 안 뛴 길을 달리면 여기 떠요' },
+};
+
+// 지도 WebView에 넘기는 러닝: 마커가 쓸 표시를 미리 붙인다(사진 주소는 검사한 것만)
+function toMapRun(run: RunMarker, openers: ReadonlySet<string>) {
+  return {
+    ...run,
+    hype: isHype(run),
+    // 이번 주 새 길을 연 러닝(NEW에서 켜지고, TOTAL에서는 오른쪽 위 민트 점)
+    fresh: isOpener(run, openers),
+    cheers: run.cheers ?? 0,
+    avatar: safeImageUrl(run.userId.profileImageUrl, BASE_URL),
+    initial: (run.userId.username?.[0] ?? '?').toUpperCase(),
+    t: Date.parse(run.createdAt) || 0,
+    tone: runnerTone(run.userId._id),
+    operator: run.userId.role === 'operator',
+  };
+}
 
 // 「NEARBY 2 KM」: 지금 보이는 지도 반경(1 km 단위, 최소 1)
 function nearbyLabel(radiusM: number | null) {
@@ -139,10 +205,20 @@ function nearbyLabel(radiusM: number | null) {
   return `NEARBY ${Math.max(1, Math.round(radiusM / 1000))} KM`;
 }
 
-const CARD_HEIGHT = 152;
+// 경로 그리기 시작(카메라가 먼저 움직이고, 카드는 0.22초 뒤 올라온다)
+const ROUTE_DELAY_MS = 380;
+// 실제 처리(서버 home-privacy: 남에게는 출발·도착 100m를 자른다)만 말한다. 「집」·「기본 ON」은 끄는 화면·법적 확인 전이라 쓰지 않음
+const HOME_LABEL = '출발·도착 100m는 다른 사람에게 안 보여요';
 
-function inChip(distanceKm: number, chip: (typeof CHIPS)[number]) {
-  return distanceKm > chip.overKm && distanceKm <= chip.upToKm;
+function feedTraceColors(p: Palette): TraceColors {
+  return { base: p.muted, ice: p.map.dot, mint: p.map.dot, fresh: p.fresh };
+}
+
+// 러닝마다 같은 가루 무늬(연출 시드)
+function seedOf(id: string) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return h;
 }
 
 export function MapFeed() {
@@ -161,42 +237,73 @@ export function MapFeed() {
     [center, initialTheme, tabClearance],
   );
   const [selected, setSelected] = useState<RunMarker | null>(null);
+  // 빈 지도 탭 횟수: 열린 카드는 이 값이 바뀌면 닫힌다(새 카드는 열릴 때의 값을 기준으로 삼는다)
+  const [dismissKey, setDismissKey] = useState(0);
   const [feedState, setFeedState] = useState<FeedState>('normal');
-  const [chipIndex, setChipIndex] = useState(0);
+  const [filter, setFilter] = useState<FeedFilter>('total');
+  const [noMatch, setNoMatch] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [radius, setRadius] = useState<number | null>(null);
   const skipFirstFocus = useRef(true);
   const lastViewport = useRef<ViewportMessage | null>(null);
   const lastRuns = useRef<RunMarker[] | null>(null);
-  const chipRef = useRef(chipIndex);
+  const filterRef = useRef(filter);
   const requestSeq = useRef(0);
+  // NEW(이번 주 새 길): 서버가 준 칸과 칸을 연 러닝별 km
+  const newCellsRef = useRef<NewCellsResponse['cells']>([]);
+  const [openerKm, setOpenerKm] = useState<Map<string, number>>(() => new Map());
+  const openersRef = useRef<ReadonlySet<string>>(new Set());
 
-  // 마지막으로 받은 런을 칩 조건으로 걸러 지도에 반영한다(WebView는 다시 로드하지 않는다)
-  const showRuns = useCallback((index: number) => {
-    const runs = lastRuns.current;
-    if (!runs) return;
-    const visible = runs.filter((run) => inChip(run.distanceKm, CHIPS[index]));
-    setFeedState(visible.length > 0 ? 'normal' : 'empty');
-    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(visible)});true;`);
+  // 지금 필터에 맞는 러닝이 하나도 없는지(TOTAL은 언제나 false)
+  const checkNoMatch = useCallback(() => {
+    const runs = lastRuns.current ?? [];
+    setNoMatch(runs.length > 0 && !runs.some((run) => matchesFilter(run, filterRef.current, openersRef.current)));
   }, []);
 
-  const fetchRuns = useCallback(async ({ lat, lng, radius }: ViewportMessage) => {
+  // 받은 러닝을 모두 지도에 올린다. 필터는 거르지 않고 마커 강조만 바꾼다(WebView는 다시 로드하지 않는다)
+  const showRuns = useCallback(() => {
+    const runs = lastRuns.current;
+    if (!runs) return;
+    setFeedState(runs.length > 0 ? 'normal' : 'empty');
+    checkNoMatch();
+    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs.map((run) => toMapRun(run, openersRef.current)))});true;`);
+  }, [checkNoMatch]);
+
+  const fetchRuns = useCallback(async ({ lat, lng, radius, cell }: ViewportMessage) => {
     const seq = ++requestSeq.current;
+    // D3 바탕(이번 주 칸별 서로 다른 러너 수). 실패해도 러닝은 보여 주고 바탕 점만 남는다
+    client.get<DensityCell[]>(`/runs/density?lat=${lat}&lng=${lng}&radius=${radius}&cell=${cell}`)
+      .then((res) => {
+        if (seq === requestSeq.current) webViewRef.current?.injectJavaScript(`window.__trace.setCells(${JSON.stringify(res.data)});true;`);
+      })
+      .catch(() => {});
+    // NEW: 이번 주 새 길 칸. 실패하면 지난 값을 비운다(NEW에 아무것도 안 켜짐)
+    client.get<NewCellsResponse>(`/runs/new-cells?lat=${lat}&lng=${lng}&radius=${radius}`)
+      .then((res) => res.data, () => ({ cellMeters: 0, cells: [], runs: [] }))
+      .then((data) => {
+        if (seq !== requestSeq.current) return;
+        newCellsRef.current = data.cells;
+        openersRef.current = new Set(data.runs.map((r) => r.runId));
+        setOpenerKm(new Map(data.runs.map((r) => [r.runId, r.km])));
+        webViewRef.current?.injectJavaScript(`window.__trace.setNew(${JSON.stringify(data.cells)},${filterRef.current === 'new'},${data.cellMeters});true;`);
+        showRuns();
+      });
     try {
       const res = await client.get<RunMarker[]>(`/runs?lat=${lat}&lng=${lng}&radius=${radius}`);
       // 늦게 도착한 이전 요청의 응답은 버린다
       if (seq !== requestSeq.current) return;
       lastRuns.current = res.data;
-      showRuns(chipRef.current);
+      showRuns();
     } catch {
       if (seq === requestSeq.current) setFeedState('error');
     }
   }, [showRuns]);
 
   useEffect(() => {
-    chipRef.current = chipIndex;
-    showRuns(chipIndex);
-  }, [chipIndex, showRuns]);
+    filterRef.current = filter;
+    checkNoMatch();
+    webViewRef.current?.injectJavaScript(`window.__setMode&&window.__setMode(${JSON.stringify(filter)});window.__trace&&window.__trace.setNew(${JSON.stringify(newCellsRef.current)},${filter === 'new'});true;`);
+  }, [filter, checkNoMatch]);
 
   useEffect(() => {
     (async () => {
@@ -223,22 +330,63 @@ export function MapFeed() {
     } catch {}
   }, []);
 
-  // 마커를 고르면 그 기록의 경로를 받아 지도에 그린다(목록 응답에는 경로가 없다)
+  // 마커를 고르면 그 기록의 경로를 받는다(목록 응답에는 경로가 없다). 남의 러닝은 서버가 집 근처를 잘라 보낸다
   const cardBottom = tabClearance + 12;
+  const myId = useAuthStore((s) => s.user?._id);
+  const [selectedRoute, setSelectedRoute] = useState<{ id: string; coords: LngLat[] } | null>(null);
   useEffect(() => {
-    const clear = () => webViewRef.current?.injectJavaScript('window.__setSelected&&window.__setSelected(null,[0,0]);true;');
-    if (!selected) { clear(); return; }
+    setSelectedRoute(null);
+    if (!selected) { webViewRef.current?.injectJavaScript('window.__routeFx&&window.__routeFx.clear();true;'); return; }
     let cancelled = false;
     client.get<RunDetailResponse>(`/runs/${selected._id}`)
       .then((res) => {
         if (cancelled) return;
         const coords = res.data.route?.coordinates ?? [];
-        const pad = [headerHeight + 16, cardBottom + CARD_HEIGHT + 24];
-        webViewRef.current?.injectJavaScript(`window.__setSelected(${JSON.stringify(coords)},${JSON.stringify(pad)});true;`);
+        setSelectedRoute({ id: selected._id, coords });
+        const pad = [headerHeight + 16, cardBottom + POSTER_HEIGHT + 24];
+        webViewRef.current?.injectJavaScript(`window.__fitRoute(${JSON.stringify(coords)},${JSON.stringify(pad)});true;`);
       })
-      .catch(() => { if (!cancelled) clear(); });
+      .catch(() => {});
     return () => { cancelled = true; };
-  }, [selected, headerHeight, cardBottom]);
+    // 헤더 높이가 바뀌어도 다시 받지 않는다
+  }, [selected]);
+
+  // 경로 연출 A+: 처음엔 그리며 재생, 필터·테마만 바뀌면 끝 상태로 색만 바꾼다
+  const drawnId = useRef<string | null>(null);
+  const routeColor = selected
+    // 렌즈에 걸린 러닝은 경로 전체를 처음부터 그 색으로: HYPE 러닝 Pearl · NEW(이번 주 새 길을 연) 러닝 민트
+    ? filter === 'hype' && isHype(selected) ? c.hype : filter === 'new' && openerKm.has(selected._id) ? c.fresh : c.map.dot
+    : c.map.dot;
+  const mine = !!selected && selected.userId._id === myId;
+  useEffect(() => {
+    if (!selectedRoute) { drawnId.current = null; return; }
+    const geometry = routeGeometry(selectedRoute.coords, mine);
+    const options: RouteFxOptions = {
+      col: routeColor, bg: c.bg, glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
+      label: mine ? HOME_LABEL : null,
+      delay: ROUTE_DELAY_MS,
+      keep: drawnId.current === selectedRoute.id,
+      seed: seedOf(selectedRoute.id),
+    };
+    drawnId.current = selectedRoute.id;
+    webViewRef.current?.injectJavaScript(`window.__routeFx.show(${JSON.stringify(geometry)},${JSON.stringify(options)});true;`);
+  }, [selectedRoute, routeColor, mine, c]);
+
+  // D3 바탕 색은 테마를 따른다
+  useEffect(() => {
+    webViewRef.current?.injectJavaScript(`window.__trace&&window.__trace.setColors(${JSON.stringify(feedTraceColors(c))});true;`);
+  }, [c]);
+
+  // 응원이 바뀌면 목록 값을 고치고 그 마커 하나만 다시 그린다(응원 수 칩·HYPE). 필터 결과가 바뀔 수 있어 안내도 다시 본다
+  const onCheered = useCallback((runId: string, cheers: number, cheered: boolean) => {
+    const runs = lastRuns.current;
+    const run = runs?.find((r) => r._id === runId);
+    if (!runs || !run) return;
+    const next = { ...run, cheers, cheered };
+    lastRuns.current = runs.map((r) => (r._id === runId ? next : r));
+    checkNoMatch();
+    webViewRef.current?.injectJavaScript(`window.__updateRun(${JSON.stringify(toMapRun(next, openersRef.current))});true;`);
+  }, [checkNoMatch]);
 
   const retry = useCallback(() => {
     if (lastViewport.current) fetchRuns(lastViewport.current);
@@ -262,14 +410,19 @@ export function MapFeed() {
         javaScriptEnabled
         startInLoadingState
         // 로드 중에 테마가 바뀌었을 수 있다
-        onLoadEnd={applyTheme}
+        onLoadEnd={() => {
+          applyTheme();
+          webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(feedTraceColors(c))});true;`);
+        }}
         onMessage={(e) => {
           try {
-            const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage;
+            const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage | MapTapMessage;
             if (message.type === 'viewport') {
               lastViewport.current = message;
               setRadius(message.radius);
               fetchRuns(message);
+            } else if (message.type === 'mapTap') {
+              setDismissKey((k) => k + 1);
             } else {
               setSelected(message.run);
             }
@@ -277,7 +430,7 @@ export function MapFeed() {
         }}
       />
 
-      {/* 헤더: 세로 페이드 위 워드마크(+ NEARBY 반경) + 거리 필터 칩 */}
+      {/* 헤더: 세로 페이드 위 워드마크(+ NEARBY 반경) + TOTAL · HYPE · NEW */}
       <View
         style={[styles.header, { paddingTop: insets.top + 8 }]}
         onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
@@ -288,26 +441,42 @@ export function MapFeed() {
           <Wordmark width={71} />
           {nearbyLabel(radius) && <Text style={styles.nearby}>{nearbyLabel(radius)}</Text>}
         </View>
-        <View style={styles.chips}>
-          {CHIPS.map((chip, index) => {
-            const on = index === chipIndex;
-            const label = (
-              <Text style={[styles.chipText, index > 0 && styles.chipMono, on && styles.chipTextOn]}>{chip.label}</Text>
-            );
+        <Glass style={styles.seg}>
+          {FEED_FILTERS.map(({ key, label, a11y }) => {
+            const on = key === filter;
+            const fill = key === 'hype' ? c.hype : key === 'new' ? c.fresh : c.chipOnBg;
+            const ink = key === 'total' ? c.chipOnFg : c.onSocial;
             return (
               <Pressable
-                key={chip.label}
+                key={key}
                 accessibilityRole="button"
-                accessibilityLabel={chip.a11y}
+                accessibilityLabel={a11y}
                 accessibilityState={{ selected: on }}
-                onPress={() => setChipIndex(index)}
+                hitSlop={{ top: 4, bottom: 4 }}
+                onPress={() => setFilter(key)}
+                style={[styles.segBtn, on && { backgroundColor: fill }]}
               >
-                {on ? <View style={[styles.chip, styles.chipOn]}>{label}</View> : <Glass style={styles.chip}>{label}</Glass>}
+                <Text style={[styles.segText, { color: on ? ink : c.text }]}>{label}</Text>
               </Pressable>
             );
           })}
-        </View>
+        </Glass>
       </View>
+
+      {/* 필터에 맞는 러닝 없음 */}
+      {feedState === 'normal' && noMatch && filter !== 'total' && headerHeight > 0 && (
+        <View accessibilityRole="summary" style={[styles.noticeShadow, { top: headerHeight + 12 }]}>
+          <Glass style={styles.notice}>
+            <View style={styles.noticeIcon}>
+              <RouteIcon color={c.text2} />
+            </View>
+            <View style={styles.noticeBody}>
+              <Text style={styles.noticeTitle}>{NO_MATCH[filter].title}</Text>
+              <Text style={styles.noticeSub}>{NO_MATCH[filter].sub}</Text>
+            </View>
+          </Glass>
+        </View>
+      )}
 
       {/* 빈 상태 · 조회 실패 */}
       {feedState !== 'normal' && headerHeight > 0 && (
@@ -321,13 +490,17 @@ export function MapFeed() {
           </View>
           <View style={styles.noticeBody}>
             <Text style={styles.noticeTitle}>
-              {feedState === 'error' ? '불러오지 못했어요' : '이 근처에는 아직 러닝 기록이 없어요'}
+              {feedState === 'error' ? '불러오지 못했어요' : '아직 아무도 안 뛴 동네예요'}
             </Text>
-            {feedState === 'empty' && <Text style={styles.noticeSub}>지도를 옮기거나 첫 러닝을 기록해 보세요</Text>}
+            {feedState === 'empty' && <Text style={styles.noticeSub}>제일 먼저 달려 보세요</Text>}
           </View>
-          {feedState === 'error' && (
+          {feedState === 'error' ? (
             <Pressable accessibilityRole="button" onPress={retry} style={styles.retryBtn}>
               <Text style={styles.retryText}>다시 시도</Text>
+            </Pressable>
+          ) : (
+            <Pressable accessibilityRole="button" onPress={() => router.push('/(tabs)/record')} style={styles.retryBtn}>
+              <Text style={styles.retryText}>달리러 가기</Text>
             </Pressable>
           )}
           </Glass>
@@ -337,7 +510,7 @@ export function MapFeed() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="내 위치로 이동"
-        style={[styles.myLocShadow, { bottom: (selected ? cardBottom + CARD_HEIGHT : tabClearance) + 12 }]}
+        style={[styles.myLocShadow, { bottom: (selected ? cardBottom + POSTER_HEIGHT : tabClearance) + 12 }]}
         onPress={handleMyLocation}
       >
         <Glass style={styles.myLocBtn}>
@@ -347,9 +520,16 @@ export function MapFeed() {
 
       {selected && (
         <MapPopupCard
+          key={selected._id}
           run={selected}
           baseUrl={BASE_URL}
           bottom={cardBottom}
+          route={selectedRoute?.id === selected._id ? selectedRoute.coords : undefined}
+          routeColor={routeColor}
+          mine={mine}
+          onCheered={onCheered}
+          dismissKey={dismissKey}
+          newKm={filter === 'new' ? openerKm.get(selected._id) : undefined}
           onClose={() => setSelected(null)}
           onUserPress={(userId) => {
             setSelected(null);
@@ -371,12 +551,10 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   logoRow: { alignItems: 'center', justifyContent: 'center', marginVertical: 6, minHeight: 20 },
   nearby: { position: 'absolute', right: 4, top: 4, ...monoLabel(10), color: c.navOff },
-  chips: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  chip: { height: 36, paddingHorizontal: 15, borderRadius: 18, justifyContent: 'center' },
-  chipOn: { backgroundColor: c.chipOnBg, borderWidth: 1, borderColor: c.chipOnBg },
-  chipText: { fontFamily: FONT.semibold, fontSize: 13, color: c.text },
-  chipMono: { ...monoLabel(13, 0.08) },
-  chipTextOn: { color: c.chipOnFg },
+  // TOTAL · HYPE · NEW 세그먼트(유리 알약 안 3칸, 고른 칸만 채움)
+  seg: { flexDirection: 'row', alignSelf: 'center', marginTop: 10, padding: 4, gap: 2, borderRadius: 22 },
+  segBtn: { height: 36, minWidth: 76, paddingHorizontal: 16, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  segText: { ...monoLabel(13, 0.08) },
   noticeShadow: {
     position: 'absolute', left: 16, right: 16, borderRadius: 16,
     ...elevationStyle(c),

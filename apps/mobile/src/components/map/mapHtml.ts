@@ -24,26 +24,37 @@ export function mapColors(p: Palette) {
     clBg: m.clBg, clRing: m.clRing, clGlow: m.clGlow, clRingSoft: withAlpha(m.clRing, 0.25),
     meFill: m.meFill, meRing: m.meRing, meHalo: m.meHalo,
     // Frost: 유리 클러스터·링 마커·선택 경로
-    glass: p.glass, glassBorder: p.glassBorder, clEdge: m.clEdge, text: p.text, hair: p.hair, ring: p.bg,
+    glass: p.glass, glassBorder: p.glassBorder, text: p.text, ring: p.bg,
+    // 지도 피드 얼굴 마커: 이니셜 바탕 · HYPE(Pearl)·NEW(민트)와 그 번짐
+    face: p.surface2, faceText: p.text2,
+    hype: p.hype, hypeSoft: withAlpha(p.hype, 0.22), hypeGlow: withAlpha(p.hype, 0.45),
+    fresh: p.fresh, onSocial: p.onSocial,
+    runners: m.runners, operator: m.operator, onOperator: m.onOperator,
     dark: p.dark,
   };
 }
 
-// 피드·프로필 지도가 같이 쓰는 마커와 클러스터(+N) 아이콘. 전역 dotIcon·ringIcon·clusterIcon과 makeIcons(c)를 만든다.
-// dotIcon: 펄스 점(이전 디자인). glassDotIcon: 프로필 지도의 유리 원 + 링 점(Frost). ringIcon: 피드 지도의 링 마커(Frost). 모두 44px 터치 영역.
-// 클러스터는 서리 유리 원(Frost): 피드 44px·clEdge 테두리, 프로필 48px·hair 테두리
-export function markerIconsScript(p: Palette, cluster: 'feed' | 'profile' = 'feed'): string {
-  const size = cluster === 'feed' ? 44 : 48;
-  const font = cluster === 'feed' ? 12 : 14;
+// 피드·프로필 지도가 같이 쓰는 마커와 묶음 아이콘. 전역 dotIcon·face·stackPill과 makeIcons(c)를 만든다.
+// dotIcon: 펄스 점(이전 디자인, 44px 터치 영역). face: 얼굴 링, stackPill: 묶음 — 지도 피드(MapFeed)와 내 흔적(ProfileMapScreen)이 같이 쓴다.
+export function markerIconsScript(p: Palette): string {
   return `
-  var dotIcon, ringIcon, glassDotIcon, iconColors;
+  var dotIcon, iconColors;
   function makeIcons(c){
     iconColors=c;
     dotIcon=L.divIcon({html:'<div style="position:relative;width:22px;height:22px;display:flex;align-items:center;justify-content:center"><div class="run-dot-pulse" style="position:absolute;inset:0;border-radius:50%;background:'+c.pulse+'"></div><div style="width:11px;height:11px;border-radius:50%;background:'+c.dot+';border:2px solid '+c.dotBorder+';box-shadow:0 0 8px '+c.dotGlow+'"></div></div>',className:'',iconSize:[22,22],iconAnchor:[11,11]});
-    glassDotIcon=L.divIcon({html:'<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;position:relative"><div style="position:absolute;left:9px;top:9px;width:26px;height:26px;box-sizing:border-box;border-radius:50%;background:'+c.glass+';border:1px solid '+c.glassBorder+';-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)"></div><div style="position:relative;width:12px;height:12px;box-sizing:border-box;border-radius:50%;border:2.5px solid '+c.dot+';box-shadow:0 0 8px '+c.dotGlow+'"></div></div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});
-    ringIcon=L.divIcon({html:'<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center"><div style="width:28px;height:28px;box-sizing:border-box;border-radius:50%;border:1px solid '+c.hair+';display:flex;align-items:center;justify-content:center"><div style="width:16px;height:16px;box-sizing:border-box;border-radius:50%;border:3px solid '+c.dot+';background:'+c.ring+'"></div></div></div>',className:'',iconSize:[44,44],iconAnchor:[22,22]});
   }
-  function clusterIcon(cl){var c=iconColors,n=cl.getChildCount();return L.divIcon({html:'<div style="width:${size}px;height:${size}px;box-sizing:border-box;border-radius:50%;background:'+c.glass+';-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);color:'+c.text+';border:${cluster === 'feed' ? 1.5 : 1}px solid '+${cluster === 'feed' ? 'c.clEdge' : 'c.hair'}+';box-shadow:0 10px 30px rgba(0,0,0,'+(c.dark?0.45:0.10)+');display:flex;align-items:center;justify-content:center;font-size:${font}px;font-weight:500;letter-spacing:0.04em;font-family:ui-monospace,Menlo,monospace">+'+n+'</div>',className:'',iconSize:[${size},${size}],iconAnchor:[${size / 2},${size / 2}]});}
+  // 얼굴(지도 피드 · 내 흔적 마커 공용): 이니셜을 깔고 사진을 덮는다(사진을 못 받아도 이니셜이 보인다)
+  function esc(s){return String(s).replace(/[&<>"']/g,function(ch){return '&#'+ch.charCodeAt(0)+';';});}
+  function face(run,size,ring,ringW){
+    var c=iconColors;
+    var img=run.avatar?'<div style="position:absolute;inset:0;background:url('+run.avatar+') center/cover"></div>':'';
+    return '<div style="position:relative;width:'+size+'px;height:'+size+'px;box-sizing:border-box;border-radius:50%;border:'+ringW+'px solid '+ring+';background:'+c.face+';overflow:hidden;display:flex;align-items:center;justify-content:center;font:600 '+Math.round(size*0.38)+'px/1 -apple-system,system-ui,sans-serif;color:'+c.faceText+'">'+esc(run.initial)+img+'</div>';
+  }
+  // 묶음: 유리 알약 안에 얼굴 겹침(faces, count개) + 수. on이 아니면 흐리게
+  function stackPill(faces,count,n,on){
+    var c=iconColors,w=Math.round(8+28+18*(count-1)+14+n.length*7.5);
+    return L.divIcon({html:'<div class="face-in"><div style="display:inline-flex;align-items:center;padding:3px;border-radius:99px;background:'+c.glass+';border:1px solid '+c.glassBorder+';-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:0 8px 24px rgba(0,0,0,'+(c.dark?0.45:0.12)+');opacity:'+(on?1:0.45)+';filter:'+(on?'none':'grayscale(1)')+'">'+faces+'<div style="padding:0 8px 0 6px;font:500 12px/1 ui-monospace,Menlo,monospace;color:'+c.text+'">'+n+'</div></div></div>',className:'',iconSize:[w,36],iconAnchor:[w/2,18]});
+  }
   makeIcons(${JSON.stringify(mapColors(p))});
 `;
 }

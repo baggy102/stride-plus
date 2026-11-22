@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   View, Text, Pressable, TextInput, Modal,
   ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, StyleSheet, Dimensions,
-  type LayoutChangeEvent, type LayoutRectangle,
+  type LayoutChangeEvent, type LayoutRectangle, type TextInputProps,
 } from 'react-native';
 import Animated, {
-  Easing, cancelAnimation, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue,
+  Easing, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
@@ -17,28 +17,39 @@ import client from '@/api/client';
 import { RouteMap } from '@/components/RouteMap';
 import { Wordmark } from '@/components/Wordmark';
 import { PhotoPicker } from '@/components/RunSummary/PhotoPicker';
-import { TrashIcon } from '@/components/icons';
+import { ShareIcon, TrashIcon } from '@/components/icons';
+import { useRunShare } from '@/components/useRunShare';
+import { useAuthStore } from '@/store/auth';
 import { generateRouteImage } from '@/components/RunSummary/generateRouteImage';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
 import { formatDuration, formatPace, formatRunPace } from '@/utils/pace';
 import { formatClock, formatDay } from '@/utils/date';
-import { kmSplits } from '@/utils/route';
+import { kmSplits, kmTail } from '@/utils/route';
 import { MOTION, useReducedMotion } from '@/utils/motion';
 import { DustTransition } from '@/components/DustTransition';
-import { DUST_MS, DUST_SCALE, buildDust, inOut, seg, sine, type BarRect, type Dust } from '@/utils/dust';
+import { DUST_SCALE, buildDust, dustTotal, freezeAt, inOut, out3, seg, sine, type BarRect, type Dust } from '@/utils/dust';
 
-// 가루 전환 타임라인(시안 5400 단위, 실제로는 DUST_MS로 압축). [시작, 끝]
+// 가루 전환 타임라인(시안 5400 단위, DUST_SCALE로 실제 ms와 바꾼다). [시작, 끝]
+// 막대 · 라벨 · 거리 숫자는 막대가 얼어붙는 시각(freezeAt, 실제 ms)을 따른다. 입력란(form)은 전환이 가장 짧을 때도 그 안에 다 보인다
 const TL = {
   head: [1200, 2100], coords: [1370, 2270], blueprint: [2300, 3100], line: [2600, 4200],
   sheet: [1000, 1900], distance: [1540, 2440], cells: [1710, 2610],
-  bars: [4100, 5000], labels: [4300, 5200], form: [4450, 5350],
+  form: [3700, 4600],
 } as const;
 const BAR_GAP = 6;
 const BARS_H = 44;
-// 막대가 다 굳는 순간 한 번 진동(마지막 막대 기준)
-const HAPTIC_AT = (TL.bars[1] + 200) / DUST_SCALE;
+// 거리 숫자는 가루가 내려앉기 시작할 때부터 센다(ms)
+const COUNT_FROM = 700;
+// 얼어붙을 때 막대를 훑는 빛의 폭(px)
+const SHINE_W = 24;
+const SHINE = ['rgba(255,255,255,0)', 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0)'] as const;
+
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
+
+// km 하나 = 막대 하나(sec = 걸린 시간). 마지막 자투리는 km < 1
+interface Split { sec: number; km: number }
 
 // 요소 하나의 스르륵(투명도 + 아래에서 lift px 떠오름). 동작 줄이기면 150ms 크로스페이드
 function useReveal(clock: SharedValue<number>, reduced: boolean, [a, b]: readonly [number, number], lift = 8) {
@@ -48,11 +59,21 @@ function useReveal(clock: SharedValue<number>, reduced: boolean, [a, b]: readonl
   });
 }
 
-// km별 막대 높이: 빠를수록 높다(18~44px). 다 채운 km만
-function splitHeights(splits: number[]): number[] {
-  const min = Math.min(...splits);
-  const max = Math.max(...splits);
-  return splits.map((s) => (max === min ? 32 : Math.round(18 + (26 * (max - s)) / (max - min))));
+// 막대 높이(고정 척도): 5'30"/km가 30px, 40초 빠를 때마다 14px 높다. 16~44px
+function barHeight(paceSec: number): number {
+  return Math.min(BARS_H, Math.max(16, Math.round(30 + ((330 - paceSec) / 40) * 14)));
+}
+// 막대 칸 폭: 5칸 기준으로 왼쪽부터 채운다. 5개를 넘으면 그때 좁힌다
+function barSlot(barsWidth: number, count: number): number {
+  return Math.min((barsWidth - BAR_GAP * 4) / 5, (barsWidth - BAR_GAP * (count - 1)) / count);
+}
+// 자투리 막대는 거리 비율만큼(최소 10px)
+function barWidth(slot: number, km: number): number {
+  return km < 1 ? Math.max(10, slot * km) : slot;
+}
+// 자투리 라벨: 0.84 km → 「.84」
+function tailLabel(km: number): string {
+  return `.${String(Math.min(99, Math.round(km * 100))).padStart(2, '0')}`;
 }
 
 // 시작점의 동네 이름(「여의도 한강공원」처럼). 못 찾으면 null
@@ -96,13 +117,16 @@ export default function RunSummaryScreen() {
     if (start) placeName(start).then(setPlace);
   }, [start?.[0], start?.[1]]);
 
-  const splits = useMemo(
-    () => (pendingSummary ? kmSplits(pendingSummary.coordinates, pendingSummary.routeTimes, pendingSummary.segmentBreaks) : []),
-    [pendingSummary],
-  );
+  const splits = useMemo((): Split[] => {
+    if (!pendingSummary) return [];
+    const { coordinates, routeTimes, segmentBreaks } = pendingSummary;
+    const whole = kmSplits(coordinates, routeTimes, segmentBreaks).map((sec) => ({ sec, km: 1 }));
+    const tail = kmTail(coordinates, routeTimes, segmentBreaks);
+    return tail ? [...whole, tail] : whole;
+  }, [pendingSummary]);
 
-  // 가루 전환(약 3초): 점 구름이 흩어지는 동안 결과 시트가 화면 아래에서 올라오고,
-  // 가루는 구간별 페이스 막대로 흘러내려 쌓인다. 모든 요소가 같은 시계(clock, 실제 ms)를 본다
+  // 가루 전환(약 2.7~3.3초): 점 구름이 경로를 따라 금이 가며 깨지는 동안 결과 시트가 화면 아래에서 올라오고,
+  // 조각은 자기 km 막대로 내려앉아 얼어붙는다. 모든 요소가 같은 시계(clock, 실제 ms)를 본다
   const reduced = useReducedMotion();
   const settleFrom = useRunStore((s) => s.settleFrom);
   const clock = useSharedValue(0);
@@ -113,7 +137,9 @@ export default function RunSummaryScreen() {
   const [dustDone, setDustDone] = useState(false);
   const rootRef = useRef<ComponentRef<typeof View>>(null);
   const layouts = useRef<Record<string, LayoutRectangle>>({});
-  const total = reduced ? MOTION.reduced : DUST_MS;
+  const barCount = splits.length;
+  const lastFreeze = freezeAt(Math.max(0, barCount - 1), Math.max(1, barCount));
+  const total = reduced ? MOTION.reduced : dustTotal(barCount);
 
   const beginClock = () => {
     if (started.current) return;
@@ -134,8 +160,11 @@ export default function RunSummaryScreen() {
     if (needBars) {
       const x = parts.reduce((v, k) => v + L[k].x, 0);
       const y = parts.reduce((v, k) => v + L[k].y, 0);
-      const w = (L.bars.width - BAR_GAP * (splits.length - 1)) / splits.length;
-      bars = splitHeights(splits).map((h, i) => ({ x: x + i * (w + BAR_GAP), y: y + BARS_H - h, w, h }));
+      const slot = barSlot(L.bars.width, splits.length);
+      bars = splits.map((s, i) => {
+        const h = barHeight(s.sec / s.km);
+        return { x: x + i * (slot + BAR_GAP), y: y + BARS_H - h, w: barWidth(slot, s.km), h };
+      });
       // 작은 화면에서 막대가 처음부터 화면 밖이면 가루는 흩어졌다 사라지기만 한다
       if (y + BARS_H > L.root.height) bars = [];
     }
@@ -144,7 +173,7 @@ export default function RunSummaryScreen() {
     building.current = true;
     rootView.measureInWindow((rx, ry) => {
       const dots = settleFrom.dots.map(([dx, dy]): [number, number] => [dx - rx, dy - ry]);
-      setDust(buildDust(dots, bars));
+      setDust(buildDust(dots, bars, splits.reduce((v, s) => v + s.km, 0)));
       setHead(dots.length ? dots[dots.length - 1] : null);
       beginClock();
     });
@@ -154,17 +183,17 @@ export default function RunSummaryScreen() {
     tryBuild();
   };
 
-  // 끝나면 가루 레이어를 내린다. 막대가 굳는 순간 가벼운 진동 한 번
+  // 끝나면 가루 레이어를 내린다. 마지막 막대가 얼어붙는 순간 가벼운 진동 한 번
   const hasBars = splits.length > 0 && !!dust;
   const buzz = () => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); };
   useAnimatedReaction(
     () => clock.value,
     (now, prev) => {
       if (prev === null) return;
-      if (hasBars && !reduced && now >= HAPTIC_AT && prev < HAPTIC_AT) runOnJS(buzz)();
+      if (hasBars && !reduced && now >= lastFreeze && prev < lastFreeze) runOnJS(buzz)();
       if (now >= total && prev < total) runOnJS(setDustDone)(true);
     },
-    [hasBars, reduced, total],
+    [hasBars, reduced, total, lastFreeze],
   );
   // 화면을 만지면 바로 끝 상태로(전환이 입력을 막지 않는다)
   const skip = () => {
@@ -177,16 +206,43 @@ export default function RunSummaryScreen() {
   const blueprintStyle = useReveal(clock, reduced, TL.blueprint, 0);
   const distanceStyle = useReveal(clock, reduced, TL.distance);
   const cellsStyle = useReveal(clock, reduced, TL.cells);
-  const labelsStyle = useReveal(clock, reduced, TL.labels, 0);
+  const labelsStyle = useReveal(clock, reduced, [(freezeAt(0, Math.max(1, barCount)) - 100) * DUST_SCALE, (lastFreeze + 150) * DUST_SCALE], 0);
   const formStyle = useReveal(clock, reduced, TL.form);
+  // 거리 숫자: 가루가 내려앉기 시작할 때부터 마지막 막대가 얼 때까지 0 → 거리(감속). 화면 전체를 다시 그리지 않도록 UI 스레드에서 글자만 바꾼다
+  const finalKm = pendingSummary?.distanceKm ?? 0;
+  const countProps = useAnimatedProps(() => {
+    const k = reduced ? 1 : out3(seg(clock.value, COUNT_FROM, lastFreeze + 150));
+    return { text: (finalKm * k).toFixed(2) } as unknown as TextInputProps;
+  });
   // 결과 시트: 화면 아래 밖에서 올라온다(저장 버튼 줄도 함께)
   const sheetStyle = useAnimatedStyle(() => {
     if (reduced) return { opacity: seg(clock.value, 0, MOTION.reduced), transform: [{ translateY: 0 }] };
     return { opacity: 1, transform: [{ translateY: rootH * (1 - inOut(seg(clock.value * DUST_SCALE, TL.sheet[0], TL.sheet[1]))) }] };
   });
 
+  // 결과를 보면서 바로 공유(2026-11-21 — 저장 후 내 흔적에서 옮김). 저장하지 않고 공유만 해도 된다
+  const { sharing, share, node: shareNode } = useRunShare();
+  const myId = useAuthStore((s) => s.user?._id);
+
   if (!pendingSummary) return null;
   const summary = pendingSummary;
+
+  const handleShare = async () => {
+    // 「처음 달린 길」: 내 러닝 첫 페이지(최근 20개)와 비교. 못 불러오면 비교할 기록 없이 계산한다(그때는 전부 처음 달린 길로 나온다)
+    let previous: [number, number][][] = [];
+    try {
+      if (myId) {
+        const { data } = await client.get<{ route?: [number, number][] }[]>(`/runs?userId=${myId}&page=1&limit=20`);
+        previous = data.map((r) => r.route ?? []).filter((r) => r.length > 0);
+      }
+    } catch {
+      // 비교할 기록 없이 진행
+    }
+    await share({
+      route: summary.coordinates, previous,
+      distanceKm: summary.distanceKm, paceSecPerKm: summary.paceSecPerKm, createdAt: finishedAt.toISOString(),
+    });
+  };
   const boxWidth = width - 48;
 
   const handleDiscard = () => {
@@ -271,7 +327,14 @@ export default function RunSummaryScreen() {
           <View style={styles.grabber} />
           <View onLayout={onLayoutOf('result')} accessibilityLabel="러닝 결과" style={styles.result}>
             <Animated.View accessible accessibilityLabel={`거리 ${summary.distanceKm.toFixed(2)} km`} style={[styles.distanceRow, distanceStyle]}>
-              <Text style={styles.distance}>{summary.distanceKm.toFixed(2)}</Text>
+              {/* 처음 값을 최종 거리로 둬야 글자 폭이 최종 값에 맞는다 */}
+              <AnimatedTextInput
+                editable={false}
+                underlineColorAndroid="transparent"
+                defaultValue={summary.distanceKm.toFixed(2)}
+                animatedProps={countProps}
+                style={[styles.distance, styles.distanceInput]}
+              />
               <Text style={styles.distanceUnit}>KM</Text>
             </Animated.View>
             <Animated.View style={[styles.grid, cellsStyle]}>
@@ -290,6 +353,7 @@ export default function RunSummaryScreen() {
             {splits.length > 0 && (
               <SplitBars
                 splits={splits}
+                barsWidth={boxWidth}
                 c={c}
                 styles={styles}
                 clock={clock}
@@ -316,17 +380,30 @@ export default function RunSummaryScreen() {
           </Animated.View>
         </ScrollView>
 
-        <Animated.View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, 16) }, sheetStyle]}>
+        <Animated.View style={[styles.footer, styles.footerRow, { paddingBottom: Math.max(insets.bottom, 16) }, sheetStyle]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="이번 러닝 공유"
+            accessibilityState={{ busy: sharing, disabled: saving }}
+            onPress={handleShare}
+            disabled={sharing || saving}
+            style={[styles.shareBtn, { opacity: saving ? 0.5 : 1 }]}
+          >
+            {sharing ? <ActivityIndicator color={c.text} /> : <ShareIcon size={18} color={c.text} />}
+            <Text style={styles.shareText}>공유</Text>
+          </Pressable>
           <Pressable
             accessibilityRole="button"
             onPress={handleSave}
-            disabled={saving}
-            style={[styles.saveBtn, { opacity: saving ? 0.8 : 1 }]}
+            disabled={saving || sharing}
+            style={[styles.saveBtn, styles.saveFlex, { opacity: saving ? 0.8 : 1 }]}
           >
             {saving ? <ActivityIndicator color={c.ink} /> : <Text style={styles.saveText}>저장하기</Text>}
           </Pressable>
         </Animated.View>
       </KeyboardAvoidingView>
+
+      {shareNode}
 
       {dust && !dustDone && !reduced && (
         <DustTransition dust={dust} clock={clock} head={head} width={width} height={rootH} c={c} />
@@ -361,7 +438,8 @@ export default function RunSummaryScreen() {
 }
 
 interface SplitBarsProps {
-  splits: number[];
+  splits: Split[];
+  barsWidth: number;
   c: Palette;
   styles: ReturnType<typeof makeStyles>;
   clock: SharedValue<number>;
@@ -371,37 +449,58 @@ interface SplitBarsProps {
   onBarsLayout: (e: LayoutChangeEvent) => void;
 }
 
-// km별 페이스 막대: 빠를수록 높다(18~44px). 쌓인 가루가 왼쪽 막대부터 실제 막대로 굳는다
-function SplitBars({ splits, c, styles, clock, reduced, labelsStyle, onLayout, onBarsLayout }: SplitBarsProps) {
-  const heights = splitHeights(splits);
-  const label = `km별 페이스: ${splits.map((s, i) => `${i + 1}km ${formatPace(s)}`).join(', ')}`;
+// km별 페이스 막대(고정 폭 · 고정 높이 척도, 마지막은 자투리). 내려앉은 가루가 1 km 막대부터 차례로 얼어붙는다
+function SplitBars({ splits, barsWidth, c, styles, clock, reduced, labelsStyle, onLayout, onBarsLayout }: SplitBarsProps) {
+  const slot = barSlot(barsWidth, splits.length);
+  const label = `km별 페이스: ${splits.map((s, i) => `${s.km < 1 ? `마지막 ${s.km.toFixed(2)}` : i + 1}km ${formatPace(s.sec / s.km)}`).join(', ')}`;
   return (
     <View accessible accessibilityRole="image" accessibilityLabel={label} style={styles.splits} onLayout={onLayout}>
       <View style={styles.splitBars} onLayout={onBarsLayout}>
-        {heights.map((h, i) => (
-          <SplitBar key={i} index={i} height={h} c={c} styles={styles} clock={clock} reduced={reduced} />
+        {splits.map((s, i) => (
+          <SplitBar
+            key={i}
+            index={i}
+            count={splits.length}
+            width={barWidth(slot, s.km)}
+            height={barHeight(s.sec / s.km)}
+            tail={s.km < 1}
+            c={c}
+            styles={styles}
+            clock={clock}
+            reduced={reduced}
+          />
         ))}
       </View>
       <Animated.View style={[styles.splitLabels, labelsStyle]}>
-        {splits.map((_, i) => (
-          <Text key={i} style={styles.splitLabel}>{i + 1}</Text>
+        {splits.map((s, i) => (
+          <View key={i} style={[styles.splitLabelSlot, { width: barWidth(slot, s.km) }]}>
+            <Text numberOfLines={1} style={[styles.splitLabel, { width: slot }]}>{s.km < 1 ? tailLabel(s.km) : i + 1}</Text>
+          </View>
         ))}
       </Animated.View>
     </View>
   );
 }
 
-function SplitBar({ index, height, c, styles, clock, reduced }: {
-  index: number; height: number; c: Palette; styles: ReturnType<typeof makeStyles>; clock: SharedValue<number>; reduced: boolean;
+function SplitBar({ index, count, width, height, tail, c, styles, clock, reduced }: {
+  index: number; count: number; width: number; height: number; tail: boolean;
+  c: Palette; styles: ReturnType<typeof makeStyles>; clock: SharedValue<number>; reduced: boolean;
 }) {
+  // 가루가 80% 쌓이면 얼어붙는다: 막대가 떠오르고, 빛이 한 번 훑고 지나간다(약 360ms). 자투리는 옅게
+  const freeze = freezeAt(index, count);
   const style = useAnimatedStyle(() => ({
-    opacity: reduced
-      ? seg(clock.value, 0, MOTION.reduced)
-      : sine(seg(clock.value * DUST_SCALE, TL.bars[0] + index * 90, TL.bars[1] + index * 90)),
+    opacity: (reduced ? seg(clock.value, 0, MOTION.reduced) : sine(seg(clock.value, freeze - 240, freeze + 120))) * (tail ? 0.6 : 1),
   }));
+  const shineStyle = useAnimatedStyle(() => {
+    const p = reduced ? 1 : seg(clock.value, freeze, freeze + 360);
+    return { opacity: p > 0 && p < 1 ? 1 : 0, transform: [{ translateX: -SHINE_W + (width + SHINE_W) * sine(p) }] };
+  });
   return (
-    <Animated.View style={[styles.splitBar, { height }, style]}>
+    <Animated.View style={[styles.splitBar, { width, height }, style]}>
       <LinearGradient colors={[c.value, withAlpha(c.value, c.dark ? 0.25 : 0.18)]} style={StyleSheet.absoluteFill} />
+      <Animated.View style={[styles.shine, shineStyle]}>
+        <LinearGradient colors={SHINE} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -423,6 +522,7 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   result: { paddingHorizontal: 24 },
   distanceRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   distance: { fontFamily: FONT.num, fontSize: 76, lineHeight: 80, letterSpacing: -1.5, color: c.text, fontVariant: ['tabular-nums'] },
+  distanceInput: { padding: 0 },
   // 팔레트 토큰 이름이 value라 인라인 { color: c.value }는 reanimated 플러그인이 shared value로 오인해 경고한다 → StyleSheet로
   distanceUnit: { marginTop: 12, ...monoLabel(14), color: c.value },
   grid: { marginTop: 8, flexDirection: 'row', borderTopWidth: 1, borderBottomWidth: 1, borderColor: c.hair },
@@ -433,9 +533,12 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   cellUnit: { ...monoLabel(11, 0.08), color: c.text2 },
   splits: { marginTop: 12 },
   splitBars: { height: BARS_H, flexDirection: 'row', alignItems: 'flex-end', gap: BAR_GAP },
-  splitBar: { flex: 1, borderTopLeftRadius: 2, borderTopRightRadius: 2, overflow: 'hidden' },
-  splitLabels: { marginTop: 3, flexDirection: 'row', gap: 6 },
-  splitLabel: { flex: 1, textAlign: 'center', ...monoLabel(10, 0), lineHeight: 12, color: c.text2 },
+  splitBar: { borderTopLeftRadius: 2, borderTopRightRadius: 2, overflow: 'hidden' },
+  shine: { position: 'absolute', top: 0, bottom: 0, left: 0, width: SHINE_W },
+  splitLabels: { marginTop: 3, flexDirection: 'row', gap: BAR_GAP },
+  // 자투리 막대가 좁아도 라벨은 칸 폭으로 가운데 맞춤
+  splitLabelSlot: { alignItems: 'center' },
+  splitLabel: { textAlign: 'center', ...monoLabel(10, 0), lineHeight: 12, color: c.text2 },
   label: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text2 },
   form: { marginTop: 20, paddingHorizontal: 24, gap: 12 },
   input: {
@@ -444,6 +547,13 @@ const makeStyles = (c: Palette) => StyleSheet.create({
   },
   footer: { paddingHorizontal: 24, paddingTop: 8, backgroundColor: c.surface },
   saveBtn: { height: 54, borderRadius: 14, backgroundColor: c.accent, alignItems: 'center', justifyContent: 'center' },
+  footerRow: { flexDirection: 'row', gap: 10 },
+  saveFlex: { flex: 1 },
+  shareBtn: {
+    height: 54, paddingHorizontal: 18, borderRadius: 14, borderWidth: 1.5, borderColor: c.border,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  shareText: { fontFamily: FONT.semibold, fontSize: 16, color: c.text },
   saveText: { fontFamily: FONT.semibold, fontSize: 16, color: c.ink },
   scrim: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 35 },
   dialog: {

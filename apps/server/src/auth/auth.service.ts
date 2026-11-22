@@ -6,7 +6,7 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Model } from 'mongoose';
+import { Model, mongo } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { RefreshToken, RefreshTokenDocument } from './auth.schema';
 import { UsersService } from '../users/users.service';
@@ -27,10 +27,13 @@ export class AuthService {
     if (existing) throw new ConflictException('Email already in use');
     const passwordHash = await bcrypt.hash(password, 10);
     // 동의 버전은 RegisterDto가 현재 버전과 같은지 검증했다
-    const user = await this.usersService.create(email, passwordHash, username, {
-      ...LEGAL_VERSIONS,
-      agreedAt: new Date(),
-    });
+    const user = await this.usersService
+      .create(email, passwordHash, username, { ...LEGAL_VERSIONS, agreedAt: new Date() })
+      .catch((error: unknown) => {
+        // 동시에 같은 이메일로 가입하면 위 검사를 둘 다 통과한다 — 유니크 인덱스 위반도 409로
+        if (error instanceof mongo.MongoServerError && error.code === 11000) throw new ConflictException('Email already in use');
+        throw error;
+      });
     const tokens = await this.issueTokens(user._id.toString(), user.email);
     return {
       ...tokens,

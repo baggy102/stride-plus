@@ -26,6 +26,14 @@ export function RouteIcon({ size = 20, color }: IconProps) {
   );
 }
 
+export function ShareIcon({ size = 18, color }: IconProps) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5" />
+    </Svg>
+  );
+}
+
 export function CloseIcon({ size = 20, color }: IconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
@@ -164,6 +172,15 @@ export function BlockedIcon({ size = 32, color }: IconProps) {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round">
       <Circle cx={12} cy={12} r={8.5} />
       <Path d="M6 6l12 12" />
+    </Svg>
+  );
+}
+
+// 응원: filled면 채운 하트
+export function HeartIcon({ size = 18, color, filled = false }: IconProps & { filled?: boolean }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? color : "none"} stroke={color} strokeWidth={2} strokeLinejoin="round">
+      <Path d="M12 20s-7-4.4-8.9-8.7C1.7 8 3.7 4.5 7.1 4.5c2 0 3.4 1 4.1 2.3h1.6c.7-1.3 2.1-2.3 4.1-2.3 3.4 0 5.4 3.5 4 6.8C19 15.6 12 20 12 20z" />
     </Svg>
   );
 }

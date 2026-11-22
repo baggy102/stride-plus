@@ -4,10 +4,14 @@ import { WebView } from 'react-native-webview';
 import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
+import * as SecureStorage from '@/utils/secureStorage';
 import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
-import { MapPopupCard } from '@/components/MapPopupCard';
+import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
+import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { traceLayerScript, type TraceColors, type TraceMessage } from '@/components/map/traceLayer';
+import { routeGeometry } from '@/utils/route';
 import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
@@ -18,6 +22,7 @@ import { fetchRunStats, type RunStats } from '@/api/stats';
 import { elevationStyle, withAlpha, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
 import Svg, { Circle } from 'react-native-svg';
+import { runnerTone, safeImageUrl } from '@/components/MapFeed/feedFilter';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
 import { CalendarView } from './CalendarView';
 
@@ -50,6 +55,19 @@ function CalendarDotsIcon({ color }: { color: string }) {
 }
 
 const PAGE_SIZE = 20;
+// 고른 경로는 카메라가 먼저 움직이고 0.38초 뒤 그린다(지도 피드와 같다)
+const ROUTE_DELAY_MS = 380;
+// 실제 처리(서버 home-privacy: 남에게는 출발·도착 100m를 자른다)만 말한다. 「집」·「기본 ON」은 끄는 화면·법적 확인 전이라 쓰지 않음
+const HOME_LABEL = '출발·도착 100m는 다른 사람에게 안 보여요';
+// 저장 직후 「내 흔적」: 카메라가 새 경로로 간 뒤 스며들기 시작
+const TRACE_DELAY_MS = 650;
+const TOAST_MS = 2800;
+// 응원 받은 순간: 마지막으로 본 시각(ISO)
+const CHEER_SEEN_KEY = 'cheerSeenAt';
+
+function traceColors(c: Palette): TraceColors {
+  return { base: c.muted, ice: c.map.dot, mint: c.fresh };
+}
 
 // 테마가 바뀔 때만 새로 만든다. 러닝은 window.__setRuns로 넣는다(D2 — 재로드 없음)
 function buildHtml(p: Palette, dark: boolean) {
@@ -77,10 +95,29 @@ ${MARKER_PULSE_CSS}
 <script>
   var map = L.map('map', { zoomControl: true }).setView([37.5665, 126.978], 13);
 ${baseMapScript(p, dark)}
-${markerIconsScript(p, 'profile')}
-  var group = L.markerClusterGroup({ iconCreateFunction: clusterIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
+${markerIconsScript(p)}
+${routeFxScript()}
+${traceLayerScript()}
+  var group = L.markerClusterGroup({ iconCreateFunction: stackIcon, showCoverageOnHover: false, maxClusterRadius: 60 });
   map.addLayer(group);
+  // 빈 지도 탭 → 열린 카드를 닫는다(마커 click은 지도로 버블링되지 않고, 끌기·핀치는 click이 아니다)
+  map.on('click', function() { window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'mapTap' })); });
   var fitted = false;
+
+  // 응원 받은 순간: 응원 받은 내 길이 한 번 빛났다 사라진다(약 2초, 동작 줄이기면 짧게 한 번)
+  window.__glow = function(routes, color) {
+    var reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    routes.forEach(function(route) {
+      if (!route || route.length < 2) return;
+      var line = L.polyline(route.map(function(p) { return [p[1], p[0]]; }), { color: color, weight: 7, opacity: 0, interactive: false, lineCap: 'round' }).addTo(map);
+      var t0 = performance.now(), dur = reduce ? 700 : 2000;
+      (function step(now) {
+        var k = Math.min(1, (now - t0) / dur), o = k < 0.3 ? k / 0.3 : (1 - k) / 0.7;
+        line.setStyle({ opacity: 0.9 * o });
+        if (k < 1) requestAnimationFrame(step); else map.removeLayer(line);
+      })(t0);
+    });
+  };
 
   // 처음 받은 러닝에만 화면을 맞춘다(새로고침·다음 페이지로 다시 들어와도 보던 위치 유지)
   var lastRuns = [];
@@ -89,15 +126,32 @@ ${markerIconsScript(p, 'profile')}
     window.__setRuns(lastRuns);
   };
 
-  window.__setRuns = function(runs) {
+  // 마커: 지도 피드 TOTAL과 같은 얼굴 링(이니셜·사진 + 사용자 색 링). who = {initial, avatar, tone}
+  var lastWho = null;
+  function faceIcon(who) {
+    var c = iconColors;
+    return L.divIcon({ html: '<div style="width:44px;height:44px;display:flex;align-items:center;justify-content:center"><div style="border-radius:50%;box-shadow:0 4px 12px rgba(0,0,0,' + (c.dark ? 0.45 : 0.16) + ')">' + face(who, 34, c.runners[who.tone], 2.5) + '</div></div>', className: '', iconSize: [44, 44], iconAnchor: [22, 22] });
+  }
+
+  // 묶음: 지도 피드와 같은 유리 알약(얼굴 하나 + 수)
+  function stackIcon(cl) {
+    return stackPill(face(lastWho, 28, iconColors.runners[lastWho.tone], 2), 1, String(cl.getChildCount()), true);
+  }
+
+  window.__setRuns = function(runs, who) {
     lastRuns = runs;
+    if (who) lastWho = who;
+    var icon = lastWho && faceIcon(lastWho);
+    // 내 흔적: 러닝이 지난 칸(D3 격자)
+    window.__trace.setRuns(runs.map(function(r) { return { _id: r._id, t: Date.parse(r.createdAt) || 0, route: r.route || [] }; }));
     group.clearLayers();
     var all = [];
     runs.forEach(function(run) {
       if (!run.startPoint) return;
       var latLng = [run.startPoint[1], run.startPoint[0]];
       all.push(latLng);
-      var marker = L.marker(latLng, { icon: glassDotIcon });
+      if (!icon) return;
+      var marker = L.marker(latLng, { icon: icon });
       marker.on('click', function() {
         window.ReactNativeWebView.postMessage(JSON.stringify(run));
       });
@@ -137,7 +191,16 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const [loadingMore, setLoadingMore] = useState(false);
   const [view, setView] = useState<ProfileView>('map');
   const [selected, setSelected] = useState<RunWithRoute | null>(null);
+  // 빈 지도 탭 횟수: 열린 카드는 이 값이 바뀌면 닫힌다(새 카드는 열릴 때의 값을 기준으로 삼는다)
+  const [dismissKey, setDismissKey] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
+  const headerHeightRef = useRef(0);
+  headerHeightRef.current = headerHeight;
+  const [toast, setToast] = useState<{ title: string; sub: string } | null>(null);
+  // 저장 직후 재생한 러닝(재생이 끝나 토스트가 뜰 때까지). 응원 받은 순간 알림은 이때 건너뛴다
+  const playedRef = useRef<string | null>(null);
+  // 응원 받은 순간: 화면이 열릴 때마다 한 번, 마지막으로 본 뒤 받은 응원이 있으면 그 길이 빛나고 토스트
+  const cheerCheckPending = useRef(true);
   const webViewRef = useRef<WebViewHandle>(null);
   const mapLoaded = useRef(false);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
@@ -145,10 +208,25 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const html = useMemo(() => buildHtml(initialTheme.p, initialTheme.dark), [initialTheme]);
 
   // 지도에 러닝을 넣는다 — WebView를 다시 로드하지 않는다
+  const pendingTrace = useRef<string | null>(null);
   const pushRuns = useCallback(() => {
     if (!mapLoaded.current) return;
-    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs)});true;`);
-  }, [runs]);
+    // 마커 얼굴: 지도 피드와 같은 이니셜·사진·사용자 색
+    const who = profile && {
+      initial: (profile.username?.[0] ?? '?').toUpperCase(),
+      avatar: safeImageUrl(profile.profileImageUrl, BASE_URL),
+      tone: runnerTone(profile._id),
+    };
+    webViewRef.current?.injectJavaScript(`window.__setRuns(${JSON.stringify(runs)},${JSON.stringify(who)});true;`);
+    const filed = runs.find((run) => run._id === pendingTrace.current);
+    if (!filed) return;
+    pendingTrace.current = null;
+    playedRef.current = filed._id;
+    const pad = [headerHeightRef.current + 16, bottomBase + 96];
+    webViewRef.current?.injectJavaScript(
+      `window.__fitRoute(${JSON.stringify(filed.route)},${JSON.stringify(pad)});setTimeout(function(){window.__trace.play(${JSON.stringify(filed._id)});},${TRACE_DELAY_MS});true;`,
+    );
+  }, [runs, profile, bottomBase]);
 
   useEffect(pushRuns, [pushRuns]);
 
@@ -203,24 +281,87 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     load('initial');
   }, [load]);
 
-  // 저장 직후(요약 → 앨범): 목록 보기로 바꾸고 새 기록을 불러온다. 파라미터는 지우고, 히어로가
-  // 새 기록으로 바뀔 때 File 전환을 하도록 대상 ID만 남겨 둔다(보기를 바꾸면 지운다)
-  const [fileTarget, setFileTarget] = useState<string | undefined>(undefined);
+  // 저장 직후: 지도 보기로 바꾸고 새 기록을 불러온 뒤, 그 경로가 내 흔적(칸)으로 스며든다(2026-11-19 내 피드 A안).
+  // 파라미터는 지우고 재생할 러닝 ID만 남긴다(pushRuns가 재생한다)
   useEffect(() => {
     if (!filedRunId) return;
-    setFileTarget(filedRunId);
-    setView('list');
+    pendingTrace.current = filedRunId;
+    setView('map');
     setSelected(null);
     load('quiet');
     router.setParams({ filed: undefined });
   }, [filedRunId]);
 
+  // 내 흔적 결과 알림(잠깐 떴다 사라진다)
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), TOAST_MS);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // 칸 색은 테마를 따른다
+  useEffect(() => {
+    if (!mapLoaded.current) return;
+    webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(traceColors(c))});true;`);
+  }, [c]);
+
+  // 고른 러닝: 카메라를 경로에 맞추고 경로 연출 A+(지도 피드와 같다). 남의 러닝은 서버가 집 근처를 잘라 보낸다
+  const drawnId = useRef<string | null>(null);
+  useEffect(() => {
+    if (!mapLoaded.current) return;
+    if (!selected) {
+      drawnId.current = null;
+      webViewRef.current?.injectJavaScript('window.__routeFx&&window.__routeFx.clear();true;');
+      return;
+    }
+    const geometry = routeGeometry(selected.route, mine);
+    const options: RouteFxOptions = {
+      col: c.map.dot, bg: c.bg, glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
+      label: mine ? HOME_LABEL : null,
+      delay: ROUTE_DELAY_MS,
+      keep: drawnId.current === selected._id,
+      seed: selected._id.length,
+    };
+    const first = drawnId.current !== selected._id;
+    drawnId.current = selected._id;
+    const pad = [headerHeightRef.current + 16, bottomBase + POSTER_HEIGHT + 24];
+    webViewRef.current?.injectJavaScript(
+      // 새로 연 구간(민트)은 지도 안 「내 흔적」 칸으로 판정한다 — 민트 점과 같은 기준
+      `${first ? `window.__fitRoute(${JSON.stringify(selected.route)},${JSON.stringify(pad)});` : ''}(function(){var g=${JSON.stringify(geometry)},o=${JSON.stringify(options)};if(window.__trace.opened(${JSON.stringify(selected._id)}))o.col=${JSON.stringify(c.fresh)};window.__routeFx.show(g,o);})();true;`,
+    );
+  }, [selected, mine, c, bottomBase]);
+
   // 탭 재진입 시 화면을 유지한 채 다시 불러온다
   const skipFirstFocus = useRef(true);
   useFocusEffect(useCallback(() => {
-    if (skipFirstFocus.current) { skipFirstFocus.current = false; return; }
-    load('quiet');
+    if (skipFirstFocus.current) skipFirstFocus.current = false;
+    else load('quiet');
+    cheerCheckPending.current = true;
   }, [load]));
+
+  // 마지막으로 본 시각(기기 저장) 이후 받은 응원. 처음이면 지금을 기록만 한다(쌓인 응원이 한꺼번에 뜨지 않게).
+  // 저장 직후 재생 중이면 그 알림을 우선하고 이번엔 건너뛴다
+  const checkCheers = useCallback(async () => {
+    if (!mine || !mapLoaded.current || listState !== 'ready' || !cheerCheckPending.current) return;
+    cheerCheckPending.current = false;
+    if (pendingTrace.current || playedRef.current) return;
+    try {
+      const seen = await SecureStorage.getItem(CHEER_SEEN_KEY);
+      const now = new Date().toISOString();
+      if (!seen) { await SecureStorage.setItem(CHEER_SEEN_KEY, now); return; }
+      const { data } = await client.get<{ runId: string; count: number }[]>(`/posts/cheers/received?since=${encodeURIComponent(seen)}`);
+      await SecureStorage.setItem(CHEER_SEEN_KEY, now);
+      const total = data.reduce((sum, r) => sum + r.count, 0);
+      if (total === 0) return;
+      const ids = new Set(data.map((r) => r.runId));
+      const routes = runs.filter((r) => ids.has(r._id)).map((r) => r.route);
+      webViewRef.current?.injectJavaScript(`window.__glow(${JSON.stringify(routes)},${JSON.stringify(c.fresh)});true;`);
+      setToast({ title: `지난번 길에 응원이 ${total}개 왔어요`, sub: '내 흔적' });
+    } catch {
+      // 못 받으면 다음에 다시 본다(본 시각을 바꾸지 않음)
+    }
+  }, [mine, listState, runs, c.fresh]);
+  useEffect(() => { checkCheers(); }, [checkCheers]);
 
   const handleMyLocation = useCallback(async () => {
     try {
@@ -269,9 +410,27 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
               style={StyleSheet.absoluteFill}
               originWhitelist={['*']}
               onLoadStart={() => { mapLoaded.current = false; }}
-              onLoadEnd={() => { mapLoaded.current = true; applyTheme(); pushRuns(); }}
+              onLoadEnd={() => {
+                mapLoaded.current = true;
+                applyTheme();
+                webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(traceColors(c))});true;`);
+                pushRuns();
+                checkCheers();
+              }}
               onMessage={(e) => {
-                try { setSelected(JSON.parse(e.nativeEvent.data)); } catch {}
+                try {
+                  const message = JSON.parse(e.nativeEvent.data) as RunWithRoute | TraceMessage | { type: 'mapTap' };
+                  if ('type' in message && message.type === 'mapTap') {
+                    setDismissKey((k) => k + 1);
+                  } else if ('type' in message && message.type === 'trace') {
+                    playedRef.current = null;
+                    setToast(message.fresh > 0
+                      ? { title: `새 길 ${message.fresh}칸을 열었어요`, sub: `내 흔적 +${message.total}칸` }
+                      : { title: `익숙한 길 ${message.total}칸을 다시 달렸어요`, sub: '내 흔적' });
+                  } else {
+                    setSelected(message as RunWithRoute);
+                  }
+                } catch {}
               }}
             />
           )}
@@ -308,7 +467,6 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                 state={listState}
                 baseUrl={BASE_URL}
                 mine={mine}
-                filedRunId={fileTarget}
                 refreshing={refreshing}
                 loadingMore={loadingMore}
                 topInset={headerHeight}
@@ -396,7 +554,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                     accessibilityState={{ selected: on }}
                     accessibilityLabel={id === 'map' ? '지도 보기' : id === 'list' ? '목록 보기' : '캘린더 보기'}
                     hitSlop={{ top: 3, bottom: 3 }}
-                    onPress={() => { setView(id); setSelected(null); setFileTarget(undefined); }}
+                    onPress={() => { setView(id); setSelected(null); }}
                     style={[styles.segmentBtn, on && styles.segmentOn]}
                   >
                     {id === 'map' ? <MapIcon color={color} /> : id === 'list' ? <ListIcon color={color} /> : <CalendarDotsIcon color={color} />}
@@ -408,15 +566,31 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
         )}
       </View>
 
-      {/* 선택된 런 카드 */}
+      {/* 선택된 런: 포스터 카드(지도 피드와 같다) */}
       {showMap && selected && (
         <MapPopupCard
+          key={selected._id}
           run={selected}
           baseUrl={BASE_URL}
           bottom={bottomBase}
+          route={selected.route}
+          routeColor={c.map.dot}
+          mine={mine}
+          dismissKey={dismissKey}
           onClose={() => setSelected(null)}
           onDetailPress={openRun}
+          onCheered={(runId, cheers, cheered) => setRuns((prev) => prev.map((run) => (run._id === runId ? { ...run, cheers, cheered } : run)))}
         />
+      )}
+
+      {/* 내 흔적 알림 */}
+      {showMap && toast && !selected && (
+        <View accessibilityRole="alert" style={[styles.toastShadow, { bottom: bottomBase + 60 }]} pointerEvents="none">
+          <Glass style={styles.toast}>
+            <Text style={styles.toastTitle}>{toast.title}</Text>
+            <Text style={styles.toastSub}>{toast.sub}</Text>
+          </Glass>
+        </View>
       )}
     </View>
   );
@@ -469,4 +643,8 @@ const makeStyles = (c: Palette) => StyleSheet.create({
     ...elevationStyle(c),
   },
   myLocGlass: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  toastShadow: { position: 'absolute', alignSelf: 'center', borderRadius: 16, ...elevationStyle(c) },
+  toast: { paddingVertical: 12, paddingHorizontal: 16, borderRadius: 16, alignItems: 'center' },
+  toastTitle: { fontFamily: FONT.semibold, fontSize: 13, lineHeight: 18, color: c.text },
+  toastSub: { ...monoLabel(10, 0.08), lineHeight: 14, color: c.muted },
 });

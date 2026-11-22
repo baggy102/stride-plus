@@ -8,6 +8,7 @@
     "ios": "expo start --ios",
     "css:build": "tailwindcss -i ./global.css -o ./tailwind.output.css --content './app/**/*.{js,jsx,ts,tsx}' --content './src/**/*.{js,jsx,ts,tsx}'",
     "gen:map-assets": "node scripts/gen-map-assets.js",
+    "update:production": "node scripts/eas-update-production.js",
     "test": "node --test --experimental-strip-types 'src/**/*.test.mjs'"
   },
   "dependencies": {
@@ -29,10 +30,12 @@
     "expo-location": "~58.0.20",
     "expo-router": "~58.0.30",
     "expo-secure-store": "~58.0.2",
+    "expo-sharing": "~58.0.23",
     "expo-splash-screen": "~58.0.13",
     "expo-status-bar": "~58.0.4",
     "expo-system-ui": "~58.0.7",
     "expo-task-manager": "~58.0.13",
+    "expo-updates": "~58.0.22",
     "leaflet": "^1.9.4",
     "nativewind": "4.2.7",
     "react": "19.3.0",
@@ -44,6 +47,7 @@
     "react-native-safe-area-context": "5.11.1",
     "react-native-screens": "4.30.1",
     "react-native-svg": "15.16.0",
+    "react-native-view-shot": "6.1.1",
     "react-native-webview": "14.0.1",
     "react-native-worklets": "0.13.0",
     "zustand": "^4.5.5"

@@ -20,6 +20,10 @@ export interface Palette {
   /** 포인트 Signal Blue(2026-11-14 확정): 고른 토글·탭 채움, 캘린더 달린 날 */
   point: string;
   onPoint: string; // point 위 글자·아이콘
+  /** 지도 피드 소셜 색(2026-11-19 확정): HYPE = Pearl(응원 많은 러닝), NEW = Aurora Mint(24시간 안). 지도 피드에서만 쓴다 */
+  hype: string;
+  fresh: string;
+  onSocial: string; // hype·fresh 위 글자
   /** 캘린더 거리 단계 색(5 km 미만 · 5~10 km · 10 km 이상). 2단계 = point. 라이트는 길수록 진하게, 다크는 길수록 밝게 */
   level: [string, string, string];
   danger: string;
@@ -44,6 +48,10 @@ export interface Palette {
   map: {
     bg: string;
     dot: string;
+    /** 지도 피드 얼굴 링(TOTAL): 사용자별 4색(2026-11-19 시안). 첫 칸 = dot. 초록·청록 계열 없음(NEW 민트와 혼동 방지) */
+    runners: [string, string, string, string];
+    operator: string; // Stride 운영자 링 · S 배지
+    onOperator: string;
     dotBorder: string;
     pulse: string;
     clBg: string;
@@ -74,6 +82,9 @@ export const palettes: Record<Scheme, Palette> = {
     logo: '#4B83B5',
     point: '#2E8BFF',
     onPoint: '#0B1016',
+    hype: '#F2FAFF',
+    fresh: '#5CF0C2',
+    onSocial: '#0B1016',
     level: ['#1E5AA8', '#2E8BFF', '#9CCBFF'],
     danger: '#E5484D',
     shadow: '#000000',
@@ -97,6 +108,9 @@ export const palettes: Record<Scheme, Palette> = {
     map: {
       bg: '#16202B',
       dot: '#9DBFE0',
+      runners: ['#9DBFE0', '#BDB2E6', '#E3AFC4', '#D8C7A1'],
+      operator: '#7C83F2',
+      onOperator: '#0B1016',
       dotBorder: '#0B1016',
       pulse: 'rgba(157,191,224,0.25)',
       clBg: '#0B1016',
@@ -125,6 +139,9 @@ export const palettes: Record<Scheme, Palette> = {
     logo: '#4B83B5',
     point: '#2E8BFF',
     onPoint: '#0B1016',
+    hype: '#0B1016',
+    fresh: '#0A7D60',
+    onSocial: '#FFFFFF',
     level: ['#6AABFF', '#2E8BFF', '#0A56C2'],
     danger: '#E5484D',
     shadow: '#0B1016',
@@ -148,6 +165,9 @@ export const palettes: Record<Scheme, Palette> = {
     map: {
       bg: '#E9EEF3',
       dot: '#24476B',
+      runners: ['#24476B', '#5B4F9A', '#9A4F6E', '#7A6533'],
+      operator: '#3D44C9',
+      onOperator: '#FFFFFF',
       dotBorder: '#FFFFFF',
       pulse: 'rgba(36,71,107,0.25)',
       clBg: '#FFFFFF',

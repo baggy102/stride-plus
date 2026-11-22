@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
+import { mongo } from 'mongoose';
 import { AuthService } from './auth.service';
 import { RefreshToken } from './auth.schema';
 import { UsersService } from '../users/users.service';
@@ -53,6 +54,12 @@ describe('AuthService', () => {
 
     it('이미 존재하는 이메일이면 ConflictException', async () => {
       mockUsersService.findByEmail.mockResolvedValue({ _id: 'u1' });
+      await expect(service.register('alice', 'a@b.com', 'pw')).rejects.toThrow(ConflictException);
+    });
+
+    it('동시 가입으로 유니크 인덱스에 걸리면(E11000) 500이 아니라 ConflictException', async () => {
+      mockUsersService.findByEmail.mockResolvedValue(null);
+      mockUsersService.create.mockRejectedValue(new mongo.MongoServerError({ message: 'E11000 duplicate key', code: 11000 }));
       await expect(service.register('alice', 'a@b.com', 'pw')).rejects.toThrow(ConflictException);
     });
 

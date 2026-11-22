@@ -21,6 +21,10 @@ export class User {
   @Prop()
   profileImageUrl?: string;
 
+  // 지도 피드에서 운영자 러닝을 따로 표시한다. 운영자 지정은 API 없이 DB에서 한다. 값이 없는 기존 문서는 일반 사용자
+  @Prop({ enum: ['user', 'operator'], default: 'user' })
+  role: 'user' | 'operator';
+
   @Prop({ type: [Types.ObjectId], default: [] })
   following: Types.ObjectId[];
 
