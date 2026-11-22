@@ -208,9 +208,11 @@ export class RunsService {
     const ownerId = (run.userId as unknown as { _id?: Types.ObjectId } | null)?._id;
     const hidden = await this.hiddenUserIds(viewerId);
     if (ownerId && hidden.some((id) => id.equals(ownerId))) throw new NotFoundException('run_not_found');
-    if (!ownerId || ownerId.equals(viewerId) || !run.route) return run;
+    // 응원 수와 내가 응원했는지 — 지도 피드 마커와 같은 집계(포스트가 없으면 0·false)
+    const cheer = (await this.cheersByRun(viewerId, [run._id])).get(String(run._id));
+    if (!ownerId || ownerId.equals(viewerId) || !run.route) return withCheers(run, cheer);
     const trimmed = trimHomeEnds(run.route.coordinates, run.routeTimes ?? []);
-    return { ...run, route: { ...run.route, coordinates: trimmed.coordinates }, routeTimes: trimmed.times };
+    return withCheers({ ...run, route: { ...run.route, coordinates: trimmed.coordinates }, routeTimes: trimmed.times }, cheer);
   }
 
   async create(
@@ -237,6 +239,11 @@ export class RunsService {
 function visibleRoute(viewerId: string, owner: unknown, coordinates: [number, number][]): [number, number][] {
   const ownerId = (owner as { _id?: Types.ObjectId } | null)?._id ?? owner;
   return String(ownerId) === viewerId ? coordinates : trimHomeEnds(coordinates).coordinates;
+}
+
+// 상세 응답에 응원 수·응원 여부를 붙인다. 반환 타입을 교차 타입으로 적어 둬야 lean 문서 타입이 두 번 펼쳐지지 않는다(TS7056)
+function withCheers<T extends object>(run: T, cheer?: { cheers: number; cheered: boolean }): T & { cheers: number; cheered: boolean } {
+  return { ...run, cheers: cheer?.cheers ?? 0, cheered: cheer?.cheered ?? false };
 }
 
 // 점마다의 시간은 좌표와 길이가 같고, 0 이상이며 줄어들지 않을 때만 저장한다. 아니면 빈 배열(스플릿 없음)
