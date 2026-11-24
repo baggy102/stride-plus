@@ -160,6 +160,7 @@ export default function RecordScreen() {
               interactive
               highlighter
               cloud
+              paused={isTracking && isPaused}
               style={{ width: root.width, height: gridHeight }}
             />
             <Pressable

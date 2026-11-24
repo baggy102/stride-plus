@@ -4,7 +4,7 @@ import Animated, {
   Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Path } from 'react-native-svg';
+import Svg from 'react-native-svg';
 import type { RunMarker } from '@/types/run';
 import { ChevronIcon, CloseIcon, HeartIcon } from '../icons';
 import { useColors } from '@/theme/useColors';
@@ -13,7 +13,10 @@ import { elevationStyle, type Palette } from '@/theme/colors';
 import { formatDuration, formatRunPace } from '@/utils/pace';
 import { formatClock, formatDay } from '@/utils/date';
 import { fitToBox, type LngLat } from '@/utils/route';
+import { boxSmooth, smoothRoute } from '@/utils/routeSmooth';
+import { lineTone } from '@/utils/routeLine';
 import { useReducedMotion } from '@/utils/motion';
+import { RouteLine } from '../RouteLine';
 import { useCheer } from '../useCheer';
 import { posterStickers, STICKER_LABEL, type StickerKind } from './stickers';
 
@@ -46,8 +49,6 @@ const NEW_LINE_H = 20;
 const ENTER_EASE = Easing.bezier(0.16, 1, 0.3, 1);
 const EXIT_EASE = Easing.bezier(0.7, 0, 0.84, 0);
 
-const pathD = (pts: [number, number][]) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
-
 // 투명도 + 아래에서 lift px. 들어올 때만 쓴다
 function useRise(v: SharedValue<number>, lift: number) {
   return useAnimatedStyle(() => ({ opacity: v.value, transform: [{ translateY: (1 - v.value) * lift }] }));
@@ -74,6 +75,11 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
   // NEW 한 줄이 들어가면 사진을 그만큼 줄여 카드 높이(288)를 지킨다. 0.2 km 미만은 숫자 없이
   const newLine = newKm === undefined ? null : newKm >= 0.2 ? `이번 주 새 길 ${newKm.toFixed(1)} km` : '이번 주 새 길';
   const mediaH = newLine ? MEDIA_H - NEW_LINE_H : MEDIA_H;
+  // 사진이 없을 때 그리는 경로(경로 선 v2): 매끈하게 한 사본을 카드에 맞춘다
+  const routePts = useMemo(
+    () => (route && route.length > 1 ? fitToBox(smoothRoute(route, boxSmooth(route, 362, mediaH, 30)).pts, 362, mediaH, 30) : []),
+    [route, mediaH],
+  );
   const { cheer, toggle: toggleCheer } = useCheer(run._id, { cheers: run.cheers ?? 0, cheered: run.cheered ?? false }, {
     disabled: mine,
     onCheered: (next) => onCheered?.(run._id, next.cheers, next.cheered),
@@ -141,9 +147,9 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
                 <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)']} locations={[0.35, 1]} style={StyleSheet.absoluteFill} />
               </>
             ) : (
-              route && route.length > 1 && (
+              routePts.length > 1 && (
                 <Svg width="100%" height={mediaH} viewBox={`0 0 362 ${mediaH}`} preserveAspectRatio="xMidYMid meet" style={StyleSheet.absoluteFill}>
-                  <Path d={pathD(fitToBox(route, 362, mediaH, 30))} stroke={lineColor} strokeWidth={3.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <RouteLine pts={routePts} body={3.2} tone={lineTone(c, lineColor)} ground={c.map.bg} id="popup" start head="full" bloom={18} />
                 </Svg>
               )
             )}

@@ -11,9 +11,10 @@ import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
-import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { routeFxScript, routeFxTone, type RouteFxOptions } from '@/components/map/routeFx';
 import { traceLayerScript, type TraceColors } from '@/components/map/traceLayer';
 import { routeGeometry, type LngLat } from '@/utils/route';
+import { smoothGeometry } from '@/utils/routeSmooth';
 import { useAuthStore } from '@/store/auth';
 import client, { BASE_URL } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
@@ -360,9 +361,10 @@ export function MapFeed() {
   const mine = !!selected && selected.userId._id === myId;
   useEffect(() => {
     if (!selectedRoute) { drawnId.current = null; return; }
-    const geometry = routeGeometry(selectedRoute.coords, mine);
+    // 그리는 사본(경로 선 v2 매끈하게). 집 근처 나누기 · km 자리는 원래 좌표로 정한 그대로
+    const geometry = smoothGeometry(routeGeometry(selectedRoute.coords, mine));
     const options: RouteFxOptions = {
-      col: routeColor, bg: c.bg, glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
+      ...routeFxTone(c, routeColor), glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
       label: mine ? HOME_LABEL : null,
       delay: ROUTE_DELAY_MS,
       keep: drawnId.current === selectedRoute.id,

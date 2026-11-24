@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type ComponentRef, type RefObject } fro
 import type { WebView } from 'react-native-webview';
 import { withAlpha, type Palette } from '@/theme/colors';
 import { MAP_TILE_URL } from '@/config/mapTiles';
+import { lineLook } from '@/utils/routeLine';
 import { mapFlavor } from './flavor';
 import { LEAFLET_CSS, LEAFLET_JS, MARKERCLUSTER_CSS, MARKERCLUSTER_JS, PROTOMAPS_JS } from './webAssets.generated';
 
@@ -31,6 +32,8 @@ export function mapColors(p: Palette) {
     fresh: p.fresh, onSocial: p.onSocial,
     runners: m.runners, operator: m.operator, onOperator: m.onOperator,
     dark: p.dark,
+    // 경로 선 v2 색 한 벌(기록 · 요약 · 상세 지도)
+    line: lineLook(p),
   };
 }
 

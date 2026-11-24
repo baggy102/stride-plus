@@ -1,12 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { View, Text, Image, ScrollView, StyleSheet, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import Svg, { Circle, Polyline } from 'react-native-svg';
+import Svg from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RouteMap } from '@/components/RouteMap';
+import { RouteLine } from '@/components/RouteLine';
 import { useColors } from '@/theme/useColors';
 import { FONT, monoLabel } from '@/theme/fonts';
 import { withAlpha, type Palette } from '@/theme/colors';
 import { fitToBox } from '@/utils/route';
+import { boxSmooth, smoothRoute } from '@/utils/routeSmooth';
+import { evenStops, lineTone } from '@/utils/routeLine';
 import { formatDate } from '@/utils/date';
 
 // 매거진형 피드(S08) · 러닝 상세(S10) · 캘린더 한 줄 카드가 같이 쓰는 카드 부품(2026-11-15 확정 시안 16차)
@@ -29,18 +32,33 @@ export interface FeedRun {
 
 export const titleOf = (run: Pick<FeedRun, 'description'>) => run.description?.trim().split('\n')[0] || '러닝 기록';
 
-// 경로 선(출발 링 · 도착 점). 미니 지도 · 지도 불러오기 전 자리에 쓴다
+// 경로 선 v2(출발 표시 · 도착 빛 머리). 미니 지도 · 지도 불러오기 전 자리에 쓴다.
+// 굵기 2.5 미만(44px 미니)은 띠 4개 · 머리 속과 작은 번짐만(출발 표시 없음, 잠금화면 아일랜드 미니와 같은 축소판)
 export function RouteSketch({ route, width, height, inset, stroke, strokeWidth = 2 }: {
   route: [number, number][]; width: number; height: number; inset: number; stroke: string; strokeWidth?: number;
 }) {
-  const pts = useMemo(() => fitToBox(route, width, height, inset), [route, width, height, inset]);
+  const c = useColors();
+  const id = useId().replace(/[^A-Za-z0-9]/g, '');
+  const pts = useMemo(
+    () => (route.length > 1 ? fitToBox(smoothRoute(route, boxSmooth(route, width, height, inset)).pts, width, height, inset) : []),
+    [route, width, height, inset],
+  );
   if (pts.length < 2) return null;
-  const end = pts[pts.length - 1];
+  const mini = strokeWidth < 2.5;
   return (
     <Svg width={width} height={height} style={StyleSheet.absoluteFill}>
-      <Polyline points={pts.map(([x, y]) => `${x},${y}`).join(' ')} fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
-      <Circle cx={pts[0][0]} cy={pts[0][1]} r={strokeWidth * 1.3} fill="none" stroke={stroke} strokeWidth={strokeWidth * 0.75} />
-      <Circle cx={end[0]} cy={end[1]} r={strokeWidth * 1.3} fill={stroke} />
+      <RouteLine
+        pts={pts}
+        body={strokeWidth}
+        tone={lineTone(c, stroke)}
+        ground={c.map.bg}
+        id={`sk${id}`}
+        stops={mini ? evenStops(4) : undefined}
+        halo={mini ? 0.55 : 1}
+        start={!mini}
+        head={mini ? 'mini' : 'full'}
+        bloom={mini ? 5.5 : 18}
+      />
     </Svg>
   );
 }

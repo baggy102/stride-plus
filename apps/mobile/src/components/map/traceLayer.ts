@@ -29,6 +29,9 @@ export function traceLayerScript(): string {
     var col={base:'#8E9BA8',ice:'#9DBFE0',mint:'#5CF0C2'},runs=[],cells=null,play=null,raf=0;
     // 지도 피드 NEW: 서버가 준 「이번 주 새 길」 칸(고정 지리 칸 중심 lng·lat). on이면 데이터 칸을 흐리게 하고 이 칸만 민트로
     var newList=[],dim=false,newM=50,newKeys=null;
+    // 경로 선 v2 「빛 둘레 격자」: 고른 경로의 도착(빛 머리) 둘레 LIFT_R px 안의 바탕 점만 바탕색 그대로 조금 밝힌다(데이터 점 · 수는 그대로)
+    var lift=null,LIFT_R=64;
+    function rgba(h,a){h=h.replace('#','');var n=parseInt(h.length===3?h.replace(/./g,'$&$&'):h.slice(0,6),16);return 'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')';}
     // NEW 칸 → 화면 칸: 서버 칸(newM 미터, 기준 위도 37.5 — 서버 new-cells와 같다)이 서로 붙어 있으면(같은 러닝) 두 중심을 이어
     // 지나는 화면 칸을 모두 켠다. 줌을 당겨도 내 흔적처럼 끊기지 않는 점 줄이 된다. 대각선은 사이 칸이 없을 때만 잇는다
     function buildNew(){
@@ -84,6 +87,12 @@ export function traceLayerScript(): string {
       ctx.beginPath();
       for(var i=i0;i<=i1;i++)for(var j=j0;j<=j1;j++){var x=(i+0.5)*CELL-origin.x,y=(j+0.5)*CELL-origin.y;ctx.moveTo(x+0.85,y);ctx.arc(x,y,0.85,0,6.2832);}
       ctx.fill();
+      if(lift){var lp=map.latLngToLayerPoint(lift),hx=lp.x-origin.x,hy=lp.y-origin.y,gr=ctx.createRadialGradient(hx,hy,0,hx,hy,LIFT_R);
+        gr.addColorStop(0,rgba(col.base,0.5));gr.addColorStop(1,rgba(col.base,0));
+        ctx.globalAlpha=1;ctx.fillStyle=gr;ctx.beginPath();
+        for(var li=Math.floor((lp.x-LIFT_R)/CELL);li<=Math.ceil((lp.x+LIFT_R)/CELL);li++)for(var lj=Math.floor((lp.y-LIFT_R)/CELL);lj<=Math.ceil((lp.y+LIFT_R)/CELL);lj++){
+          var lx=(li+0.5)*CELL-origin.x,ly=(lj+0.5)*CELL-origin.y;ctx.moveTo(lx+1,ly);ctx.arc(lx,ly,1,0,6.2832);}
+        ctx.fill();}
       var t=play?now-play.t0:0,today=Date.now(),fade=dim?0.3:1;
       if(cells)cells.forEach(function(c){
         var x=(c.i+0.5)*CELL-origin.x,y=(c.j+0.5)*CELL-origin.y;
@@ -124,6 +133,8 @@ export function traceLayerScript(): string {
       // 지도 피드: 서버가 센 칸(서로 다른 러너 3명 이상)
       setCells:function(next){served=next;build();redraw();},
       setColors:function(next){col=next;redraw();},
+      // 고른 경로의 도착 [lat,lng](경로 연출이 선을 다 그은 뒤 켠다), null이면 끈다
+      lift:function(ll){lift=ll;redraw();},
       // 새 러닝: 7일 안에 이 러닝이 처음 지난 칸(민트 점)이 하나라도 있으면 true — 고른 경로를 처음부터 민트로 그린다
       opened:function(id){var r=runs.find(function(q){return q._id===id;});
         if(!r||!cells||Date.now()-r.t>=NEW_MS)return false;

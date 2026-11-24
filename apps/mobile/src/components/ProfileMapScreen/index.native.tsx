@@ -9,9 +9,10 @@ import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
 import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
-import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { routeFxScript, routeFxTone, type RouteFxOptions } from '@/components/map/routeFx';
 import { traceLayerScript, type TraceColors, type TraceMessage } from '@/components/map/traceLayer';
 import { routeGeometry } from '@/utils/route';
+import { smoothGeometry } from '@/utils/routeSmooth';
 import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
@@ -314,9 +315,10 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
       webViewRef.current?.injectJavaScript('window.__routeFx&&window.__routeFx.clear();true;');
       return;
     }
-    const geometry = routeGeometry(selected.route, mine);
+    // 그리는 사본(경로 선 v2 매끈하게). 집 근처 나누기 · km 자리는 원래 좌표로 정한 그대로
+    const geometry = smoothGeometry(routeGeometry(selected.route, mine));
     const options: RouteFxOptions = {
-      col: c.map.dot, bg: c.bg, glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
+      ...routeFxTone(c, c.map.dot), glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
       label: mine ? HOME_LABEL : null,
       delay: ROUTE_DELAY_MS,
       keep: drawnId.current === selected._id,
@@ -327,7 +329,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     const pad = [headerHeightRef.current + 16, bottomBase + POSTER_HEIGHT + 24];
     webViewRef.current?.injectJavaScript(
       // 새로 연 구간(민트)은 지도 안 「내 흔적」 칸으로 판정한다 — 민트 점과 같은 기준
-      `${first ? `window.__fitRoute(${JSON.stringify(selected.route)},${JSON.stringify(pad)});` : ''}(function(){var g=${JSON.stringify(geometry)},o=${JSON.stringify(options)};if(window.__trace.opened(${JSON.stringify(selected._id)}))o.col=${JSON.stringify(c.fresh)};window.__routeFx.show(g,o);})();true;`,
+      `${first ? `window.__fitRoute(${JSON.stringify(selected.route)},${JSON.stringify(pad)});` : ''}(function(){var g=${JSON.stringify(geometry)},o=${JSON.stringify(options)};if(window.__trace.opened(${JSON.stringify(selected._id)}))Object.assign(o,${JSON.stringify(routeFxTone(c, c.fresh))});window.__routeFx.show(g,o);})();true;`,
     );
   }, [selected, mine, c, bottomBase]);
 
