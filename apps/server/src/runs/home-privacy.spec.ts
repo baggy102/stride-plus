@@ -1,4 +1,4 @@
-import { trimHomeEnds } from './home-privacy';
+import { distanceToRouteMeters, routeWithinMeters, trimHomeEnds } from './home-privacy';
 
 // 위도 37.5에서 경도 0.001도 ≈ 88.4m
 const LNG_STEP_METERS = 88.4;
@@ -41,5 +41,35 @@ describe('trimHomeEnds', () => {
   it('점이 2개 미만이면 그대로 둔다', () => {
     expect(trimHomeEnds([]).coordinates).toEqual([]);
     expect(trimHomeEnds([[127, 37.5]]).coordinates).toEqual([[127, 37.5]]);
+  });
+});
+
+describe('distanceToRouteMeters', () => {
+  // 위도 1도 ≈ 111.2km → 0.00045도 ≈ 50m
+  const NORTH_50M = 0.00045;
+
+  it('선분 가운데에서 수직으로 떨어진 거리', () => {
+    expect(distanceToRouteMeters([127.0005, 37.5 + NORTH_50M], line(2))).toBeCloseTo(50, 0);
+  });
+
+  it('선분 끝 밖이면 끝점까지 거리', () => {
+    expect(distanceToRouteMeters([126.999, 37.5], line(3))).toBeCloseTo(LNG_STEP_METERS, -1);
+  });
+
+  it('경로 위의 점은 0, 점 하나짜리 경로는 그 점까지, 빈 경로는 Infinity', () => {
+    expect(distanceToRouteMeters([127.001, 37.5], line(3))).toBeCloseTo(0, 6);
+    expect(distanceToRouteMeters([127, 37.5 + NORTH_50M], [[127, 37.5]])).toBeCloseTo(50, 0);
+    expect(distanceToRouteMeters([127, 37.5], [])).toBe(Infinity);
+  });
+
+  it('routeWithinMeters — 반경 경계', () => {
+    expect(routeWithinMeters([127.0005, 37.5 + NORTH_50M], line(2), 51)).toBe(true);
+    expect(routeWithinMeters([127.0005, 37.5 + NORTH_50M], line(2), 49)).toBe(false);
+  });
+
+  it('집을 지나는 원래 경로와 달리, 자른 경로는 집에서 약 100m 떨어져 있다', () => {
+    const home: [number, number] = [127, 37.5];
+    expect(distanceToRouteMeters(home, line(11))).toBe(0);
+    expect(distanceToRouteMeters(home, trimHomeEnds(line(11)).coordinates)).toBeCloseTo(100, -1);
   });
 });

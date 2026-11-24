@@ -38,3 +38,5 @@ export class User {
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
+// 「나를 차단한 사용자」 조회(find({ blocked: me }), RunsService.hiddenUserIds)가 컬렉션 전체를 훑지 않게
+UserSchema.index({ blocked: 1 });
