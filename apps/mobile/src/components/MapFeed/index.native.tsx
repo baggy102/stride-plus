@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
-import { View, StyleSheet, ActivityIndicator, Pressable, Text } from 'react-native';
+import { View, StyleSheet, ActivityIndicator, Pressable, Text, AppState } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Glass } from '@/components/Glass';
 import { Wordmark } from '@/components/Wordmark';
@@ -19,6 +19,8 @@ import client, { BASE_URL } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
 import { elevationStyle, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
+import { useMapRecovery, type MapPageMessage } from '@/components/map/useMapRecovery';
+import * as SecureStorage from '@/utils/secureStorage';
 import type { RunMarker } from '@/types/run';
 import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
 
@@ -27,8 +29,37 @@ const SEOUL = { lat: 37.5665, lng: 126.978 };
 // 서버 FindRunsDto의 radius 상한과 같다.
 const MAX_RADIUS_M = 300000;
 
-// cell: 지금 줌에서 화면 11px에 해당하는 미터(D3 칸, 서버 FindDensityDto 범위 5~5000)
-type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number; cell: number };
+// 지난 세션의 마지막 지도 중심(기기 저장). 위치를 기다리지 않고 지도를 바로 띄울 때 마지막 위치 다음 후보
+const CENTER_KEY = 'mapFeedCenter';
+// 마지막으로 알려진 위치는 10분 안의 것만 쓴다(더 오래되면 내 위치 점이 엉뚱한 곳에 찍힌다). 1초 안에 안 오면 건너뛴다
+const LAST_KNOWN_MAX_AGE_MS = 10 * 60 * 1000;
+const QUICK_WAIT_MS = 1000;
+// 정확한 측위는 뒤에서 받는다. 이 시간 안에 오면 지도를 옮기고, 늦게 오면 내 위치 점만 옮긴다
+const FIX_TIMEOUT_MS = 4000;
+
+type LatLng = { lat: number; lng: number };
+
+// 기다리되 ms가 지나거나 실패하면 null(지도 시작이 기기 응답에 묶이지 않게)
+function within<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    promise.then(resolve, () => resolve(null)).finally(() => clearTimeout(timer));
+  });
+}
+
+function parseCenter(raw: string | null): LatLng | null {
+  if (!raw) return null;
+  try {
+    const { lat, lng } = JSON.parse(raw) as Partial<LatLng>;
+    if (typeof lat !== 'number' || typeof lng !== 'number' || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+    return { lat, lng };
+  } catch {
+    return null;
+  }
+}
+
+// cell: 지금 줌에서 화면 11px에 해당하는 미터(D3 칸, 서버 FindDensityDto 범위 5~5000). zoom: WebView를 다시 만들 때 보던 화면으로 되돌린다
+type ViewportMessage = { type: 'viewport'; lat: number; lng: number; radius: number; cell: number; zoom: number };
 type DensityCell = { lng: number; lat: number; n: number };
 type RunMessage = { type: 'run'; run: RunMarker };
 type MapTapMessage = { type: 'mapTap' };
@@ -36,9 +67,11 @@ type MapTapMessage = { type: 'mapTap' };
 type NewCellsResponse = { cellMeters: number; cells: { lng: number; lat: number; runId: string }[]; runs: { runId: string; km: number }[] };
 type RunDetailResponse = { route?: { coordinates?: [number, number][] } };
 
+// center: 처음 지도 중심. me: 처음 내 위치(모르면 null — 측위가 오면 __setMe가 점을 붙인다)
 // bottomOffset: 탭바에 가리지 않게 Leaflet 출처 표기를 올리는 높이
-function buildHtml(lat: number, lng: number, p: Palette, dark: boolean, bottomOffset: number) {
+function buildHtml({ lat, lng }: LatLng, me: LatLng | null, p: Palette, dark: boolean, bottomOffset: number) {
   const m = p.map;
+  const meAt = me ? [me.lat, me.lng] : [lat, lng];
   return `<!DOCTYPE html>
 <html>
 <head>
@@ -64,9 +97,19 @@ ${MARKER_PULSE_CSS}
 <script>
   var map = L.map('map',{zoomControl:false}).setView([${lat},${lng}],13);
 ${baseMapScript(p, dark)}
-  // 내 위치: 옅은 원(44) + 점(16, 테두리 3)
-  var meHalo=L.circleMarker([${lat},${lng}],{radius:22,stroke:false,fillColor:'${m.meHalo}',fillOpacity:1,interactive:false}).addTo(map);
-  var me=L.circleMarker([${lat},${lng}],{radius:6.5,color:'${m.meRing}',fillColor:'${m.meFill}',fillOpacity:1,weight:3,interactive:false}).addTo(map);
+  // 내 위치: 옅은 원(44) + 점(16, 테두리 3). 아직 모르면 측위가 온 뒤 __setMe가 붙인다
+  var meHalo=L.circleMarker(${JSON.stringify(meAt)},{radius:22,stroke:false,fillColor:'${m.meHalo}',fillOpacity:1,interactive:false});
+  var me=L.circleMarker(${JSON.stringify(meAt)},{radius:6.5,color:'${m.meRing}',fillColor:'${m.meFill}',fillOpacity:1,weight:3,interactive:false});
+  if(${!!me}){meHalo.addTo(map);me.addTo(map);}
+  // 측위가 오면 내 위치 점을 옮기고, move면 지도도 옮긴다(사용자가 이미 지도를 끌었으면 그대로). 멀면 애니메이션 없이(날아가는 동안 중간 타일을 받지 않게)
+  var dragged=false;
+  map.on('dragstart',function(){dragged=true;});
+  window.__setMe=function(lat,lng,move){
+    var at=[lat,lng];meHalo.setLatLng(at).addTo(map);me.setLatLng(at).addTo(map);
+    if(!move||dragged)return;
+    var z=Math.max(map.getZoom(),13);
+    if(map.distance(map.getCenter(),at)>3000)map.setView(at,z,{animate:false});else map.flyTo(at,z);
+  };
   L.control.scale({imperial:false,position:'bottomleft',maxWidth:64}).addTo(map);
 
 ${markerIconsScript(p)}
@@ -162,7 +205,7 @@ ${traceLayerScript()}
     var r=Math.min(Math.ceil(c.distanceTo(map.getBounds().getNorthEast())),${MAX_RADIUS_M});
     var mpp=40075016.686*Math.cos(c.lat*Math.PI/180)/Math.pow(2,map.getZoom()+8);
     var cell=Math.min(5000,Math.max(5,Math.round(mpp*11)));
-    window.ReactNativeWebView.postMessage(JSON.stringify({type:'viewport',lat:c.lat,lng:c.lng,radius:r,cell:cell}));
+    window.ReactNativeWebView.postMessage(JSON.stringify({type:'viewport',lat:c.lat,lng:c.lng,radius:r,cell:cell,zoom:map.getZoom()}));
   }
   var moveTimer;
   map.on('moveend',function(){
@@ -228,15 +271,24 @@ export function MapFeed() {
   const c = useColors();
   const dark = useScheme() === 'dark';
   const styles = useMemo(() => makeStyles(c), [c]);
-  const [center, setCenter] = useState<{ lat: number; lng: number } | null>(null);
+  // 처음 지도 중심과 처음 내 위치. 한 번만 정한다 — 정확한 측위가 와도 HTML을 다시 만들지 않고(재로드 없음) __setMe로 옮긴다
+  const [start, setStart] = useState<{ center: LatLng; me: LatLng | null } | null>(null);
   const webViewRef = useRef<WebViewHandle>(null);
+  const loadedRef = useRef(false);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3, 재로드 없음)
-  const { initial: initialTheme, applyTheme } = useMapTheme(webViewRef, c, dark);
+  const { initial: initialTheme, syncThemeOnLoad } = useMapTheme(webViewRef, c, dark);
   const html = useMemo(
-    () => (center ? buildHtml(center.lat, center.lng, initialTheme.p, initialTheme.dark, tabClearance + 8) : ''),
-    [center, initialTheme, tabClearance],
+    () => (start ? buildHtml(start.center, start.me, initialTheme.p, initialTheme.dark, tabClearance + 8) : ''),
+    [start, initialTheme, tabClearance],
   );
   const [selected, setSelected] = useState<RunMarker | null>(null);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  // 지금 아는 내 위치와, 로드 전에 온 측위로 지도를 옮겨야 하는지(onLoadEnd가 마저 한다)
+  const meRef = useRef<LatLng | null>(null);
+  const pendingMove = useRef(false);
+  // WebView를 다시 만들 때 로드 뒤 되돌릴 화면
+  const restoreView = useRef<ViewportMessage | null>(null);
   // 빈 지도 탭 횟수: 열린 카드는 이 값이 바뀌면 닫힌다(새 카드는 열릴 때의 값을 기준으로 삼는다)
   const [dismissKey, setDismissKey] = useState(0);
   const [feedState, setFeedState] = useState<FeedState>('normal');
@@ -246,6 +298,12 @@ export function MapFeed() {
   const [radius, setRadius] = useState<number | null>(null);
   const skipFirstFocus = useRef(true);
   const lastViewport = useRef<ViewportMessage | null>(null);
+  // WebView가 죽거나 포그라운드 복귀 핑에 답이 없으면 다시 마운트한다. 페이지가 처음 viewport를 다시 보내 러닝·바탕 점은 스스로 다시 받고,
+  // 보던 화면은 onLoadEnd가 되돌린다. 그려 둔 경로가 사라지므로 포스터 카드는 닫는다
+  const { mapKey, handleMapMessage, crashProps } = useMapRecovery(webViewRef, loadedRef, () => {
+    restoreView.current = lastViewport.current;
+    setSelected(null);
+  });
   const lastRuns = useRef<RunMarker[] | null>(null);
   const filterRef = useRef(filter);
   const requestSeq = useRef(0);
@@ -305,16 +363,60 @@ export function MapFeed() {
     webViewRef.current?.injectJavaScript(`window.__setMode&&window.__setMode(${JSON.stringify(filter)});window.__trace&&window.__trace.setNew(${JSON.stringify(newCellsRef.current)},${filter === 'new'});true;`);
   }, [filter, checkNoMatch]);
 
+  // 내 위치 점을 옮긴다(move면 지도도). 로드 전이면 onLoadEnd가 마저 한다. 고른 러닝이 있으면 지도는 옮기지 않는다
+  const placeMe = useCallback((pos: LatLng, move: boolean) => {
+    meRef.current = pos;
+    if (!loadedRef.current) {
+      pendingMove.current = pendingMove.current || move;
+      return;
+    }
+    webViewRef.current?.injectJavaScript(`window.__setMe(${pos.lat},${pos.lng},${move && !selectedRef.current});true;`);
+  }, []);
+
+  // 지도는 GPS 측위를 기다리지 않고 바로 띄운다: 마지막으로 알려진 위치 → 지난번 지도 중심 → 서울.
+  // 정확한 측위(Balanced)는 뒤에서 받아 4초 안이면 지도를 옮기고, 늦으면 내 위치 점만 옮긴다. 권한이 없으면 지금처럼 서울
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status === 'granted') {
-        const pos = await Location.getCurrentPositionAsync({});
-        setCenter({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-      } else {
-        setCenter(SEOUL);
+      let granted = false;
+      try {
+        granted = (await Location.requestForegroundPermissionsAsync()).status === 'granted';
+      } catch {}
+      if (!alive) return;
+      if (!granted) {
+        setStart({ center: SEOUL, me: SEOUL });
+        return;
       }
+      const askedAt = Date.now();
+      // Android: 위치 설정이 꺼져 있어도 시작 때 시스템 대화상자를 띄우지 않는다(취소하면 측위가 실패한다)
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced, mayShowUserSettingsDialog: false })
+        .then((pos) => {
+          if (alive) placeMe({ lat: pos.coords.latitude, lng: pos.coords.longitude }, Date.now() - askedAt < FIX_TIMEOUT_MS);
+        })
+        .catch(() => {});
+      const [last, saved] = await Promise.all([
+        within(Location.getLastKnownPositionAsync({ maxAge: LAST_KNOWN_MAX_AGE_MS }), QUICK_WAIT_MS),
+        within(SecureStorage.getItem(CENTER_KEY).then(parseCenter), QUICK_WAIT_MS),
+      ]);
+      if (!alive) return;
+      const me = last ? { lat: last.coords.latitude, lng: last.coords.longitude } : null;
+      // 측위가 이미 왔으면 그 위치로 연다
+      const known = meRef.current ?? me;
+      if (meRef.current) pendingMove.current = false;
+      setStart({ center: known ?? saved ?? SEOUL, me: known });
     })();
+    return () => { alive = false; };
+  }, [placeMe]);
+
+  // 다음 실행의 시작 중심: 앱이 백그라운드로 갈 때 한 번 저장(약 100m 단위)
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      const v = lastViewport.current;
+      if (state !== 'background' || !v) return;
+      const round = (n: number) => Math.round(n * 1000) / 1000;
+      SecureStorage.setItem(CENTER_KEY, JSON.stringify({ lat: round(v.lat), lng: round(v.lng) })).catch(() => {});
+    });
+    return () => sub.remove();
   }, []);
 
   useFocusEffect(useCallback(() => {
@@ -326,7 +428,8 @@ export function MapFeed() {
     try {
       const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
       const { latitude, longitude } = pos.coords;
-      webViewRef.current?.injectJavaScript(`map.flyTo([${latitude},${longitude}],Math.max(map.getZoom(),13));true;`);
+      meRef.current = { lat: latitude, lng: longitude };
+      webViewRef.current?.injectJavaScript(`window.__setMe(${latitude},${longitude},false);map.flyTo([${latitude},${longitude}],Math.max(map.getZoom(),13));true;`);
     } catch {}
   }, []);
 
@@ -403,27 +506,44 @@ export function MapFeed() {
   return (
     <View style={styles.container}>
       <WebView
+        key={mapKey}
         ref={webViewRef}
         source={{ html }}
         style={StyleSheet.absoluteFill}
         originWhitelist={['*']}
         javaScriptEnabled
         startInLoadingState
-        // 로드 중에 테마가 바뀌었을 수 있다
+        {...crashProps}
+        onLoadStart={() => { loadedRef.current = false; }}
         onLoadEnd={() => {
-          applyTheme();
-          webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(feedTraceColors(c))});true;`);
+          loadedRef.current = true;
+          // 로드 중에 테마가 바뀌었을 때만 다시 칠한다(D3 바탕 색도 함께)
+          if (syncThemeOnLoad()) {
+            webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(feedTraceColors(c))});true;`);
+          }
+          // 다시 마운트했으면 보던 화면·필터로, 로드 전에 측위가 왔으면 내 위치 점(과 지도)을 옮긴다
+          const restore = restoreView.current;
+          const me = meRef.current;
+          const move = pendingMove.current && !restore && !selectedRef.current;
+          restoreView.current = null;
+          pendingMove.current = false;
+          let js = '';
+          if (restore) js += `map.setView([${restore.lat},${restore.lng}],${restore.zoom},{animate:false});`;
+          if (filterRef.current !== 'total') js += `window.__setMode(${JSON.stringify(filterRef.current)});`;
+          if (me) js += `window.__setMe(${me.lat},${me.lng},${move});`;
+          if (js) webViewRef.current?.injectJavaScript(`${js}true;`);
         }}
         onMessage={(e) => {
           try {
-            const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage | MapTapMessage;
+            const message = JSON.parse(e.nativeEvent.data) as ViewportMessage | RunMessage | MapTapMessage | MapPageMessage;
+            if (handleMapMessage(message)) return;
             if (message.type === 'viewport') {
               lastViewport.current = message;
               setRadius(message.radius);
               fetchRuns(message);
             } else if (message.type === 'mapTap') {
               setDismissKey((k) => k + 1);
-            } else {
+            } else if (message.type === 'run') {
               setSelected(message.run);
             }
           } catch {}

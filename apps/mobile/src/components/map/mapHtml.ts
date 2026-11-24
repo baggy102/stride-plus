@@ -59,13 +59,40 @@ export function markerIconsScript(p: Palette): string {
 `;
 }
 
+// 타일 실패 회복. 라이브러리는 실패한 타일을 바탕색으로 칠하고 끝내며, PMTiles는 실패한 헤더·디렉터리 요청까지 캐시해 다시 받지 않는다.
+// 레이어가 지도에 붙기 전에(첫 타일 요청 전에) 화면 타일 요청을 감싸 실패한 타일을 모으고, 2·4·8초 뒤 그 타일만 다시 그린다.
+// PMTiles는 다시 그리기 전에 소스를 새로 만들어 캐시를 버린다. ZXY는 4xx·5xx 응답도 실패로 본다(그대로 두면 빈 타일로 캐시된다).
+// 세 번 다 실패하면 멈추고, 새 타일이 실패하거나(사용자가 지도를 움직임) online·화면 복귀·앱 핑(__mapPing) 때 다시 시작한다.
+// 타일 주소가 비면 앱에 알린다(앱이 경고를 남긴다). 전역 baseLayer가 먼저 있어야 한다
+const TILE_RECOVERY_SCRIPT = `
+  window.__tiles=(function(url){
+    if(!url){window.ReactNativeWebView.postMessage(JSON.stringify({type:'tileUrlMissing'}));return {retry:function(){}};}
+    var pm=new URL(url,'http://example.com').pathname.slice(-8)==='.pmtiles',failed={},retried={},tries=0,timer=0;
+    if(!pm){var pre=url.split('{')[0],f0=window.fetch;
+      window.fetch=function(u){return f0.apply(window,arguments).then(function(r){if(!r.ok&&typeof u==='string'&&u.indexOf(pre)===0)throw new Error('Bad response code: '+r.status);return r;});};}
+    function fail(k){failed[k]=1;if(!retried[k]&&tries>2)tries=2;if(!timer&&tries<3)timer=setTimeout(retry,2000<<tries);}
+    function retry(){clearTimeout(timer);timer=0;var keys=Object.keys(failed);if(!keys.length)return;tries++;retried=failed;failed={};
+      if(pm)baseLayer.views.forEach(function(v){v.tileCache.source=new protomapsL.PmtilesSource(url,true);});
+      keys.forEach(function(k){baseLayer.rerenderTile(k);});}
+    baseLayer.views.forEach(function(v){var get=v.getDisplayTile;
+      v.getDisplayTile=function(c){return get.call(v,c).catch(function(e){if(!e||e.name!=='AbortError')fail(c.x+':'+c.y+':'+c.z);throw e;});};});
+    function again(){tries=0;retry();}
+    window.addEventListener('online',again);
+    document.addEventListener('visibilitychange',function(){if(document.visibilityState==='visible')again();});
+    return {retry:again};
+  })(${JSON.stringify(MAP_TILE_URL)});
+  // 앱이 다시 보일 때 앱이 보내는 핑: 바로 답하고, 실패한 타일이 있으면 다시 그린다(답이 없으면 앱이 WebView를 새로 만든다)
+  window.__mapPing=function(){window.ReactNativeWebView.postMessage(JSON.stringify({type:'pong'}));window.__tiles.retry();};`;
+
 // 베이스맵(protomaps 벡터 타일, D3)과 테마 전환. 전역 map이 먼저 있어야 한다.
 // __setTheme은 그리기 규칙만 바꿔 받아 둔 타일을 다시 그린다 — WebView 재로드·타일 재요청 없음.
 // 화면별 색(마커·경로)은 각 HTML이 window.__onTheme(colors)로 갱신한다
 export function baseMapScript(p: Palette, dark: boolean): string {
   return `
   function themeRules(f){return {paintRules:protomapsL.paintRules(f),labelRules:protomapsL.labelRules(f,'ko'),backgroundColor:f.background};}
-  var baseLayer=protomapsL.leafletLayer(Object.assign({url:${JSON.stringify(MAP_TILE_URL)},lang:'ko'},themeRules(${JSON.stringify(mapFlavor(dark))})));
+  // 타일 캔버스는 2배 해상도까지(3배 기기에서 지도 하나의 캔버스 메모리를 줄인다 — 메모리 압박 때 WebView 프로세스가 먼저 정리된다)
+  var baseLayer=protomapsL.leafletLayer(Object.assign({url:${JSON.stringify(MAP_TILE_URL)},lang:'ko',devicePixelRatio:Math.min(2,window.devicePixelRatio||1)},themeRules(${JSON.stringify(mapFlavor(dark))})));
+${TILE_RECOVERY_SCRIPT}
   // 출처 표기(Protomaps · OpenStreetMap)는 레이어가 직접 붙인다. OSM 표기는 지워선 안 되므로 작게 왼쪽 아래(축척 위)로 옮기고
   // Leaflet 접두어(깃발·Leaflet)는 뺀다 — 오른쪽 아래 현 위치 버튼과 겹치지 않게
   baseLayer.addTo(map);
@@ -93,7 +120,9 @@ export const MARKER_PULSE_CSS = `
 
 /**
  * 지도 HTML은 처음 테마로 한 번만 만들고, 이후 테마가 바뀌면 __setTheme만 주입한다(D3).
- * initial: HTML을 만들 때 쓸 처음 테마. applyTheme: WebView onLoadEnd에서도 불러 로드 중 바뀐 테마를 맞춘다
+ * initial: HTML을 만들 때 쓸 처음 테마. applyTheme: 지금 테마를 주입한다.
+ * syncThemeOnLoad: WebView onLoadEnd에서 부른다. 막 로드된 페이지는 언제나 처음 테마이므로(다시 마운트해도 같다)
+ * 지금 테마가 처음과 다를 때만 다시 칠하고 true — 같으면 첫 타일을 두 번 그리지 않는다
  */
 export function useMapTheme(webViewRef: RefObject<WebViewHandle | null>, p: Palette, dark: boolean) {
   const initial = useRef({ p, dark }).current;
@@ -102,11 +131,17 @@ export function useMapTheme(webViewRef: RefObject<WebViewHandle | null>, p: Pale
     webViewRef.current?.injectJavaScript(`window.__setTheme&&window.__setTheme(${args});true;`);
   }, [webViewRef, p, dark]);
 
+  const syncThemeOnLoad = useCallback(() => {
+    if (p === initial.p && dark === initial.dark) return false;
+    applyTheme();
+    return true;
+  }, [applyTheme, p, dark, initial]);
+
   const first = useRef(true);
   useEffect(() => {
     if (first.current) { first.current = false; return; }
     applyTheme();
   }, [applyTheme]);
 
-  return { initial, applyTheme };
+  return { initial, applyTheme, syncThemeOnLoad };
 }
