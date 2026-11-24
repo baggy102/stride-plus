@@ -24,6 +24,7 @@ import { useMapRecovery, type MapPageMessage } from '@/components/map/useMapReco
 import * as SecureStorage from '@/utils/secureStorage';
 import type { RunMarker } from '@/types/run';
 import { FEED_FILTERS, HYPE_MIN_CHEERS, isHype, isOpener, matchesFilter, runnerTone, safeImageUrl, type FeedFilter } from './feedFilter';
+import { routeDraw } from './routeDraw';
 
 const SEOUL = { lat: 37.5665, lng: 126.978 };
 
@@ -285,6 +286,12 @@ export function MapFeed() {
   const [selected, setSelected] = useState<RunMarker | null>(null);
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  // 닫기 시작한 카드의 러닝(×·빈 지도 탭). 카드는 0.24초 동안 내려가지만 지도 위 경로·빛 둘레는 이때 바로 지운다
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const closingRef = useRef(closingId);
+  closingRef.current = closingId;
+  // 그 러닝이 아직 골라져 있을 때만 선택을 푼다(카드가 내려가는 사이 다른 마커를 골랐으면 그대로 둔다)
+  const deselect = useCallback((id: string) => setSelected((s) => (s?._id === id ? null : s)), []);
   // 지금 아는 내 위치와, 로드 전에 온 측위로 지도를 옮겨야 하는지(onLoadEnd가 마저 한다)
   const meRef = useRef<LatLng | null>(null);
   const pendingMove = useRef(false);
@@ -440,17 +447,19 @@ export function MapFeed() {
   const [selectedRoute, setSelectedRoute] = useState<{ id: string; coords: LngLat[] } | null>(null);
   useEffect(() => {
     setSelectedRoute(null);
-    if (!selected) { webViewRef.current?.injectJavaScript('window.__routeFx&&window.__routeFx.clear();true;'); return; }
+    if (!selected) return;
     let cancelled = false;
     client.get<RunDetailResponse>(`/runs/${selected._id}`)
       .then((res) => {
-        if (cancelled) return;
+        // 받는 사이 선택이 바뀌었거나 카드를 닫기 시작했으면 경로도 카메라도 건드리지 않는다
+        if (cancelled || closingRef.current === selected._id) return;
         const coords = res.data.route?.coordinates ?? [];
         setSelectedRoute({ id: selected._id, coords });
         const pad = [headerHeight + 16, cardBottom + POSTER_HEIGHT + 24];
         webViewRef.current?.injectJavaScript(`window.__fitRoute(${JSON.stringify(coords)},${JSON.stringify(pad)});true;`);
       })
-      .catch(() => {});
+      // 못 받으면 경로 없이(바꾸기 전 러닝의 경로가 남지 않게 지운다)
+      .catch(() => { if (!cancelled) setSelectedRoute({ id: selected._id, coords: [] }); });
     return () => { cancelled = true; };
     // 헤더 높이가 바뀌어도 다시 받지 않는다
   }, [selected]);
@@ -462,20 +471,27 @@ export function MapFeed() {
     ? filter === 'hype' && isHype(selected) ? c.hype : filter === 'new' && openerKm.has(selected._id) ? c.fresh : c.map.dot
     : c.map.dot;
   const mine = !!selected && selected.userId._id === myId;
+  // 지도 위 경로를 그리고 지우는 곳은 여기 하나. 선택을 풀 때 같은 렌더에 mine·routeColor가 바뀌어도 앞 경로를 다시 그리지 않는다
+  const draw = routeDraw(selected?._id, closingId, selectedRoute);
   useEffect(() => {
-    if (!selectedRoute) { drawnId.current = null; return; }
+    if (draw === 'wait') { drawnId.current = null; return; }
+    if (draw === 'clear') {
+      drawnId.current = null;
+      webViewRef.current?.injectJavaScript('window.__routeFx&&window.__routeFx.clear();true;');
+      return;
+    }
     // 그리는 사본(경로 선 v2 매끈하게). 집 근처 나누기 · km 자리는 원래 좌표로 정한 그대로
-    const geometry = smoothGeometry(routeGeometry(selectedRoute.coords, mine));
+    const geometry = smoothGeometry(routeGeometry(draw.coords, mine));
     const options: RouteFxOptions = {
       ...routeFxTone(c, routeColor), glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
       label: mine ? HOME_LABEL : null,
       delay: ROUTE_DELAY_MS,
-      keep: drawnId.current === selectedRoute.id,
-      seed: seedOf(selectedRoute.id),
+      keep: drawnId.current === draw.id,
+      seed: seedOf(draw.id),
     };
-    drawnId.current = selectedRoute.id;
+    drawnId.current = draw.id;
     webViewRef.current?.injectJavaScript(`window.__routeFx.show(${JSON.stringify(geometry)},${JSON.stringify(options)});true;`);
-  }, [selectedRoute, routeColor, mine, c]);
+  }, [draw, routeColor, mine, c]);
 
   // D3 바탕 색은 테마를 따른다
   useEffect(() => {
@@ -546,6 +562,7 @@ export function MapFeed() {
             } else if (message.type === 'mapTap') {
               setDismissKey((k) => k + 1);
             } else if (message.type === 'run') {
+              setClosingId(null);
               setSelected(message.run);
             }
           } catch {}
@@ -652,7 +669,8 @@ export function MapFeed() {
           onCheered={onCheered}
           dismissKey={dismissKey}
           newKm={filter === 'new' ? openerKm.get(selected._id) : undefined}
-          onClose={() => setSelected(null)}
+          onCloseStart={() => setClosingId(selected._id)}
+          onClose={() => deselect(selected._id)}
           onUserPress={(userId) => {
             setSelected(null);
             router.push(`/user/${userId}`);

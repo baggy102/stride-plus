@@ -50,7 +50,8 @@ export function routeFxScript(): string {
     var LV2=${JSON.stringify(LINE_V2)},BANDS=${JSON.stringify(bandStyles(BODY))},CORE=${JSON.stringify(coreSteps())},B=${BODY},KNOCK=${knockWidth(BODY)},BLOOM=${BLOOM},SEAM=${SEAM};
     var pane=map.createPane('routeFx');pane.style.zIndex=450;pane.style.pointerEvents='none';
     var svg=document.createElementNS(NS,'svg');svg.setAttribute('style','position:absolute;left:0;top:0;width:1px;height:1px;overflow:visible');pane.appendChild(svg);
-    var cur=null;
+    // cur: 지금 그린 경로(없으면 null). fading: clear()가 걸어 둔 비우기 타이머(0.2초 페이드 뒤)
+    var cur=null,fading=0;
     var reduced=function(){return window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;};
     function el(tag,attrs,parent){var e=document.createElementNS(NS,tag);for(var k in attrs)e.setAttribute(k,attrs[k]);(parent||svg).appendChild(e);return e;}
     function pts(list){return list.map(function(c){var p=map.latLngToLayerPoint([c[1],c[0]]);return [p.x,p.y];});}
@@ -175,20 +176,28 @@ export function routeFxScript(): string {
       if(pts.length===1){map.flyTo(pts[0],Math.max(map.getZoom(),15),{duration:0.55});return;}
       map.flyToBounds(L.latLngBounds(pts),{paddingTopLeft:[32,pad[0]],paddingBottomRight:[32,pad[1]],maxZoom:16,duration:0.55});
     };
+    function wipe(){clearTimeout(fading);fading=0;svg.innerHTML='';svg.style.transition='';svg.style.opacity='';}
     window.__routeFx={
       // g: RouteGeometry(매끈하게 한 사본), o: RouteFxOptions
       show:function(g,o){
         if(cur)cancelAnimationFrame(cur.raf);
+        // 지우던 중이면 비우기를 멈춘다(새 경로가 지워지지 않게)
+        clearTimeout(fading);fading=0;
         svg.style.transition='';svg.style.opacity='';
         cur={g:g,o:o,t0:performance.now()+o.delay,last:0,done:o.keep||reduced(),dust:[],di:0,prevTT:-1,bloomAt:0,rnd:rng(o.seed)};
         if(!cur.done)lift(false);
         render();
         if(!cur.done)cur.raf=requestAnimationFrame(step);
       },
+      // 언제 불러도(그리기 전 대기 · 그리는 중 · 빛 머리 · 끝난 뒤 · 지우는 중) 연출을 멈추고 빛 둘레를 끈 뒤 0.2초 페이드로 비운다.
+      // 여러 번 불러도 같다
       clear:function(){
-        if(!cur)return;cancelAnimationFrame(cur.raf);cur=null;lift(false);
+        if(cur){cancelAnimationFrame(cur.raf);cur=null;}
+        lift(false);
+        if(!svg.firstChild){wipe();return;}
+        if(fading)return;
         svg.style.transition='opacity .2s ease';svg.style.opacity='0';
-        setTimeout(function(){if(!cur){svg.innerHTML='';svg.style.transition='';svg.style.opacity='';}},220);
+        fading=setTimeout(wipe,220);
       }
     };
   })();
