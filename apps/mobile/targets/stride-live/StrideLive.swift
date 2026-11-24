@@ -2,9 +2,12 @@ import ActivityKit
 import SwiftUI
 import WidgetKit
 
-// Frost 잠금화면 위젯(캔버스 F-Lock): 서리 카드 안에 경로 점 구름 + 거리 + 페이스 · 시간, 아래 STRIDE+ LIVE.
-// 다이내믹 아일랜드: 축소형은 Ice 점 + 거리, 펼침형은 거리 · 시간 · 페이스 + 경로.
-// 서체는 위젯에 앱 글꼴을 넣지 않고 시스템 글꼴로 대신한다(숫자 = 시스템 고정폭 숫자, 라벨 = 시스템 모노).
+// 잠금화면 Live Activity: CG-3 「기운 판」(SPEC_LA4 7절) + 2026-11-24 수정.
+// - 왼쪽 수치 기둥 L2 「균등 분배」: 위 워드마크 그림(「● REC」 자리), 가운데 거리 + KM, 아래 TIME · PACE 두 줄. 나눔 선 없음.
+// - 오른쪽: 원근으로 눕힌 24 격자 판 위 경로 선 v2, 빛 머리 · 빛 기둥 · 빛 공기. 판은 카드 오른쪽 밖으로 이어진다.
+// - 일시정지: 워드마크 줄 오른쪽에 작은 warn 「PAUSED」, 머리가 warn. 달리는 중에는 상태 글자 없음.
+// 다이내믹 아일랜드: 축소형 · 최소형은 평평한 미니 경로(선 v2 축소판), 펼친 모습은 왼쪽 수치 + 오른쪽 기운 판.
+// 카드는 라이트 모드에서도 어두운 tint. 자리 값은 LiveStyle.swift(LockColumn · IslandColumn · PlaneSpec).
 
 @main
 struct StrideLiveBundle: WidgetBundle {
@@ -13,233 +16,172 @@ struct StrideLiveBundle: WidgetBundle {
   }
 }
 
-private extension Color {
-  init(hex: UInt32, opacity: Double = 1) {
-    self.init(
-      .sRGB,
-      red: Double((hex >> 16) & 0xFF) / 255,
-      green: Double((hex >> 8) & 0xFF) / 255,
-      blue: Double(hex & 0xFF) / 255,
-      opacity: opacity
-    )
-  }
-}
-
-// Frost 토큰(apps/mobile/src/theme/colors.ts와 같은 값)
-private struct FrostPalette {
-  let card: Color
-  let border: Color
-  let text: Color
-  let muted: Color
-  let value: Color
-  let head: Color
-  let logo: Color
-  let warn: Color
-
-  static let dark = FrostPalette(
-    card: Color(hex: 0x121922, opacity: 0.92),
-    border: Color(hex: 0xDCE6EE, opacity: 0.16),
-    text: Color(hex: 0xDCE6EE),
-    muted: Color(hex: 0x8E9BA8),
-    value: Color(hex: 0x9DBFE0),
-    head: Color(hex: 0xDCE6EE),
-    logo: Color(hex: 0x9DBFE0),
-    warn: Color(hex: 0xFFC66B)
-  )
-
-  static let light = FrostPalette(
-    card: Color(hex: 0xFFFFFF, opacity: 0.92),
-    border: Color(hex: 0x0B1016, opacity: 0.08),
-    text: Color(hex: 0x0B1016),
-    muted: Color(hex: 0x5D6976),
-    value: Color(hex: 0x24476B),
-    head: Color(hex: 0x24476B),
-    logo: Color(hex: 0x24476B),
-    warn: Color(hex: 0xB45309)
-  )
-}
-
-private func formatPace(_ secPerKm: Double) -> String {
-  guard secPerKm > 0, secPerKm.isFinite, secPerKm <= 3600 else { return "--'--\"" }
-  let total = Int(secPerKm.rounded())
-  return String(format: "%d'%02d\"", total / 60, total % 60)
-}
-
-private func formatElapsed(_ sec: Double) -> String {
-  let total = max(0, Int(sec))
-  return String(format: "%02d:%02d:%02d", total / 3600, (total % 3600) / 60, total % 60)
-}
-
-private func formatDistance(_ km: Double) -> String {
-  String(format: "%.2f", km)
-}
-
-// 0~1로 맞춘 경로 점을 점선으로(점 구름처럼) 그리고 지금 위치에 글로우 점
-private struct RouteCloud: View {
-  let route: [Double]
-  let color: Color
-  let head: Color
-
-  var body: some View {
-    GeometryReader { geo in
-      let pts = points(in: geo.size)
-      ZStack {
-        Path { path in
-          for (i, pt) in pts.enumerated() {
-            if i == 0 { path.move(to: pt) } else { path.addLine(to: pt) }
-          }
-        }
-        .stroke(color.opacity(0.75), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round, dash: [0.5, 3]))
-        if let last = pts.last {
-          Circle()
-            .fill(head)
-            .frame(width: 6, height: 6)
-            .shadow(color: head.opacity(0.9), radius: 5)
-            .position(last)
-        }
-      }
-    }
-  }
-
-  private func points(in size: CGSize) -> [CGPoint] {
-    guard route.count >= 2 else { return [] }
-    return stride(from: 0, to: route.count - 1, by: 2).map { i in
-      CGPoint(x: route[i] * size.width, y: route[i + 1] * size.height)
-    }
-  }
-}
-
-// 시간: 달리는 중에는 잠금화면에서 스스로 흐르고, 일시정지 중에는 멈춘 값
+/// 시간: 달리는 중에는 잠금화면에서 스스로 흐르고, 일시정지 중에는 멈춘 값(같은 분:초 모양)
 private struct ElapsedText: View {
   let state: RunActivityAttributes.ContentState
 
   var body: some View {
     if state.paused {
-      Text(formatElapsed(state.elapsedSec))
+      Text(LiveFormat.elapsed(state.elapsedSec))
     } else {
       Text(state.timerStart, style: .timer)
     }
   }
 }
 
-private struct LockScreenView: View {
-  let context: ActivityViewContext<RunActivityAttributes>
-  @Environment(\.colorScheme) private var scheme
+/// TIME · PACE 한 줄: 모노 라벨 + Barlow 값, 같은 바닥선
+private struct StatLine<Value: View>: View {
+  let label: String
+  let labelX: CGFloat
+  let valueX: CGFloat
+  let baseline: CGFloat
+  let size: CGSize
+  @ViewBuilder let value: () -> Value
 
   var body: some View {
-    let p = scheme == .dark ? FrostPalette.dark : FrostPalette.light
-    let state = context.state
-    VStack(alignment: .leading, spacing: 10) {
-      HStack(alignment: .center, spacing: 18) {
-        RouteCloud(route: state.route, color: p.value, head: p.head)
-          .frame(width: 96, height: 64)
-        VStack(alignment: .leading, spacing: 6) {
-          HStack(alignment: .top, spacing: 4) {
-            Text(formatDistance(state.distanceKm))
-              .font(.system(size: 44, weight: .semibold))
-              .monospacedDigit()
-              .foregroundColor(p.text)
-            Text("KM")
-              .font(.system(size: 9, weight: .medium, design: .monospaced))
-              .foregroundColor(p.value)
-              .padding(.top, 6)
-          }
-          HStack(spacing: 0) {
-            Text("\(formatPace(state.paceSecPerKm))/KM · ")
-            ElapsedText(state: state)
-          }
-          .font(.system(size: 13, weight: .medium, design: .monospaced))
-          .monospacedDigit()
-          .foregroundColor(p.text)
-        }
-        Spacer(minLength: 0)
+    ZStack(alignment: .topLeading) {
+      Text(label)
+        .font(LiveFont.mono(LockColumn.labelSize))
+        .tracking(LockColumn.labelTracking)
+        .foregroundColor(LiveColor.text2)
+        .pinned(x: labelX, baseline: baseline, in: size)
+      value()
+        .font(LiveFont.num(LockColumn.valueSize))
+        .foregroundColor(LiveColor.text)
+        .lineLimit(1)
+        .multilineTextAlignment(.leading)
+        .frame(width: LockColumn.valueWidth, alignment: .leading)
+        .pinned(x: valueX, baseline: baseline, in: size)
+    }
+  }
+}
+
+/// 잠금화면 왼쪽 수치 기둥(L2). size = 카드 크기
+private struct LockColumnView: View {
+  let state: RunActivityAttributes.ContentState
+  let size: CGSize
+
+  var body: some View {
+    let valueX = LockColumn.x + LockColumn.labelWidth + LockColumn.labelGap
+    ZStack(alignment: .topLeading) {
+      Wordmark(width: LockColumn.wordmarkWidth, color: LiveColor.logo)
+        .pinned(x: LockColumn.x, top: LockColumn.padTop, in: size)
+      if state.paused {
+        Text("PAUSED")
+          .font(LiveFont.mono(LockColumn.pausedSize))
+          .tracking(LockColumn.pausedTracking)
+          .foregroundColor(LiveColor.warn)
+          .pinned(right: LockColumn.x + LockColumn.width, baseline: LockColumn.pausedBaseline, in: size)
       }
-      HStack(spacing: 10) {
-        Text("STRIDE+")
-          .font(.system(size: 12, weight: .heavy))
-          .italic()
-          .foregroundColor(p.logo)
-        Text(state.paused ? "PAUSED" : "LIVE")
-          .font(.system(size: 10, weight: .medium, design: .monospaced))
-          .tracking(1.4)
-          .foregroundColor(state.paused ? p.warn : p.muted)
-        Spacer()
+      LockColumn.distance.text(LiveFormat.distance(state.distanceKm))
+        .pinned(x: LockColumn.x, baseline: LockColumn.distanceBaseline, in: size)
+      StatLine(label: "TIME", labelX: LockColumn.x, valueX: valueX, baseline: LockColumn.timeBaseline, size: size) {
+        ElapsedText(state: state)
+      }
+      StatLine(label: "PACE", labelX: LockColumn.x, valueX: valueX, baseline: LockColumn.paceBaseline, size: size) {
+        Text(LiveFormat.pace(state.paceSecPerKm))
       }
     }
-    .padding(.horizontal, 20)
-    .padding(.vertical, 16)
-    .background(p.card)
-    .overlay(
-      RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(p.border, lineWidth: 1)
-    )
+    .frame(width: size.width, height: size.height, alignment: .topLeading)
+  }
+}
+
+private struct LockScreenView: View {
+  let state: RunActivityAttributes.ContentState
+
+  var body: some View {
+    GeometryReader { geo in
+      ZStack(alignment: .topLeading) {
+        TiltedPlaneView(
+          route: state.route,
+          distanceKm: state.distanceKm,
+          paused: state.paused,
+          spec: .lock(width: geo.size.width),
+          size: geo.size
+        )
+        .accessibilityHidden(true)
+        LockColumnView(state: state, size: geo.size)
+      }
+    }
+    .frame(height: LockColumn.cardHeight)
+    .clipShape(ContainerRelativeShape())
+    .overlay {
+      ContainerRelativeShape().strokeBorder(LiveColor.border, lineWidth: 1)
+    }
+  }
+}
+
+/// 아일랜드 펼친 모습 왼쪽: 상태 점(+ PAUSED) · 거리 32 + KM · TIME · PACE
+private struct IslandColumnView: View {
+  let state: RunActivityAttributes.ContentState
+
+  var body: some View {
+    let size = CGSize(width: IslandColumn.width, height: IslandColumn.height)
+    let dotColor = state.paused ? LiveColor.warn : LiveColor.ice
+    ZStack(alignment: .topLeading) {
+      Circle()
+        .fill(dotColor)
+        .frame(width: IslandColumn.dotSize, height: IslandColumn.dotSize)
+        .pinned(x: 0, top: IslandColumn.statusCenterY - IslandColumn.dotSize / 2, in: size)
+      if state.paused {
+        Text("PAUSED")
+          .font(LiveFont.mono(IslandColumn.pausedSize))
+          .tracking(IslandColumn.pausedTracking)
+          .foregroundColor(LiveColor.warn)
+          .pinned(
+            x: IslandColumn.dotSize + IslandColumn.pausedGap,
+            baseline: IslandColumn.statusCenterY + IslandColumn.pausedSize * LiveFont.monoCap / 2,
+            in: size
+          )
+      }
+      IslandColumn.distance.text(LiveFormat.distance(state.distanceKm))
+        .pinned(x: 0, baseline: IslandColumn.distanceBaseline, in: size)
+      StatLine(label: "TIME", labelX: 0, valueX: IslandColumn.valueX, baseline: IslandColumn.timeBaseline, size: size) {
+        ElapsedText(state: state)
+      }
+      StatLine(label: "PACE", labelX: 0, valueX: IslandColumn.valueX, baseline: IslandColumn.paceBaseline, size: size) {
+        Text(LiveFormat.pace(state.paceSecPerKm))
+      }
+    }
+    .frame(width: size.width, height: size.height, alignment: .topLeading)
   }
 }
 
 struct RunLiveActivity: Widget {
   var body: some WidgetConfiguration {
     ActivityConfiguration(for: RunActivityAttributes.self) { context in
-      LockScreenView(context: context)
-        .activitySystemActionForegroundColor(FrostPalette.dark.value)
+      LockScreenView(state: context.state)
+        .activityBackgroundTint(LiveColor.tint.opacity(LiveColor.tintOpacity))
+        .activitySystemActionForegroundColor(LiveColor.ice)
     } dynamicIsland: { context in
-      let p = FrostPalette.dark
       let state = context.state
       return DynamicIsland {
         DynamicIslandExpandedRegion(.leading) {
-          HStack(alignment: .top, spacing: 3) {
-            Text(formatDistance(state.distanceKm))
-              .font(.system(size: 32, weight: .semibold))
-              .monospacedDigit()
-              .foregroundColor(p.text)
-            Text("KM")
-              .font(.system(size: 9, weight: .medium, design: .monospaced))
-              .foregroundColor(p.value)
-              .padding(.top, 5)
-          }
-          .padding(.leading, 4)
+          IslandColumnView(state: state)
         }
-        DynamicIslandExpandedRegion(.trailing) {
-          VStack(alignment: .trailing, spacing: 2) {
-            ElapsedText(state: state)
-              .font(.system(size: 15, weight: .medium, design: .monospaced))
-              .monospacedDigit()
-              .foregroundColor(p.text)
-              .multilineTextAlignment(.trailing)
-            Text("\(formatPace(state.paceSecPerKm))/KM")
-              .font(.system(size: 12, weight: .medium, design: .monospaced))
-              .foregroundColor(p.muted)
+        DynamicIslandExpandedRegion(.trailing, priority: 1) {
+          GeometryReader { geo in
+            TiltedPlaneView(
+              route: state.route,
+              distanceKm: state.distanceKm,
+              paused: state.paused,
+              spec: .island(size: geo.size),
+              size: geo.size
+            )
           }
-          .padding(.trailing, 4)
-        }
-        DynamicIslandExpandedRegion(.bottom) {
-          HStack(alignment: .center) {
-            RouteCloud(route: state.route, color: p.value, head: p.head)
-              .frame(width: 64, height: 28)
-            Spacer()
-            if state.paused {
-              Text("PAUSED")
-                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                .tracking(1.2)
-                .foregroundColor(p.warn)
-            }
-          }
-          .padding(.horizontal, 4)
+          .frame(height: IslandColumn.planeHeight)
+          .accessibilityHidden(true)
         }
       } compactLeading: {
-        Circle()
-          .fill(state.paused ? p.warn : p.value)
-          .frame(width: 8, height: 8)
-          .shadow(color: p.value.opacity(0.8), radius: 3)
+        MiniRoute(route: state.route, paused: state.paused, size: IslandColumn.compactRoute)
       } compactTrailing: {
-        Text(formatDistance(state.distanceKm))
-          .font(.system(size: 14, weight: .semibold))
-          .monospacedDigit()
-          .foregroundColor(p.value)
+        Text(LiveFormat.distance(state.distanceKm))
+          .font(LiveFont.num(IslandColumn.compactDistanceSize))
+          .foregroundColor(LiveColor.text)
       } minimal: {
-        Circle()
-          .fill(state.paused ? p.warn : p.value)
-          .frame(width: 8, height: 8)
+        MiniRoute(route: state.route, paused: state.paused, size: IslandColumn.minimalRoute)
       }
-      .keylineTint(p.value)
+      .keylineTint(LiveColor.ice)
     }
   }
 }
