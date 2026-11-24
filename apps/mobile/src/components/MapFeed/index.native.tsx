@@ -11,9 +11,10 @@ import * as Location from 'expo-location';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
-import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { routeFxScript, routeFxTone, type RouteFxOptions } from '@/components/map/routeFx';
 import { traceLayerScript, type TraceColors } from '@/components/map/traceLayer';
 import { routeGeometry, type LngLat } from '@/utils/route';
+import { smoothGeometry } from '@/utils/routeSmooth';
 import { useAuthStore } from '@/store/auth';
 import client, { BASE_URL } from '@/api/client';
 import { useColors, useScheme } from '@/theme/useColors';
@@ -222,8 +223,8 @@ type FeedState = 'normal' | 'empty' | 'error';
 
 // 필터에 맞는 러닝이 없을 때 안내(지도에는 흐린 마커가 그대로 있다)
 const NO_MATCH: Record<Exclude<FeedFilter, 'total'>, { title: string; sub: string }> = {
-  hype: { title: '이 근처에 HYPE 러닝이 아직 없어요', sub: `응원을 ${HYPE_MIN_CHEERS}개 이상 받은 러닝이 여기에 떠요` },
-  new: { title: '이 근처엔 이번 주 새 길이 아직 없어요', sub: '한동안 아무도 안 뛴 길을 달리면 여기 떠요' },
+  hype: { title: '이 근처엔 아직 HYPE 러닝이 없어요', sub: `응원을 ${HYPE_MIN_CHEERS}개 이상 받은 러닝이 여기에 떠요` },
+  new: { title: '이 근처엔 아직 이번 주 새 길이 없어요', sub: '한동안 아무도 달리지 않은 길을 달리면 여기에 떠요' },
 };
 
 // 지도 WebView에 넘기는 러닝: 마커가 쓸 표시를 미리 붙인다(사진 주소는 검사한 것만)
@@ -463,9 +464,10 @@ export function MapFeed() {
   const mine = !!selected && selected.userId._id === myId;
   useEffect(() => {
     if (!selectedRoute) { drawnId.current = null; return; }
-    const geometry = routeGeometry(selectedRoute.coords, mine);
+    // 그리는 사본(경로 선 v2 매끈하게). 집 근처 나누기 · km 자리는 원래 좌표로 정한 그대로
+    const geometry = smoothGeometry(routeGeometry(selectedRoute.coords, mine));
     const options: RouteFxOptions = {
-      col: routeColor, bg: c.bg, glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
+      ...routeFxTone(c, routeColor), glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
       label: mine ? HOME_LABEL : null,
       delay: ROUTE_DELAY_MS,
       keep: drawnId.current === selectedRoute.id,
@@ -610,7 +612,7 @@ export function MapFeed() {
           </View>
           <View style={styles.noticeBody}>
             <Text style={styles.noticeTitle}>
-              {feedState === 'error' ? '불러오지 못했어요' : '아직 아무도 안 뛴 동네예요'}
+              {feedState === 'error' ? '불러오지 못했어요' : '아직 아무도 안 달린 동네예요'}
             </Text>
             {feedState === 'empty' && <Text style={styles.noticeSub}>제일 먼저 달려 보세요</Text>}
           </View>

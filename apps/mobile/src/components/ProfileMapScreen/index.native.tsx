@@ -9,9 +9,10 @@ import client, { BASE_URL } from '@/api/client';
 import { useAuthStore } from '@/store/auth';
 import { Wordmark } from '@/components/Wordmark';
 import { MapPopupCard, POSTER_HEIGHT } from '@/components/MapPopupCard';
-import { routeFxScript, type RouteFxOptions } from '@/components/map/routeFx';
+import { routeFxScript, routeFxTone, type RouteFxOptions } from '@/components/map/routeFx';
 import { traceLayerScript, type TraceColors, type TraceMessage } from '@/components/map/traceLayer';
 import { routeGeometry } from '@/utils/route';
+import { smoothGeometry } from '@/utils/routeSmooth';
 import { BackIcon, BlockedIcon, GearIcon, ListIcon, LocateIcon, MapIcon } from '@/components/icons';
 import { SafetyMenu } from '@/components/SafetyMenu';
 import { useTabBarClearance } from '@/components/FloatingTabBar';
@@ -321,9 +322,10 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
       webViewRef.current?.injectJavaScript('window.__routeFx&&window.__routeFx.clear();true;');
       return;
     }
-    const geometry = routeGeometry(selected.route, mine);
+    // 그리는 사본(경로 선 v2 매끈하게). 집 근처 나누기 · km 자리는 원래 좌표로 정한 그대로
+    const geometry = smoothGeometry(routeGeometry(selected.route, mine));
     const options: RouteFxOptions = {
-      col: c.map.dot, bg: c.bg, glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
+      ...routeFxTone(c, c.map.dot), glass: c.glass, glassBorder: c.glassBorder, text: c.text, text2: c.text2,
       label: mine ? HOME_LABEL : null,
       delay: ROUTE_DELAY_MS,
       keep: drawnId.current === selected._id,
@@ -334,7 +336,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
     const pad = [headerHeightRef.current + 16, bottomBase + POSTER_HEIGHT + 24];
     webViewRef.current?.injectJavaScript(
       // 새로 연 구간(민트)은 지도 안 「내 흔적」 칸으로 판정한다 — 민트 점과 같은 기준
-      `${first ? `window.__fitRoute(${JSON.stringify(selected.route)},${JSON.stringify(pad)});` : ''}(function(){var g=${JSON.stringify(geometry)},o=${JSON.stringify(options)};if(window.__trace.opened(${JSON.stringify(selected._id)}))o.col=${JSON.stringify(c.fresh)};window.__routeFx.show(g,o);})();true;`,
+      `${first ? `window.__fitRoute(${JSON.stringify(selected.route)},${JSON.stringify(pad)});` : ''}(function(){var g=${JSON.stringify(geometry)},o=${JSON.stringify(options)};if(window.__trace.opened(${JSON.stringify(selected._id)}))Object.assign(o,${JSON.stringify(routeFxTone(c, c.fresh))});window.__routeFx.show(g,o);})();true;`,
     );
   }, [selected, mine, c, bottomBase]);
 
@@ -362,12 +364,13 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
       if (total === 0) return;
       const ids = new Set(data.map((r) => r.runId));
       const routes = runs.filter((r) => ids.has(r._id)).map((r) => r.route);
-      webViewRef.current?.injectJavaScript(`window.__glow(${JSON.stringify(routes)},${JSON.stringify(c.fresh)});true;`);
-      setToast({ title: `지난번 길에 응원이 ${total}개 왔어요`, sub: '내 흔적' });
+      // 응원은 HYPE를 만드는 값이라 Pearl(hype)로 빛난다. 민트는 NEW 전용(Q7 제안안, 2026-11-22)
+      webViewRef.current?.injectJavaScript(`window.__glow(${JSON.stringify(routes)},${JSON.stringify(c.hype)});true;`);
+      setToast({ title: `내 러닝에 응원이 ${total}개 왔어요`, sub: '내 흔적' });
     } catch {
       // 못 받으면 다음에 다시 본다(본 시각을 바꾸지 않음)
     }
-  }, [mine, listState, runs, c.fresh]);
+  }, [mine, listState, runs, c.hype]);
   useEffect(() => { checkCheers(); }, [checkCheers]);
 
   const handleMyLocation = useCallback(async () => {
@@ -402,7 +405,7 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
           <View style={styles.blockedIcon}>
             <BlockedIcon color={c.text2} />
           </View>
-          <Text style={styles.blockedTitle}>차단한 사용자입니다</Text>
+          <Text style={styles.blockedTitle}>차단한 사용자예요</Text>
           <Text style={styles.blockedBody}>이 사용자의 프로필과 러닝을 볼 수 없어요.</Text>
           <Pressable accessibilityRole="button" onPress={goBack} style={styles.blockedBtn}>
             <Text style={styles.blockedBtnText}>뒤로 가기</Text>
@@ -435,8 +438,8 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
                   } else if ('type' in message && message.type === 'trace') {
                     playedRef.current = null;
                     setToast(message.fresh > 0
-                      ? { title: `새 길 ${message.fresh}칸을 열었어요`, sub: `내 흔적 +${message.total}칸` }
-                      : { title: `익숙한 길 ${message.total}칸을 다시 달렸어요`, sub: '내 흔적' });
+                      ? { title: '처음 달린 길이 생겼어요', sub: `내 흔적 +${message.total}칸` }
+                      : { title: '늘 달리던 길이에요', sub: `내 흔적 +${message.total}칸` });
                   } else {
                     setSelected(message as RunWithRoute);
                   }
@@ -541,10 +544,10 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
             <View style={styles.headerInfo}>
               <Text style={styles.username} numberOfLines={1}>{displayName}</Text>
               {listState === 'ready' ? (
+                // 누적 줄은 라벨 없이 숫자 + KM(TOTAL은 피드 세그먼트 「전체 러닝」과 겹쳐 뺌, Q5)
                 <Text style={styles.stats} accessibilityLabel={`누적 ${totalKm.toFixed(1)} km, ${runCount}회`}>
-                  {'TOTAL '}
                   <Text style={styles.statsValue}>{totalKm.toFixed(1)}</Text>
-                  {' km  ·  '}
+                  {' KM  ·  '}
                   <Text style={styles.statsValue}>{runCount}</Text>
                   {' RUNS'}
                 </Text>

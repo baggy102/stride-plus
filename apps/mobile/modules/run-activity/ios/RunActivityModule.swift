@@ -17,6 +17,9 @@ public class RunActivityModule: Module {
   public func definition() -> ModuleDefinition {
     Name("RunActivity")
 
+    // 이 바이너리의 위젯이 읽는 경로 모양. JS(src/native/liveActivity.ts)가 이 값이 있을 때만 새 모양으로 보낸다(OTA 호환)
+    Constant("routeFormat") { "grid1000" }
+
     Function("isSupported") { () -> Bool in
       if #available(iOS 16.2, *) {
         return ActivityAuthorizationInfo().areActivitiesEnabled
@@ -54,6 +57,9 @@ public class RunActivityModule: Module {
     }
   }
 
+  /// 경로 점 상한(JS MAX_ROUTE_POINTS와 같다). ActivityKit 갱신 데이터는 4KB까지라 더 오면 뒤(지금 위치) 쪽을 남기고 자른다
+  private static let maxRoutePoints = 96
+
   @available(iOS 16.2, *)
   private static func contentState(_ s: RunStateRecord) -> RunActivityAttributes.ContentState {
     RunActivityAttributes.ContentState(
@@ -62,7 +68,7 @@ public class RunActivityModule: Module {
       elapsedSec: s.elapsedSec,
       timerStart: Date(timeIntervalSince1970: s.timerStartMs / 1000),
       paused: s.paused,
-      route: s.route
+      route: Array(s.route.prefix(s.route.count - s.route.count % 2).suffix(maxRoutePoints * 2))
     )
   }
 }

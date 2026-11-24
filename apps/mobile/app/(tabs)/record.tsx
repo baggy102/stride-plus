@@ -160,11 +160,12 @@ export default function RecordScreen() {
               interactive
               highlighter
               cloud
+              paused={isTracking && isPaused}
               style={{ width: root.width, height: gridHeight }}
             />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="현재 위치로 이동"
+              accessibilityLabel="내 위치로 이동"
               onPress={() => mapRef.current?.recenter()}
               hitSlop={8}
               style={styles.locate}
@@ -219,7 +220,7 @@ export default function RecordScreen() {
             <LocateIcon color={c.text} />
           </View>
           <Text style={styles.deniedTitle}>위치 권한이 꺼져 있어요</Text>
-          <Text style={styles.deniedBody}>러닝 경로를 기록하려면 설정에서 위치 접근을 허용해 주세요.</Text>
+          <Text style={styles.deniedBody}>러닝 경로를 기록하려면 설정에서 위치 권한을 허용해 주세요.</Text>
           <Pressable accessibilityRole="button" onPress={() => Linking.openSettings()} style={styles.deniedBtn}>
             <Text style={styles.deniedBtnText}>설정 열기</Text>
           </Pressable>

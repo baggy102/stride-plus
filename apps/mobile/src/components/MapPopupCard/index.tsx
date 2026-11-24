@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import Animated, {
   Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import Svg, { Path } from 'react-native-svg';
+import Svg from 'react-native-svg';
 import type { RunMarker } from '@/types/run';
 import { ChevronIcon, CloseIcon, HeartIcon } from '../icons';
 import { useColors } from '@/theme/useColors';
@@ -13,8 +13,11 @@ import { elevationStyle, type Palette } from '@/theme/colors';
 import { formatDuration, formatRunPace } from '@/utils/pace';
 import { formatClock, formatDay } from '@/utils/date';
 import { fitToBox, type LngLat } from '@/utils/route';
+import { boxSmooth, smoothRoute } from '@/utils/routeSmooth';
+import { lineTone } from '@/utils/routeLine';
 import { useReducedMotion } from '@/utils/motion';
-import client from '@/api/client';
+import { RouteLine } from '../RouteLine';
+import { useCheer } from '../useCheer';
 import { posterStickers, STICKER_LABEL, type StickerKind } from './stickers';
 
 interface Props {
@@ -46,8 +49,6 @@ const NEW_LINE_H = 20;
 const ENTER_EASE = Easing.bezier(0.16, 1, 0.3, 1);
 const EXIT_EASE = Easing.bezier(0.7, 0, 0.84, 0);
 
-const pathD = (pts: [number, number][]) => pts.map((p, i) => `${i ? 'L' : 'M'}${p[0].toFixed(1)} ${p[1].toFixed(1)}`).join('');
-
 // 투명도 + 아래에서 lift px. 들어올 때만 쓴다
 function useRise(v: SharedValue<number>, lift: number) {
   return useAnimatedStyle(() => ({ opacity: v.value, transform: [{ translateY: (1 - v.value) * lift }] }));
@@ -63,7 +64,9 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
   const styles = useMemo(() => makeStyles(c), [c]);
   const reduced = useReducedMotion();
   const username = run.userId.username || '알 수 없음';
-  const title = run.description?.trim(); // 쓴 경우만 사람 줄 아래에
+  // 코스 이름 = 코스 소개 첫 줄(쓴 경우만). 있으면 굵은 첫 줄, 작성자 줄은 둘째 줄로(Q6, 2026-11-22)
+  const courseName = run.description?.trim().split('\n')[0].trim();
+  const byline = `${username} · ${formatDay(run.createdAt)} · ${formatClock(run.createdAt)}`;
   const avatar = run.userId.profileImageUrl;
   const photo = run.photoUrls[0] ?? run.thumbnailUrl;
   const resolve = (url: string) => (url.startsWith('/') ? `${baseUrl}${url}` : url);
@@ -72,8 +75,15 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
   // NEW 한 줄이 들어가면 사진을 그만큼 줄여 카드 높이(288)를 지킨다. 0.2 km 미만은 숫자 없이
   const newLine = newKm === undefined ? null : newKm >= 0.2 ? `이번 주 새 길 ${newKm.toFixed(1)} km` : '이번 주 새 길';
   const mediaH = newLine ? MEDIA_H - NEW_LINE_H : MEDIA_H;
-  const [cheer, setCheer] = useState({ cheers: run.cheers ?? 0, cheered: run.cheered ?? false });
-  const [sending, setSending] = useState(false);
+  // 사진이 없을 때 그리는 경로(경로 선 v2): 매끈하게 한 사본을 카드에 맞춘다
+  const routePts = useMemo(
+    () => (route && route.length > 1 ? fitToBox(smoothRoute(route, boxSmooth(route, 362, mediaH, 30)).pts, 362, mediaH, 30) : []),
+    [route, mediaH],
+  );
+  const { cheer, toggle: toggleCheer } = useCheer(run._id, { cheers: run.cheers ?? 0, cheered: run.cheered ?? false }, {
+    disabled: mine,
+    onCheered: (next) => onCheered?.(run._id, next.cheers, next.cheered),
+  });
 
   // 들어오기
   const card = useSharedValue(0);
@@ -118,32 +128,15 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
     useAnimatedStyle(() => ({ opacity: Math.min(1, stick[1].value * 2), transform: [{ scale: 0.6 + 0.4 * stick[1].value }, { rotate: '4deg' }] })),
   ];
 
-  const toggleCheer = async () => {
-    if (mine || sending) return;
-    const before = cheer;
-    const next = { cheers: before.cheers + (before.cheered ? -1 : 1), cheered: !before.cheered };
-    setCheer(next);
-    setSending(true);
-    try {
-      const res = await client.post<{ cheers: number; cheered: boolean }>(`/posts/run/${run._id}/cheer`);
-      setCheer(res.data);
-      onCheered?.(run._id, res.data.cheers, res.data.cheered);
-    } catch {
-      setCheer(before);
-    } finally {
-      setSending(false);
-    }
-  };
-
-  const stickerColor = (kind: StickerKind) =>
-    kind === 'dawn' ? { bg: c.fresh, fg: c.onSocial } : kind === 'new' ? { bg: c.point, fg: c.onPoint } : { bg: '#F2FAFF', fg: '#0B1016' };
+  // 스티커 색은 러너 링 색 토큰(SPEC_v2 A). 코드 키 new는 토큰 today
+  const stickerColor = (kind: StickerKind) => c.sticker[kind === 'new' ? 'today' : kind];
 
   return (
-    <Animated.View accessibilityLabel="러닝 포스터" style={[styles.shadow, { bottom }, cardStyle]}>
+    <Animated.View accessibilityLabel="러닝 카드" style={[styles.shadow, { bottom }, cardStyle]}>
       <View style={styles.card}>
         <Pressable
           accessibilityRole={onDetailPress ? 'button' : undefined}
-          accessibilityLabel="러닝 상세 열기"
+          accessibilityLabel="코스 보기"
           disabled={!onDetailPress}
           onPress={() => onDetailPress?.(run._id)}
         >
@@ -154,9 +147,9 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
                 <LinearGradient colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.5)']} locations={[0.35, 1]} style={StyleSheet.absoluteFill} />
               </>
             ) : (
-              route && route.length > 1 && (
+              routePts.length > 1 && (
                 <Svg width="100%" height={mediaH} viewBox={`0 0 362 ${mediaH}`} preserveAspectRatio="xMidYMid meet" style={StyleSheet.absoluteFill}>
-                  <Path d={pathD(fitToBox(route, 362, mediaH, 30))} stroke={lineColor} strokeWidth={3.5} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+                  <RouteLine pts={routePts} body={3.2} tone={lineTone(c, lineColor)} ground={c.map.bg} id="popup" start head="full" bloom={18} />
                 </Svg>
               )
             )}
@@ -174,7 +167,7 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
             )}
           </Animated.View>
         </Pressable>
-        {/* 닫기: 카드 오른쪽 위(상세 열기와 겹치지 않게 미디어 바깥 형제) */}
+        {/* 닫기: 카드 오른쪽 위(코스 보기와 겹치지 않게 미디어 바깥 형제) */}
         <Animated.View style={[styles.closeWrap, mediaStyle]}>
           <Pressable
             accessibilityRole="button"
@@ -212,7 +205,7 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
           </Animated.View>
         )}
 
-        {/* 사람: 아바타 · 이름 · 날짜·시각 / 제목(쓴 경우만) */}
+        {/* 사람: 아바타 · 코스 이름(쓴 경우만) / 작성자 · 날짜 · 시각. 코스 이름이 없으면 작성자 줄이 첫 줄 */}
         <Animated.View style={[styles.personRow, metaStyle]}>
           <Pressable
             accessibilityRole={onUserPress ? 'button' : undefined}
@@ -228,8 +221,8 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
             )}
           </Pressable>
           <View style={styles.titleCol}>
-            <Text style={styles.title} numberOfLines={1}>{`${username} · ${formatDay(run.createdAt)} · ${formatClock(run.createdAt)}`}</Text>
-            {!!title && <Text style={styles.sub} numberOfLines={1}>{title}</Text>}
+            <Text style={styles.title} numberOfLines={1}>{courseName || byline}</Text>
+            {!!courseName && <Text style={styles.sub} numberOfLines={1}>{byline}</Text>}
           </View>
         </Animated.View>
 

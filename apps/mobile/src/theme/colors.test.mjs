@@ -27,3 +27,14 @@ test('포인트 Signal Blue와 거리 단계 2단계는 같은 색(두 테마)',
     assert.equal(p.level[1], p.point);
   }
 });
+
+test('스티커는 러너 링 색(새벽 러닝 Rose · 10K+ Sand · 오늘 Lilac)을 쓰고 NEW·HYPE·선택 색은 빌리지 않는다(두 테마)', () => {
+  for (const p of [palettes.dark, palettes.light]) {
+    const { dawn, tenK, today } = p.sticker;
+    assert.deepEqual([dawn.bg, tenK.bg, today.bg], [p.map.runners[2], p.map.runners[3], p.map.runners[1]]);
+    for (const s of [dawn, tenK, today]) {
+      assert.ok(![p.fresh, p.hype, p.point, palettes.dark.hype].includes(s.bg));
+      assert.equal(s.fg, p.dark ? '#0B1016' : '#FFFFFF');
+    }
+  }
+});

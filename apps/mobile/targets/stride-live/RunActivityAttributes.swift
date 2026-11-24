@@ -15,7 +15,8 @@ struct RunActivityAttributes: ActivityAttributes {
     /// 경과 시간 기준 시작 시각(시작 + 일시정지 합). 잠금화면에서 시간이 스스로 흐르게 한다
     var timerStart: Date
     var paused: Bool
-    /// 경로 점 구름: 0~1로 맞춘 x0, y0, x1, y1 … (최대 48점)
+    /// 경로: x0, y0, x1, y1 … (최대 96점, 출발 → 지금 위치). 가로 · 세로 같은 배율로 0~1000 정수 격자에 맞춘 값(북쪽 위).
+    /// 위젯이 비율 그대로 다시 맞춰 그리므로 배율은 상관없다. 타입은 [Double] 그대로(정수 값이라 인코딩이 짧다)
     var route: [Double]
   }
 }

@@ -295,7 +295,7 @@ describe('RunsService', () => {
       });
 
       const result = await service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718');
-      expect(result).toEqual(run);
+      expect(result).toEqual({ ...run, cheers: 0, cheered: false });
     });
 
     it('없는 ID면 NotFoundException(run_not_found)', async () => {
@@ -484,6 +484,63 @@ describe('RunsService', () => {
       expect(await service.findNearby(VIEWER, 37.5, 127)).toEqual([]);
       expect(mockPostAggregate).not.toHaveBeenCalled();
     });
+
+    describe('findById(러닝 상세)', () => {
+      const RUN_ID = String(RUN_A);
+      const OTHER = new Types.ObjectId('64b7f0c2a1b2c3d4e5f60799');
+      // 위도 37.5에서 경도 0.001도 ≈ 88m — 11점이면 약 880m
+      const coordinates = Array.from({ length: 11 }, (_, i) => [127 + i * 0.001, 37.5]);
+      const detail = (owner: Types.ObjectId | string) => ({
+        _id: RUN_A,
+        userId: { _id: new Types.ObjectId(String(owner)), username: 'runner' },
+        distanceKm: 0.88,
+        route: { type: 'LineString', coordinates },
+        routeTimes: coordinates.map((_, i) => i * 30),
+      });
+
+      it('포스트가 없으면 0·false — 이 러닝 하나만 집계한다', async () => {
+        mockRunModel.findById.mockReturnValue(chain(detail(OTHER)));
+
+        const result = await service.findById(VIEWER, RUN_ID);
+        expect(result).toMatchObject({ cheers: 0, cheered: false });
+        const [pipeline] = mockPostAggregate.mock.calls[0];
+        expect(pipeline[0]).toEqual({ $match: { runId: { $in: [RUN_A] } } });
+        expect(pipeline[1].$project.cheered.$in[0].equals(new Types.ObjectId(VIEWER))).toBe(true);
+      });
+
+      it('내가 응원한 러닝 — 수와 cheered true, 집 근처 가림은 그대로', async () => {
+        mockRunModel.findById.mockReturnValue(chain(detail(OTHER)));
+        mockPostAggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([{ runId: RUN_A, cheers: 3, cheered: true }]) });
+
+        const result = await service.findById(VIEWER, RUN_ID);
+        expect(result).toMatchObject({ cheers: 3, cheered: true, distanceKm: 0.88 });
+        expect(result.route.coordinates).not.toContainEqual(coordinates[0]);
+        expect(result.routeTimes).toHaveLength(result.route.coordinates.length);
+      });
+
+      it('남들만 응원한 러닝 — 수는 세고 cheered false', async () => {
+        mockRunModel.findById.mockReturnValue(chain(detail(OTHER)));
+        mockPostAggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([{ runId: RUN_A, cheers: 5, cheered: false }]) });
+
+        expect(await service.findById(VIEWER, RUN_ID)).toMatchObject({ cheers: 5, cheered: false });
+      });
+
+      it('내 러닝 — 받은 응원 수를 원본 경로와 함께', async () => {
+        mockRunModel.findById.mockReturnValue(chain(detail(VIEWER)));
+        mockPostAggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([{ runId: RUN_A, cheers: 2, cheered: false }]) });
+
+        const result = await service.findById(VIEWER, RUN_ID);
+        expect(result).toMatchObject({ cheers: 2, cheered: false });
+        expect(result.route.coordinates).toEqual(coordinates);
+      });
+
+      it('차단 관계면 집계 없이 404', async () => {
+        mockRunModel.findById.mockReturnValue(chain(detail(BLOCKED)));
+
+        await expect(service.findById(VIEWER, RUN_ID)).rejects.toThrow(new NotFoundException('run_not_found'));
+        expect(mockPostAggregate).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('집 근처 가림(남의 러닝)', () => {
@@ -533,7 +590,7 @@ describe('RunsService', () => {
 
       const mineRun = run(VIEWER);
       mockRunModel.findById.mockReturnValue(chain(mineRun));
-      expect(await service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718')).toBe(mineRun);
+      expect(await service.findById(VIEWER, '64b7f0c2a1b2c3d4e5f60718')).toEqual({ ...mineRun, cheers: 0, cheered: false });
     });
   });
 });

@@ -10,8 +10,8 @@ import { useColors } from '@/theme/useColors';
 import { FONT } from '@/theme/fonts';
 import { elevationStyle, type Palette } from '@/theme/colors';
 
-// 계정 삭제 시 함께 지워지는 항목(서버 UsersService.deleteAccount와 맞춘다)
-const DELETED_ITEMS = ['계정 정보', '러닝 기록', '게시글', '사진'];
+// 계정 삭제 시 함께 지워지는 항목(서버 UsersService.deleteAccount와 맞춘다: 포스트·받은 응원 삭제, 보낸 응원 빼기)
+const DELETED_ITEMS = ['계정 정보', '러닝 기록(코스 소개 포함)', '사진', '주고받은 응원'];
 // 위치기반서비스 이용약관은 설정에서 캔버스 표기를 따른다
 const SETTINGS_LEGAL_LABELS: Record<string, string> = { location: '위치기반서비스 이용약관' };
 
@@ -136,7 +136,7 @@ export default function SettingsScreen() {
         <View style={styles.dialogWrap} pointerEvents="box-none">
           {dialog === 'legal' && (
             <View accessibilityRole="alert" style={styles.dialog}>
-              <Text style={styles.dialogTitle}>약관 페이지 준비 중입니다</Text>
+              <Text style={styles.dialogTitle}>약관 페이지를 준비하고 있어요</Text>
               <Text style={styles.dialogBody}>공개 페이지가 열리면 여기서 바로 볼 수 있어요.</Text>
               <Pressable accessibilityRole="button" onPress={closeDialog} style={[styles.pill, styles.pillAccent, { marginTop: 10 }]}>
                 <Text style={styles.pillAccentText}>확인</Text>
@@ -146,14 +146,14 @@ export default function SettingsScreen() {
           {dialog === 'delete' && (
             <View style={styles.dialog}>
               <Text style={styles.dialogTitle}>계정을 삭제할까요?</Text>
-              <Text style={styles.dialogText}>아래 항목이 모두 삭제됩니다.</Text>
+              <Text style={styles.dialogText}>아래 항목이 모두 삭제돼요.</Text>
               <View style={styles.deletedList}>
                 {DELETED_ITEMS.map((item) => (
                   <Text key={item} style={styles.dialogText}>{`•  ${item}`}</Text>
                 ))}
               </View>
-              <Text style={styles.irreversible}>삭제한 뒤에는 되돌릴 수 없습니다.</Text>
-              {deleteFailed && <Text style={styles.dialogBody}>삭제하지 못했어요. 네트워크를 확인하고 다시 시도해 주세요.</Text>}
+              <Text style={styles.irreversible}>삭제한 뒤에는 되돌릴 수 없어요.</Text>
+              {deleteFailed && <Text style={styles.dialogBody}>삭제하지 못했어요. 네트워크 연결을 확인하고 다시 시도해 주세요.</Text>}
               <View style={styles.dialogButtons}>
                 <Pressable accessibilityRole="button" disabled={deleting} onPress={closeDialog} style={[styles.pill, styles.pillNeutral]}>
                   <Text style={styles.pillNeutralText}>취소</Text>

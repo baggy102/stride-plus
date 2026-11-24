@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import axios from 'axios';
 import * as SecureStorage from '@/utils/secureStorage';
 import client, { BASE_URL } from '@/api/client';
-import { extractMessage } from '@/api/errors';
+import { extractMessage, serverMessage } from '@/api/errors';
 import { LEGAL_VERSIONS } from '@/config/legal';
 
 interface User {
@@ -17,7 +17,10 @@ interface AuthStore {
   isAuthenticated: boolean;
   isHydrating: boolean;
   isLoading: boolean;
+  /** 화면에 보여 줄 오류 문구(한국어) */
   error: string | null;
+  /** 서버가 보낸 아는 오류 코드(banned_word 등). 가입 화면이 고칠 단계를 고를 때만 쓴다 */
+  errorCode: string | null;
   hydrate: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -28,12 +31,16 @@ interface AuthStore {
   clearError: () => void;
 }
 
+// 가입이 모르는 이유로 거절됐을 때(TERMS #21)
+const REGISTER_FAILED = '가입하지 못했어요. 입력한 정보를 확인하고 다시 시도해 주세요.';
+
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   isAuthenticated: false,
   isHydrating: true,
   isLoading: false,
   error: null,
+  errorCode: null,
 
   hydrate: async () => {
     try {
@@ -50,7 +57,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
   },
 
   login: async (email, password) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, errorCode: null });
     try {
       const { data } = await client.post<{
         accessToken: string;
@@ -62,7 +69,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       set({ user: data.user, isAuthenticated: true });
     } catch (e) {
       const invalid = axios.isAxiosError(e) && e.response?.status === 401;
-      set({ error: invalid ? '이메일 또는 비밀번호가 맞지 않습니다.' : extractMessage(e) });
+      set({ error: invalid ? '이메일 또는 비밀번호가 맞지 않아요.' : extractMessage(e) });
     } finally {
       set({ isLoading: false });
     }
@@ -77,18 +84,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
     await SecureStorage.deleteItem('access_token');
     await SecureStorage.deleteItem('refresh_token');
-    set({ user: null, isAuthenticated: false, error: null });
+    set({ user: null, isAuthenticated: false, error: null, errorCode: null });
   },
 
   deleteAccount: async () => {
     await client.delete('/users/me');
     await SecureStorage.deleteItem('access_token');
     await SecureStorage.deleteItem('refresh_token');
-    set({ user: null, isAuthenticated: false, error: null });
+    set({ user: null, isAuthenticated: false, error: null, errorCode: null });
   },
 
   register: async (username, email, password) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, error: null, errorCode: null });
     try {
       const { data } = await client.post<{
         accessToken: string;
@@ -107,7 +114,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       await SecureStorage.setItem('refresh_token', data.refreshToken);
       set({ user: data.user, isAuthenticated: true });
     } catch (e) {
-      set({ error: extractMessage(e) });
+      set({ error: extractMessage(e, REGISTER_FAILED), errorCode: serverMessage(e) });
     } finally {
       set({ isLoading: false });
     }
@@ -123,5 +130,5 @@ export const useAuthStore = create<AuthStore>((set) => ({
     await SecureStorage.setItem('refresh_token', data.refreshToken);
   },
 
-  clearError: () => set({ error: null }),
+  clearError: () => set({ error: null, errorCode: null }),
 }));

@@ -22,12 +22,19 @@ import type { Palette } from '@/theme/colors';
 const EMAIL_PATTERN = /.+@.+\..+/;
 const NO_AGREEMENTS: Record<LegalKey, boolean> = { terms: false, privacy: false, location: false };
 
-// 서버 오류 메시지 → 화면 문구. step은 고칠 입력이 있는 단계
-function describeError(error: string): { text: string; step: 1 | 2 } {
-  if (error === 'banned_word') return { text: '닉네임에 사용할 수 없는 단어가 있어요.', step: 1 };
-  if (error === 'Email already in use') return { text: '이미 가입된 이메일이에요.', step: 1 };
-  if (error === 'consent_required') return { text: '약관 동의가 필요해요. 앱을 최신 버전으로 업데이트해 주세요.', step: 2 };
-  return { text: error, step: 2 };
+// 고칠 입력이 1단계(정보 입력)에 있는 서버 오류 코드(apps/server auth.service.ts · auth/dto)
+const STEP1_CODES = new Set([
+  'banned_word',
+  'Email already in use',
+  'email must be an email',
+  'username must be longer than or equal to 2 characters',
+  'password must be longer than or equal to 8 characters',
+]);
+
+// 오류 → 화면 문구와 고칠 입력이 있는 단계. 문구는 스토어가 이미 한국어로 바꿔 둔다(src/api/errorText.ts)
+function describeError(text: string, code: string | null): { text: string; step: 1 | 2 } {
+  if (code === 'banned_word') return { text: '닉네임에 사용할 수 없는 단어가 있어요.', step: 1 };
+  return { text, step: code && STEP1_CODES.has(code) ? 1 : 2 };
 }
 
 function Checkbox({ on, c }: { on: boolean; c: Palette }) {
@@ -44,7 +51,7 @@ function Checkbox({ on, c }: { on: boolean; c: Palette }) {
   );
 }
 
-// 확정 UI S03 회원가입 — 1단계 정보 입력, 2단계 필수 약관 동의(캔버스 추가 화면 ①)
+// 확정 UI S03 계정 만들기 — 1단계 정보 입력, 2단계 필수 약관 동의(캔버스 추가 화면 ①)
 export default function RegisterScreen() {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
@@ -57,11 +64,11 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [agreed, setAgreed] = useState(NO_AGREEMENTS);
   const [noticeVisible, setNoticeVisible] = useState(false);
-  const { register, isLoading, error, clearError } = useAuthStore();
+  const { register, isLoading, error, errorCode, clearError } = useAuthStore();
 
   useEffect(() => () => { clearError(); }, []);
 
-  const described = error ? describeError(error) : null;
+  const described = error ? describeError(error, errorCode) : null;
   // 1단계 입력 문제로 거절되면 1단계로 돌려보낸다
   useEffect(() => {
     if (described?.step === 1) setStep(1);
@@ -214,8 +221,8 @@ export default function RegisterScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + 16 }]}>
         {/* 약관 공개 페이지(F5) 전까지 안내만 띄운다 — 캔버스 결정 */}
         {step === 2 && noticeVisible && (
-          <Pressable accessibilityRole="button" accessibilityLabel="약관 페이지 준비 중입니다. 닫기" onPress={() => setNoticeVisible(false)} style={styles.notice}>
-            <Text style={styles.noticeText}>약관 페이지 준비 중입니다</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel="약관 페이지를 준비하고 있어요. 닫기" onPress={() => setNoticeVisible(false)} style={styles.notice}>
+            <Text style={styles.noticeText}>약관 페이지를 준비하고 있어요</Text>
             <CloseIcon color={c.text2} />
           </Pressable>
         )}
