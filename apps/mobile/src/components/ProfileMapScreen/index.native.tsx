@@ -21,6 +21,7 @@ import { Glass } from '@/components/Glass';
 import { fetchRunStats, type RunStats } from '@/api/stats';
 import { elevationStyle, withAlpha, type Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, markerIconsScript, MARKER_PULSE_CSS, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
+import { useMapRecovery, type MapPageMessage } from '@/components/map/useMapRecovery';
 import Svg, { Circle } from 'react-native-svg';
 import { runnerTone, safeImageUrl } from '@/components/MapFeed/feedFilter';
 import { RunList, type ListState, type RunWithRoute } from './RunList';
@@ -204,8 +205,14 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
   const webViewRef = useRef<WebViewHandle>(null);
   const mapLoaded = useRef(false);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
-  const { initial: initialTheme, applyTheme } = useMapTheme(webViewRef, c, dark);
+  const { initial: initialTheme, syncThemeOnLoad } = useMapTheme(webViewRef, c, dark);
   const html = useMemo(() => buildHtml(initialTheme.p, initialTheme.dark), [initialTheme]);
+  // WebView가 죽거나 포그라운드 복귀 핑에 답이 없으면 다시 마운트한다. 로드가 끝나면 onLoadEnd가 러닝을 다시 넣는다(mapLoaded).
+  // 그려 둔 경로·재생이 사라지므로 포스터 카드를 닫고 재생 표시를 푼다
+  const { mapKey, handleMapMessage, crashProps } = useMapRecovery(webViewRef, mapLoaded, () => {
+    setSelected(null);
+    playedRef.current = null;
+  });
 
   // 지도에 러닝을 넣는다 — WebView를 다시 로드하지 않는다
   const pendingTrace = useRef<string | null>(null);
@@ -405,21 +412,24 @@ export function ProfileMapScreen({ userId, filedRunId }: Props) {
         <>
           {mapMounted && (
             <WebView
+              key={mapKey}
               ref={webViewRef}
               source={{ html }}
               style={StyleSheet.absoluteFill}
               originWhitelist={['*']}
+              {...crashProps}
               onLoadStart={() => { mapLoaded.current = false; }}
               onLoadEnd={() => {
                 mapLoaded.current = true;
-                applyTheme();
+                syncThemeOnLoad();
                 webViewRef.current?.injectJavaScript(`window.__trace.setColors(${JSON.stringify(traceColors(c))});true;`);
                 pushRuns();
                 checkCheers();
               }}
               onMessage={(e) => {
                 try {
-                  const message = JSON.parse(e.nativeEvent.data) as RunWithRoute | TraceMessage | { type: 'mapTap' };
+                  const message = JSON.parse(e.nativeEvent.data) as RunWithRoute | TraceMessage | { type: 'mapTap' } | MapPageMessage;
+                  if (handleMapMessage(message)) return;
                   if ('type' in message && message.type === 'mapTap') {
                     setDismissKey((k) => k + 1);
                   } else if ('type' in message && message.type === 'trace') {

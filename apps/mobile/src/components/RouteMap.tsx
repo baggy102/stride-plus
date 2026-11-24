@@ -4,6 +4,7 @@ import { WebView } from 'react-native-webview';
 import { useColors, useScheme } from '@/theme/useColors';
 import type { Palette } from '@/theme/colors';
 import { baseMapScript, leafletHead, useMapTheme, type WebViewHandle } from '@/components/map/mapHtml';
+import { useMapRecovery } from '@/components/map/useMapRecovery';
 import { kmMarks } from '@/utils/route';
 
 // 경로를 실제 지도 위 좌표에 그린다. 기록 중(따라가기·손으로 이동)·요약·상세(경로 맞춤)에서 쓴다.
@@ -181,10 +182,12 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
   const dark = useScheme() === 'dark';
   const webViewRef = useRef<WebViewHandle>(null);
   // HTML은 처음 테마로 한 번만 — 테마 전환은 __setTheme 주입(D3)
-  const { initial, applyTheme } = useMapTheme(webViewRef, c, dark);
+  const { initial, syncThemeOnLoad } = useMapTheme(webViewRef, c, dark);
   const html = useMemo(() => buildHtml(initial.p, initial.dark, interactive, highlighter, cloud), [initial, interactive, highlighter, cloud]);
   const projectWaiters = useRef<((pts: [number, number][]) => void)[]>([]);
   const loaded = useRef(false);
+  // WebView가 죽거나 포그라운드 복귀 핑에 답이 없으면 다시 마운트한다(로드가 끝나면 onLoadEnd가 경로를 다시 넣는다)
+  const { mapKey, handleMapMessage, crashProps } = useMapRecovery(webViewRef, loaded);
 
   const marks = useMemo(() => (kmTicks ? kmMarks(coordinates) : []), [kmTicks, coordinates]);
 
@@ -211,17 +214,20 @@ export const RouteMap = forwardRef<RouteMapHandle, Props>(function RouteMap(
   return (
     <View style={[styles.root, { backgroundColor: c.map.bg }, style]} pointerEvents={interactive ? 'auto' : 'none'}>
       <WebView
+        key={mapKey}
         ref={webViewRef}
         source={{ html }}
         originWhitelist={['*']}
         javaScriptEnabled
         scrollEnabled={false}
         style={StyleSheet.absoluteFill}
+        {...crashProps}
         onLoadStart={() => { loaded.current = false; }}
-        onLoadEnd={() => { loaded.current = true; applyTheme(); push(); }}
+        onLoadEnd={() => { loaded.current = true; syncThemeOnLoad(); push(); }}
         onMessage={(e) => {
           try {
             const msg = JSON.parse(e.nativeEvent.data);
+            if (handleMapMessage(msg)) return;
             if (msg.type === 'project') {
               const waiters = projectWaiters.current;
               projectWaiters.current = [];

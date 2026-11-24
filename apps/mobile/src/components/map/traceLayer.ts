@@ -22,7 +22,7 @@ export interface TraceMessage {
 export function traceLayerScript(): string {
   return `
   (function(){
-    var CELL=11,NEW_MS=7*24*3600*1000,PAD=0.5;
+    var CELL=11,NEW_MS=7*24*3600*1000,PAD=0.25;
     var pane=map.createPane('trace');pane.style.zIndex=350;pane.style.pointerEvents='none';
     var cv=document.createElement('canvas');cv.style.position='absolute';pane.appendChild(cv);
     var ctx=cv.getContext('2d');
