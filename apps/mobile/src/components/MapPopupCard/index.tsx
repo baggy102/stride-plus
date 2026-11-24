@@ -23,7 +23,10 @@ import { posterStickers, STICKER_LABEL, type StickerKind } from './stickers';
 interface Props {
   run: RunMarker;
   baseUrl: string;
+  /** 닫기가 끝났을 때(내려가는 애니메이션이 끝나거나 끊겼을 때) 한 번 */
   onClose: () => void;
+  /** 닫기를 시작할 때(×·dismissKey, 내려가기 전). 지도 위 경로처럼 카드 밖 선택 표시를 바로 지운다 */
+  onCloseStart?: () => void;
   onUserPress?: (userId: string) => void;
   /** 카드(사진·›)를 누르면 러닝 상세(S10)로 */
   onDetailPress?: (runId: string) => void;
@@ -59,7 +62,7 @@ function useRise(v: SharedValue<number>, lift: number) {
  * 사진(없으면 경로, 위에는 스티커 · 닫기만) / 기록 한 묶음(거리 + TIME · PACE) / 사람 / 응원 · 코스 보기 (A안, 2026-11-21).
  * 들어올 때: 카드 0.22초 뒤 올라옴 → 사진 → 거리 → 스티커 → 글자. 닫을 때 0.24초에 내려간다
  */
-export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress, bottom = 24, route, routeColor, mine = false, onCheered, dismissKey = 0, newKm }: Props) {
+export function MapPopupCard({ run, baseUrl, onClose, onCloseStart, onUserPress, onDetailPress, bottom = 24, route, routeColor, mine = false, onCheered, dismissKey = 0, newKm }: Props) {
   const c = useColors();
   const styles = useMemo(() => makeStyles(c), [c]);
   const reduced = useReducedMotion();
@@ -104,9 +107,21 @@ export function MapPopupCard({ run, baseUrl, onClose, onUserPress, onDetailPress
     // 공유 값은 한 번 만든 뒤 바뀌지 않는다
   }, [reduced]);
 
+  // 닫기는 한 번만: ×를 두 번 누르거나 ×와 빈 지도 탭이 겹쳐도 내려가기를 다시 시작하지 않는다.
+  // onCloseStart는 시작하자마자, onClose는 내려가기가 끝나든 끊기든 부른다. 이미 언마운트된 카드(부모가 먼저 바꿈)는 부르지 않는다
+  const closing = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const finishClose = () => { if (mounted.current) onClose(); };
   const close = () => {
+    if (closing.current) return;
+    closing.current = true;
+    onCloseStart?.();
     if (reduced) { onClose(); return; }
-    card.value = withTiming(0, { duration: 240, easing: EXIT_EASE }, (done) => { if (done) runOnJS(onClose)(); });
+    card.value = withTiming(0, { duration: 240, easing: EXIT_EASE }, () => { runOnJS(finishClose)(); });
   };
 
   // 카드 밖 빈 지도 탭: 카드가 열린 뒤 부모가 dismissKey를 바꾸면 ×와 같이 닫는다(열릴 때의 값은 무시)
