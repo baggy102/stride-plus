@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, HttpCode, Post, Req, Param, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { toMeView } from './me.view';
 
 @Controller('users')
 export class UsersController {
@@ -10,12 +11,7 @@ export class UsersController {
     // NOTE: 'me' must be declared before ':id' so NestJS routes it correctly
     const user = await this.usersService.findById(req.user.sub);
     if (!user) throw new NotFoundException('user_not_found');
-    return {
-      _id: user._id,
-      email: user.email,
-      username: user.username,
-      profileImageUrl: user.profileImageUrl,
-    };
+    return toMeView(user);
   }
 
   @Delete('me')

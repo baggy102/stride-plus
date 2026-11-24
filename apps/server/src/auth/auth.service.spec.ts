@@ -112,6 +112,36 @@ describe('AuthService', () => {
       expect(storedToken.deleteOne).toHaveBeenCalled();
     });
 
+    it('갱신 응답에 GET /users/me와 같은 모양의 user를 함께 돌려준다(내부 필드는 빼고)', async () => {
+      mockJwtService.verify.mockReturnValue({ sub: 'u1' });
+      mockRefreshTokenModel.findOne.mockResolvedValue({ expiresAt: new Date(Date.now() + 60000), deleteOne: jest.fn().mockResolvedValue({}) });
+      mockUsersService.findById.mockResolvedValue({
+        _id: 'u1',
+        email: 'a@b.com',
+        username: 'alice',
+        profileImageUrl: 'https://cdn/a.png',
+        passwordHash: 'hash',
+        blocked: [],
+        consents: { terms: '2026-11-01' },
+      });
+      mockRefreshTokenModel.create.mockResolvedValue({});
+
+      const result = await service.refresh('valid-token');
+      // 예전 앱이 읽는 필드는 그대로
+      expect(result.accessToken).toBe('mocked-token');
+      expect(result.refreshToken).toBe('mocked-token');
+      expect(result.user).toEqual({ _id: 'u1', email: 'a@b.com', username: 'alice', profileImageUrl: 'https://cdn/a.png' });
+    });
+
+    it('사용자가 지워졌으면 토큰을 돌려주지 않고 UnauthorizedException', async () => {
+      mockJwtService.verify.mockReturnValue({ sub: 'u1' });
+      const storedToken = { expiresAt: new Date(Date.now() + 60000), deleteOne: jest.fn() };
+      mockRefreshTokenModel.findOne.mockResolvedValue(storedToken);
+      mockUsersService.findById.mockResolvedValue(null);
+      await expect(service.refresh('valid-token')).rejects.toThrow(UnauthorizedException);
+      expect(mockRefreshTokenModel.create).not.toHaveBeenCalled();
+    });
+
     it('만료된 토큰이면 UnauthorizedException', async () => {
       mockJwtService.verify.mockReturnValue({ sub: 'u1' });
       mockRefreshTokenModel.findOne.mockResolvedValue({ expiresAt: new Date(Date.now() - 1000), deleteOne: jest.fn() });

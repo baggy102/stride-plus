@@ -39,10 +39,11 @@ describe('AuthController', () => {
     expect(result).toEqual({ accessToken: 'at', refreshToken: 'rt', user });
   });
 
-  it('refresh — body의 refreshToken으로 갱신', async () => {
-    mockAuthService.refresh.mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt' });
+  it('refresh — body의 refreshToken으로 갱신, 토큰과 user를 함께 반환', async () => {
+    const user = { _id: 'u1', email: 'a@b.com', username: 'alice', profileImageUrl: undefined };
+    mockAuthService.refresh.mockResolvedValue({ accessToken: 'new-at', refreshToken: 'new-rt', user });
     const result = await controller.refresh({ refreshToken: 'old-rt' });
-    expect(result).toEqual({ accessToken: 'new-at', refreshToken: 'new-rt' });
+    expect(result).toEqual({ accessToken: 'new-at', refreshToken: 'new-rt', user });
     expect(mockAuthService.refresh).toHaveBeenCalledWith('old-rt');
   });
 
