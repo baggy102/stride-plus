@@ -52,6 +52,8 @@ CLAUDE.md
 # 프로젝트 서브에이전트와, 에이전트가 참조하는 UI 용어 사전은 리포에서 버전 관리한다
 !.claude/agents/*.md
 !docs/ui-glossary.md
+# 인프라 이전 계획 문서도 리포에서 버전 관리한다
+!docs/infra/*.md
 
 # Server uploads (user-generated files)
 apps/server/uploads/
