@@ -10,6 +10,7 @@ import { Model, mongo } from 'mongoose';
 import * as bcrypt from 'bcrypt';
 import { RefreshToken, RefreshTokenDocument } from './auth.schema';
 import { UsersService } from '../users/users.service';
+import { toMeView } from '../users/me.view';
 import { LEGAL_VERSIONS } from './legal-versions';
 
 @Injectable()
@@ -72,7 +73,10 @@ export class AuthService {
     if (!user) throw new UnauthorizedException();
 
     await stored.deleteOne();
-    return this.issueTokens(payload.sub, user.email);
+    const tokens = await this.issueTokens(payload.sub, user.email);
+    // GET /users/me와 같은 모양의 user를 함께 돌려준다 — 앱이 갱신 뒤 /users/me를 한 번 더 부르지 않게.
+    // 예전 앱은 accessToken·refreshToken만 읽으므로 필드를 더해도 호환된다.
+    return { ...tokens, user: toMeView(user) };
   }
 
   // 이 기기의 refresh 토큰만 지운다. 없는 토큰이어도 성공(멱등) — 토큰 유효 여부를 드러내지 않는다.

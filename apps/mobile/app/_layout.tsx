@@ -2,7 +2,7 @@ import '../styles';
 import '@/tasks/locationTask'; // 백그라운드 위치 태스크 등록(모듈 최상위)
 import '@/native/liveActivity'; // 기록 중 러닝 → 잠금화면 Live Activity(iOS)
 import { useEffect, useMemo } from 'react';
-import { View } from 'react-native';
+import { AppState, View } from 'react-native';
 import { LoadingView } from '@/components/LoadingView';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Stack, useRouter, useSegments, useRootNavigationState } from 'expo-router';
@@ -38,11 +38,16 @@ export default function RootLayout() {
     '--color-value': toRgbChannels(c.value),
   }), [c]);
 
-  // 앱 시작: 리프레시 실패 핸들러 등록 후 토큰 유효성 확인
+  // 앱 시작: 리프레시 실패 핸들러 등록 후 세션 확인. 토큰이 있으면 캐시한 사용자로 바로 피드 화면에 들어가고 확인은 뒤에서 한다
   useEffect(() => {
     registerUnauthenticatedHandler(logout);
     hydrate();
     hydrateTheme();
+    // 다시 활성화되면 곧 만료될 토큰을 미리 갱신한다(첫 요청이 401 → 갱신 → 재시도로 늘어지지 않게)
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') useAuthStore.getState().resume();
+    });
+    return () => sub.remove();
   }, []);
 
   // isAuthenticated 변경 시 라우트 분기 — navigationState.key 로 준비 여부 확인

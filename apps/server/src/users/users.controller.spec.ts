@@ -23,6 +23,19 @@ describe('UsersController', () => {
     jest.clearAllMocks();
   });
 
+  it('getMe — 내부 필드 없이 _id·email·username·profileImageUrl만(POST /auth/refresh의 user와 같은 모양)', async () => {
+    mockUsersService.findById.mockResolvedValue({
+      _id: 'u1', email: 'a@b.com', username: 'alice', profileImageUrl: 'https://cdn/a.png', passwordHash: 'hash', blocked: [],
+    });
+    const result = await controller.getMe({ user: { sub: 'u1' } });
+    expect(result).toEqual({ _id: 'u1', email: 'a@b.com', username: 'alice', profileImageUrl: 'https://cdn/a.png' });
+  });
+
+  it('getMe — 사용자가 없으면 404 user_not_found', async () => {
+    mockUsersService.findById.mockResolvedValue(null);
+    await expect(controller.getMe({ user: { sub: 'gone' } })).rejects.toThrow('user_not_found');
+  });
+
   it('deleteMe — req.user.sub로 계정 삭제', async () => {
     mockUsersService.deleteAccount.mockResolvedValue(undefined);
     await controller.deleteMe({ user: { sub: 'u1' } });
