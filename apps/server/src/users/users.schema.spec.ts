@@ -13,3 +13,9 @@ describe('UserSchema role', () => {
     expect(new UserModel({ email: 'a@b.c', passwordHash: 'x', role: 'admin' }).validateSync()?.errors.role).toBeDefined();
   });
 });
+
+describe('UserSchema 인덱스', () => {
+  it('나를 차단한 사용자 조회(blocked)에 인덱스', () => {
+    expect(UserSchema.indexes().map(([fields]) => fields)).toContainEqual({ blocked: 1 });
+  });
+});

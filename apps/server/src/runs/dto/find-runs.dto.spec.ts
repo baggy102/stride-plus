@@ -18,8 +18,10 @@ describe('FindRunsDto radius', () => {
     expect(await radiusErrors('300001')).toHaveLength(1);
   });
 
-  it('1m 미만은 거부', async () => {
+  it('50m 미만은 거부(작은 반경으로 남의 경로를 짚어 보지 못하게)', async () => {
     expect(await radiusErrors('0')).toHaveLength(1);
+    expect(await radiusErrors('49')).toHaveLength(1);
+    expect(await radiusErrors('50')).toHaveLength(0);
   });
 });
 

@@ -57,3 +57,32 @@ export function trimHomeEnds(
     times: withTimes ? [start.time, ...times.slice(start.i + 1, end.i + 1), end.time] : [],
   };
 }
+
+// 점 center에서 경로(꺾은선, 점 하나여도 된다)까지 가장 가까운 거리(m). 빈 경로는 Infinity.
+// center 둘레를 평면으로 펴서 잰다(지도 검색 반경 정도의 거리에서는 오차가 아주 작다). stopAt 이하를 찾으면 바로 돌려준다
+export function distanceToRouteMeters([lng0, lat0]: Coordinate, route: Coordinate[], stopAt = 0): number {
+  if (route.length === 0) return Infinity;
+  const ky = toRadians(1) * EARTH_RADIUS_METERS;
+  const kx = ky * Math.cos(toRadians(lat0));
+  let ax = (route[0][0] - lng0) * kx;
+  let ay = (route[0][1] - lat0) * ky;
+  let best = Math.hypot(ax, ay);
+  for (let i = 1; i < route.length && best > stopAt; i++) {
+    const bx = (route[i][0] - lng0) * kx;
+    const by = (route[i][1] - lat0) * ky;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    // 선분 위에서 center(원점)에 가장 가까운 점
+    const t = len2 > 0 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / len2)) : 0;
+    best = Math.min(best, Math.hypot(ax + t * dx, ay + t * dy));
+    ax = bx;
+    ay = by;
+  }
+  return best;
+}
+
+// 경로가 center에서 meters 안을 지나는가
+export function routeWithinMeters(center: Coordinate, route: Coordinate[], meters: number): boolean {
+  return distanceToRouteMeters(center, route, meters) <= meters;
+}

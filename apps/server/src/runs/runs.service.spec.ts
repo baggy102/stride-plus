@@ -3,17 +3,37 @@ import { getModelToken } from '@nestjs/mongoose';
 import { Test } from '@nestjs/testing';
 import { RunsService, normalizeRouteTimes } from './runs.service';
 import { Run } from './runs.schema';
+import { startPublic, startPublicUpdate } from './start-point';
+import { trimHomeEnds } from './home-privacy';
 import { User } from '../users/users.schema';
 import { Post } from '../posts/posts.schema';
 import { Types } from 'mongoose';
 
 const mockFind = jest.fn();
+const mockExists = jest.fn();
+const mockBulkWrite = jest.fn();
 
-const mockRunModel = {
-  find: mockFind,
-  findById: jest.fn(),
-  aggregate: jest.fn(),
-};
+// new this.runModel(doc).save()도 흉내 낸다: 만든 문서를 그대로 저장해 돌려준다
+const mockRunModel = Object.assign(
+  jest.fn().mockImplementation((doc: Record<string, unknown>) => ({ ...doc, save: jest.fn().mockResolvedValue(doc) })),
+  { find: mockFind, findById: jest.fn(), aggregate: jest.fn(), exists: mockExists, bulkWrite: mockBulkWrite },
+);
+const point = (coordinates: [number, number]) => ({ type: 'Point', coordinates });
+const queryChain = (value: unknown) => ({
+  select: jest.fn().mockReturnThis(),
+  populate: jest.fn().mockReturnThis(),
+  limit: jest.fn().mockReturnThis(),
+  lean: jest.fn().mockReturnThis(),
+  exec: jest.fn().mockResolvedValue(value),
+});
+// 마커 조회 흉내: startPublic 검색(새 문서) · 원래 경로 검색(옛 문서) · 내 러닝의 원래 시작점($slice)에 각각 답한다
+function answerMarkers({ fresh = [], legacy = [], own = [] }: { fresh?: unknown[]; legacy?: unknown[]; own?: unknown[] }) {
+  const chains = { fresh: queryChain(fresh), legacy: queryChain(legacy), own: queryChain(own) };
+  mockFind.mockImplementation((filter: { _id?: { $in?: unknown[] }; startPublic?: { $exists?: boolean } }) =>
+    filter._id?.$in ? chains.own : filter.startPublic?.$exists === false ? chains.legacy : chains.fresh,
+  );
+  return chains;
+}
 
 const mockPostAggregate = jest.fn();
 const mockPostModel = { aggregate: mockPostAggregate };
@@ -46,6 +66,9 @@ describe('RunsService', () => {
     service = module.get(RunsService);
     jest.clearAllMocks();
     mockPostAggregate.mockReturnValue({ exec: jest.fn().mockResolvedValue([]) });
+    // 기본: 백필이 끝나 startPublic 없는 문서가 없다
+    mockExists.mockReturnValue({ exec: jest.fn().mockResolvedValue(null) });
+    mockBulkWrite.mockResolvedValue({});
   });
 
   describe('findNearby', () => {
@@ -57,18 +80,12 @@ describe('RunsService', () => {
           distanceKm: 5.2,
           paceSecPerKm: 330,
           photoUrls: ['photo1.jpg'],
-          route: { type: 'LineString', coordinates: [[127.1, 37.5], [127.2, 37.6]] },
+          startPublic: point([127.101, 37.501]),
           createdAt: new Date('2026-01-01'),
         },
       ];
-
-      mockFind.mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        populate: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        lean: jest.fn().mockReturnThis(),
-        exec: jest.fn().mockResolvedValue(raw),
-      });
+      // 내 러닝: 원래 시작점은 경로의 첫 점을 따로 읽는다
+      answerMarkers({ fresh: raw, own: [{ _id: 'run1', userId: new Types.ObjectId(VIEWER), route: { coordinates: [[127.1, 37.5]] } }] });
 
       const result = await service.findNearby(VIEWER, 37.5, 127.1);
 
@@ -105,7 +122,7 @@ describe('RunsService', () => {
           distanceKm: 2,
           paceSecPerKm: 400,
           photoUrls: [],
-          route: { type: 'LineString', coordinates: [[126.9, 37.4]] },
+          startPublic: point([126.9, 37.4]),
           createdAt: new Date(),
         },
       ];
@@ -137,7 +154,7 @@ describe('RunsService', () => {
 
       expect(mockFind).toHaveBeenCalledWith(
         expect.objectContaining({
-          route: expect.objectContaining({
+          startPublic: expect.objectContaining({
             $near: expect.objectContaining({
               $maxDistance: 5000,
             }),
@@ -159,7 +176,7 @@ describe('RunsService', () => {
 
       expect(mockFind).toHaveBeenCalledWith(
         expect.objectContaining({
-          route: expect.objectContaining({
+          startPublic: expect.objectContaining({
             $near: expect.objectContaining({
               $maxDistance: 10000,
             }),
@@ -181,6 +198,153 @@ describe('RunsService', () => {
       await service.findNearby(VIEWER, 37.5, 127.0, 300000);
 
       expect(limit).toHaveBeenCalledWith(500);
+    });
+
+    it('가린 시작점(startPublic)으로 찾고 경로(route)는 읽지 않는다 — 응답 모양은 그대로', async () => {
+      const select = jest.fn().mockReturnThis();
+      mockFind.mockReturnValue({
+        select,
+        populate: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([
+          { _id: 'run1', userId: { _id: 'u1' }, distanceKm: 3, paceSecPerKm: 300, photoUrls: [], startPublic: point([127.001, 37.5]), createdAt: new Date() },
+        ]),
+      });
+
+      const [marker] = await service.findNearby(VIEWER, 37.5, 127.0, 2000);
+
+      expect(mockFind).toHaveBeenCalledTimes(1);
+      const [query] = mockFind.mock.calls[0];
+      expect(query).not.toHaveProperty('route');
+      expect(query.startPublic.$near).toEqual({ $geometry: { type: 'Point', coordinates: [127.0, 37.5] }, $maxDistance: 2000 });
+      const fields: string[] = select.mock.calls[0][0].split(' ');
+      expect(fields).not.toContain('route');
+      expect(fields).not.toContain('routeTimes');
+      expect(fields).not.toContain('startRaw');
+      expect(fields).toEqual(expect.arrayContaining(['startPublic', 'userId', 'photoUrls', 'createdAt']));
+      expect(Object.keys(marker).sort()).toEqual(
+        ['_id', 'userId', 'distanceKm', 'paceSecPerKm', 'routeImageUrl', 'thumbnailUrl', 'photoUrls', 'description', 'startPoint', 'cheers', 'cheered', 'createdAt'].sort(),
+      );
+      expect(marker.startPoint).toEqual([127.001, 37.5]);
+    });
+
+    it('가린 시작점이 없는(null) 남의 러닝은 startPoint null — 원래 시작점으로 대신하지 않는다', async () => {
+      mockFind.mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        populate: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockReturnThis(),
+        lean: jest.fn().mockReturnThis(),
+        exec: jest.fn().mockResolvedValue([{ _id: 'run1', userId: { _id: 'u1' }, startPublic: null, route: { coordinates: [[127, 37.5]] } }]),
+      });
+      const [marker] = await service.findNearby(VIEWER, 37.5, 127.0);
+      expect(marker.startPoint).toBeNull();
+    });
+  });
+
+  describe('백필 전 문서(startPublic 없음) — 읽을 때 계산해 채운다', () => {
+    const OTHER = '64b7f0c2a1b2c3d4e5f60799';
+    // 집(127, 37.5)에서 동쪽으로 약 880m. 원래 경로는 집을 지나고, 가린 시작점은 약 100m 동쪽
+    const coordinates: [number, number][] = Array.from({ length: 11 }, (_, i) => [127 + i * 0.001, 37.5]);
+    const legacyRun = (owner: string, _id = 'legacy1') => ({
+      _id,
+      userId: { _id: new Types.ObjectId(owner) },
+      distanceKm: 0.88,
+      route: { type: 'LineString', coordinates },
+    });
+    const withLegacy = () => mockExists.mockReturnValue({ exec: jest.fn().mockResolvedValue({ _id: 'x' }) });
+    const flush = () => new Promise((resolve) => setImmediate(resolve));
+
+    it('남아 있으면 원래 경로로 찾아 가린 시작점을 계산하고, 문서에 채운다(응답에 경로는 없다)', async () => {
+      withLegacy();
+      const legacyChain = answerMarkers({ legacy: [legacyRun(OTHER)] }).legacy;
+
+      const [marker] = await service.findNearby(VIEWER, 37.5, 127.005, 2000);
+      await flush();
+
+      const legacyQuery = mockFind.mock.calls.map(([q]) => q).find((q) => q.startPublic?.$exists === false);
+      expect(legacyQuery.route.$near.$maxDistance).toBe(2000);
+      expect(legacyQuery.userId).toEqual({ $nin: [BLOCKED, BLOCKER] });
+      expect(legacyChain.limit).toHaveBeenCalledWith(500);
+      // 지금까지 남에게 보이던 시작점과 같다
+      expect(marker.startPoint).toEqual(trimHomeEnds(coordinates).coordinates[0]);
+      expect(marker).not.toHaveProperty('route');
+      expect(mockBulkWrite).toHaveBeenCalledWith([startPublicUpdate('legacy1', coordinates)], { ordered: false });
+    });
+
+    it('내 옛 러닝은 원래 시작점', async () => {
+      withLegacy();
+      answerMarkers({ legacy: [legacyRun(VIEWER)], own: [{ _id: 'legacy1', route: { coordinates: [coordinates[0]] } }] });
+      const [marker] = await service.findNearby(VIEWER, 37.5, 127.005, 2000);
+      expect(marker.startPoint).toEqual(coordinates[0]);
+    });
+
+    it('원래 경로만 반경 안을 지나고 가린 시작점은 반경 밖이면 빠진다(값은 채운다)', async () => {
+      withLegacy();
+      answerMarkers({ legacy: [legacyRun(OTHER)] });
+      // 집 바로 위, 반경 50m: 원래 경로는 지나지만 가린 시작점은 약 100m 밖
+      expect(await service.findNearby(VIEWER, 37.5, 127, 50)).toEqual([]);
+      await flush();
+      expect(mockBulkWrite).toHaveBeenCalledTimes(1);
+    });
+
+    it('새 문서와 섞이면 시작점이 가까운 순, 같은 문서는 한 번', async () => {
+      withLegacy();
+      const far = { _id: 'fresh-far', userId: { _id: 'u1' }, startPublic: point([127.02, 37.5]) };
+      answerMarkers({
+        fresh: [far, { ...far, _id: 'legacy-near', startPublic: point([127.0011, 37.5]) }],
+        legacy: [legacyRun(OTHER, 'legacy-near'), legacyRun(OTHER, 'legacy-2')],
+      });
+      const markers = await service.findNearby(VIEWER, 37.5, 127.001, 5000);
+      expect(markers.map((m) => m._id)).toEqual(['legacy-near', 'legacy-2', 'fresh-far']);
+    });
+
+    it('남아 있지 않으면 원래 경로로 찾지 않는다', async () => {
+      answerMarkers({ legacy: [legacyRun(OTHER)] });
+      expect(await service.findNearby(VIEWER, 37.5, 127.005, 2000)).toEqual([]);
+      expect(mockFind).toHaveBeenCalledTimes(1);
+      expect(mockExists).toHaveBeenCalledWith({ startPublic: { $exists: false } });
+      // 한 번 없다고 확인하면 다시 묻지 않는다
+      await service.findNearby(VIEWER, 37.5, 127.005, 2000);
+      expect(mockExists).toHaveBeenCalledTimes(1);
+    });
+
+    it('채우기가 실패해도 응답은 그대로', async () => {
+      withLegacy();
+      answerMarkers({ legacy: [legacyRun(OTHER)] });
+      mockBulkWrite.mockRejectedValue(new Error('write failed'));
+      const markers = await service.findNearby(VIEWER, 37.5, 127.005, 2000);
+      await flush();
+      expect(markers).toHaveLength(1);
+    });
+  });
+
+  describe('create — 마커 시작점을 함께 저장', () => {
+    const dto = (coordinates: [number, number][]) => ({ coordinates, distanceKm: 1, paceSecPerKm: 300 });
+    const saved = () => mockRunModel.mock.calls[0][0];
+
+    it('startPublic은 집 근처 100m를 자른 첫 점. 원래 시작점은 따로 저장하지 않는다', async () => {
+      const coordinates: [number, number][] = Array.from({ length: 11 }, (_, i) => [127 + i * 0.001, 37.5]);
+      await service.create(VIEWER, dto(coordinates));
+      const doc = saved();
+      expect(doc).not.toHaveProperty('startRaw');
+      expect(doc.startPublic.type).toBe('Point');
+      expect(doc.startPublic.coordinates).toEqual(trimHomeEnds(coordinates).coordinates[0]);
+      // 약 100m(경도 0.001도 ≈ 88m) 안쪽
+      expect(doc.startPublic.coordinates[0]).toBeGreaterThan(127.001);
+      expect(doc.startPublic.coordinates[0]).toBeLessThan(127.0012);
+    });
+
+    it('200m 이하 짧은 러닝: 지금 남에게 보이는 것과 같이 가운데 한 점', async () => {
+      const coordinates: [number, number][] = [[127, 37.5], [127.001, 37.5], [127.002, 37.5]]; // 약 177m
+      await service.create(VIEWER, dto(coordinates));
+      const doc = saved();
+      expect(doc.startPublic.coordinates[0]).toBeCloseTo(127.001, 6);
+    });
+
+    it('빈 경로는 null — 남에게 마커로 잡히지 않는다', async () => {
+      await service.create(VIEWER, dto([]));
+      expect(saved()).toMatchObject({ startPublic: null });
     });
   });
 
@@ -408,6 +572,15 @@ describe('RunsService', () => {
       const cells = await service.density(VIEWER, 37.5, 127.005, 2000, 50);
       expect(cells.some((c) => c.lng < 127.0005)).toBe(false);
     });
+
+    // 누출 회귀: 원래 경로가 지나서 $near 후보로 잡혀도, 자른 경로가 반경 안을 지나지 않으면 세지 않는다
+    it('가린 구간(집 근처)만 반경 안을 지나는 남의 러닝은 세지 않는다', async () => {
+      mockFind.mockReturnValue(chain(owners.map((id) => ({ userId: new Types.ObjectId(id), route: { coordinates: route } }))));
+      // 출발점(집) 바로 위, 반경 50m: 원래 경로는 지나지만 자른 경로는 약 100m 밖
+      expect(await service.density(VIEWER, 37.5, 127, 50, 50)).toEqual([]);
+      // 같은 반경이라도 자른 경로가 지나는 곳이면 센다
+      expect((await service.density(VIEWER, 37.5, 127.005, 50, 50)).length).toBeGreaterThan(0);
+    });
   });
 
   describe('newCells(NEW · 이번 주 새 길)', () => {
@@ -442,6 +615,13 @@ describe('RunsService', () => {
       const result = await service.newCells(VIEWER, 37.5, 127.005, 2000);
       expect(result.cells.some((c) => c.lng < 127.0005)).toBe(false);
       expect(result.cells.some((c) => c.lng > 127.0095)).toBe(false);
+    });
+
+    // 누출 회귀: 원래 경로가 지나서 후보로 잡혀도, 자른 경로가 반경 안을 지나지 않으면 칸도 러닝도 나오지 않는다
+    it('가린 구간(집 근처)만 반경 안을 지나는 러닝은 세지 않는다', async () => {
+      mockFind.mockReturnValue(chain([{ _id: RUN, createdAt: new Date(Date.now() - 3600 * 1000), route: { coordinates: route } }]));
+      expect(await service.newCells(VIEWER, 37.5, 127, 50)).toEqual({ cellMeters: 50, cells: [], runs: [] });
+      expect((await service.newCells(VIEWER, 37.5, 127.005, 50)).cells.length).toBeGreaterThan(0);
     });
   });
 
@@ -565,11 +745,23 @@ describe('RunsService', () => {
       routeTimes,
     });
 
-    it('findNearby — 남의 시작점은 출발점에서 100m 안쪽, 내 시작점은 원본', async () => {
-      mockFind.mockReturnValue(chain([run(OTHER), run(VIEWER)]));
+    it('findNearby — 남에게는 가린 시작점(startPublic), 내게는 원래 시작점(내 러닝만 경로 첫 점을 따로 읽는다)', async () => {
+      // 저장된 모양 그대로: 마커 조회는 경로 없이 가린 시작점만 읽는다
+      const stored = (owner: string, _id: string) => ({ _id, userId: { _id: new Types.ObjectId(owner) }, distanceKm: 0.88, startPublic: startPublic(coordinates as [number, number][]) });
+      const chains = answerMarkers({
+        fresh: [stored(OTHER, 'other-run'), stored(VIEWER, 'my-run')],
+        own: [{ _id: 'my-run', userId: new Types.ObjectId(VIEWER), route: { coordinates: [coordinates[0]] } }],
+      });
       const [other, mine] = await service.findNearby(VIEWER, 37.5, 127);
+
+      // 두 번째 조회는 결과 중 내 러닝만, 경로 첫 점 하나만(포함 투영)
+      const [ownFilter] = mockFind.mock.calls.map(([q]) => q).filter((q) => q._id?.$in);
+      expect(ownFilter._id.$in).toEqual(['my-run']);
+      expect(ownFilter.userId.equals(new Types.ObjectId(VIEWER))).toBe(true);
+      expect(chains.own.select).toHaveBeenCalledWith({ userId: 1, 'route.coordinates': { $slice: 1 } });
       expect(other.startPoint).not.toEqual(coordinates[0]);
       expect(other.startPoint?.[0]).toBeGreaterThan(127.001);
+      expect(other.startPoint).toEqual(trimHomeEnds(coordinates as [number, number][]).coordinates[0]);
       expect(mine.startPoint).toEqual(coordinates[0]);
     });
 

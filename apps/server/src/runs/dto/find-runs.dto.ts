@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsISO8601, IsMongoId, IsNumber, IsOptional, Max, Min } from 'class-validator';
+import { MAX_SEARCH_RADIUS_M, MIN_SEARCH_RADIUS_M } from './search-radius';
 
 export class FindRunsDto {
   @IsOptional()
@@ -14,8 +15,8 @@ export class FindRunsDto {
 
   @IsOptional()
   @IsNumber()
-  @Min(1)
-  @Max(300000)
+  @Min(MIN_SEARCH_RADIUS_M)
+  @Max(MAX_SEARCH_RADIUS_M)
   @Type(() => Number)
   radius?: number;
 
