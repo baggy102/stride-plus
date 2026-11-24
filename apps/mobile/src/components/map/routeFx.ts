@@ -113,6 +113,10 @@ export function routeFxScript(): string {
         el('rect',{x:lx-62,y:h0[1]+12,width:124,height:16,rx:5,fill:o.glass,stroke:o.glassBorder},lg);
         var lt=el('text',{x:lx,y:h0[1]+23,'text-anchor':'middle','font-family':'ui-monospace,Menlo,monospace','font-size':8.5,fill:o.text2},lg);lt.textContent=o.label;}
       if(cur.done){finish();return;}
+      // 그리기 전에는 선(띠 · 속선)과 km 점 · 라벨 · 안내를 숨긴다. 카메라가 먼저 움직이는 delay 동안 step()이 아무것도 안 하므로
+      // 여기서 숨겨야 경로 전체가 먼저 보였다 사라지지 않는다. 그리는 중에 다시 그리면 다음 step()이 그 자리로 되돌린다.
+      // 출발 고리 · 도착 빛 머리는 그리기 첫 100ms에도 보이므로 그대로 둔다
+      reveal(0);cur.fades.forEach(function(f){f.el.style.opacity=0;});
       // 빛: 물결 · 번짐 · 가루 18 · 꼬리(속선 6조각) · 머리(번짐 + 속)
       var fg=el('g',{}),fx={rip:[],dust:[],trail:[],end:end};
       function dot(r,fill,op){return el('circle',{r:r,fill:fill,opacity:op},fg);}
